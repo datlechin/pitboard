@@ -79,6 +79,9 @@ struct AccountPicker: View {
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("picker.ok")
             }
+        // Given only to a front with no account windows (`Front::offers_account_windows`).
+        case .noWindows:
+            EmptyView()
         case .noAccount(let title, let link, let linkText, let detail, let inBrowser, let add):
             Text(title).font(.headline)
                 .accessibilityIdentifier(titled)

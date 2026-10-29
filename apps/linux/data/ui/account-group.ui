@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One account: its name, the tool it is for and its plan above its rows, and at the end of its
+     header that it is in use, that a switch to it is under way, or its button, and the menu of
+     what else it offers. Every word is the model's, set by window/account_group.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardAccountGroup" parent="AdwPreferencesGroup">
+    <property name="header-suffix">
+      <object class="GtkBox">
+        <property name="spacing">6</property>
+        <property name="valign">center</property>
+        <child>
+          <object class="GtkBox" id="in_use">
+            <property name="spacing">6</property>
+            <property name="visible">False</property>
+            <child>
+              <object class="GtkImage">
+                <property name="icon-name">object-select-symbolic</property>
+                <property name="accessible-role">presentation</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="in_use_label"/>
+            </child>
+            <style>
+              <class name="dim-label"/>
+            </style>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinner" id="switching">
+            <property name="visible">False</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkButton" id="action">
+            <property name="visible">False</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkMenuButton" id="more">
+            <property name="icon-name">view-more-symbolic</property>
+            <style>
+              <class name="flat"/>
+            </style>
+          </object>
+        </child>
+      </object>
+    </property>
+  </template>
+</interface>

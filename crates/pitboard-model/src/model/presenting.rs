@@ -3350,7 +3350,7 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: words::USE_WITH_CODEX.into(),
+            title: words::use_with_codex(Front::MacMenuBar),
             detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {

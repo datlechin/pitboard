@@ -9,14 +9,34 @@ use crate::permit::Permit;
 use crate::schedule::{self, Job, Location};
 use std::path::PathBuf;
 
+/// What the watch service does at a limit of the account in use. Either way it warms up the
+/// accounts `pitboard warm on` turned on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Switching {
+    /// It switches Claude Code once a limit reaches this share.
+    At(Threshold),
+    /// It never switches.
+    Never,
+}
+
+impl Switching {
+    /// The share it switches at, `None` where it never does.
+    pub fn at(self) -> Option<Threshold> {
+        match self {
+            Switching::At(at) => Some(at),
+            Switching::Never => None,
+        }
+    }
+}
+
 /// Whether the watch service is installed, and what it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
-    /// Installed, where `location` says. `at` is the share it switches at, where its job says
-    /// one the way Pitboard writes it.
+    /// Installed, where `location` says. `switching` is what it does at a limit, where its job
+    /// says it the way Pitboard writes it.
     Yes {
         location: Location,
-        at: Option<Threshold>,
+        switching: Option<Switching>,
     },
     No,
     /// This machine has no scheduler Pitboard knows how to ask.
@@ -28,7 +48,7 @@ pub(crate) fn status(ctx: &Context) -> Installed {
         None => Installed::Unsupported,
         Some(s) if s.installed(ctx, Job::Watch) => Installed::Yes {
             location: s.location(ctx, Job::Watch),
-            at: share(&s.options(ctx, Job::Watch)),
+            switching: switching(&s.options(ctx, Job::Watch)),
         },
         Some(_) => Installed::No,
     }
@@ -45,13 +65,13 @@ pub(crate) fn task(ctx: &Context) -> Option<crate::host::task::Task> {
     schedule::task(ctx, Job::Watch)
 }
 
-/// Install it, switching at `at`, and ask the system to start it now. Returns where it went.
-/// A reinstall replaces the one there, which the system starts again.
+/// Install it, doing at a limit what `switching` says, and ask the system to start it now.
+/// Returns where it went. A reinstall replaces the one there, which the system starts again.
 ///
 /// Refused with [`Error::ScheduleNotDefaultHome`] where this context is not the default home's
 /// ([`schedule::serves`]): it would watch `~/.pitboard`'s accounts while `PITBOARD_HOME` named
 /// others. `uninstall` is not refused for it, so the service can always be taken away.
-pub(crate) fn install(ctx: &Context, permit: Permit, at: Threshold) -> Result<Location> {
+pub(crate) fn install(ctx: &Context, permit: Permit, switching: Switching) -> Result<Location> {
     if !schedule::serves(ctx) {
         return Err(Error::ScheduleNotDefaultHome {
             home: crate::home::dir(ctx),
@@ -66,7 +86,7 @@ pub(crate) fn install(ctx: &Context, permit: Permit, at: Threshold) -> Result<Lo
         permit,
         Job::Watch,
         &schedule::program(ctx, Job::Watch)?,
-        &["--at".to_string(), at.percent().to_string()],
+        &options(switching),
         &schedule::environment(ctx, schedule::proxy_variables(ctx)),
     )?;
     crate::audit::record(ctx, permit, VERB, "install", "ok");
@@ -97,9 +117,22 @@ pub(crate) fn taken_away(ctx: &Context, permit: Permit) -> Result<bool> {
 
 const VERB: &str = "watch-service";
 
-fn share(options: &[String]) -> Option<Threshold> {
+// `pitboard watch`'s own options, after the job's marker.
+fn options(switching: Switching) -> Vec<String> {
+    match switching {
+        Switching::At(at) => vec!["--at".to_string(), at.percent().to_string()],
+        Switching::Never => vec!["--no-switch".to_string()],
+    }
+}
+
+fn switching(options: &[String]) -> Option<Switching> {
     match options {
-        [at, percent] if at == "--at" => percent.parse().ok().and_then(Threshold::new),
+        [at, percent] if at == "--at" => percent
+            .parse()
+            .ok()
+            .and_then(Threshold::new)
+            .map(Switching::At),
+        [never] if never == "--no-switch" => Some(Switching::Never),
         _ => None,
     }
 }
@@ -162,8 +195,8 @@ mod tests {
 
     const SID: &str = "S-1-5-21-1004-1005-1006-1001";
 
-    fn at(percent: u8) -> Threshold {
-        Threshold::new(percent).expect("a share there can be")
+    fn at(percent: u8) -> Switching {
+        Switching::At(Threshold::new(percent).expect("a share there can be"))
     }
 
     /// Installed, the service runs `pitboard watch` with its marker and the share it was
@@ -180,7 +213,7 @@ mod tests {
                 status(&ctx),
                 Installed::Yes {
                     location: location.clone(),
-                    at: Some(at(90))
+                    switching: Some(at(90))
                 }
             );
             assert_eq!(installed_program(&ctx), Some(machine.program()));
@@ -204,7 +237,7 @@ mod tests {
                 status(&ctx),
                 Installed::Yes {
                     location,
-                    at: Some(at(80))
+                    switching: Some(at(80))
                 }
             );
 
@@ -325,7 +358,7 @@ mod tests {
                 status(&ctx),
                 Installed::Yes {
                     location,
-                    at: Some(at(95))
+                    switching: Some(at(95))
                 }
             );
         }
@@ -355,7 +388,7 @@ mod tests {
                 waits.recv().expect("it waits for the change");
                 assert!(matches!(
                     status(&ctx),
-                    Installed::Yes { at: share, .. } if share == Some(at(before))
+                    Installed::Yes { switching, .. } if switching == Some(at(before))
                 ));
                 drop(changing);
                 assert!(waiting.join().expect("it ends").expect("done"));
@@ -387,19 +420,63 @@ mod tests {
         );
     }
 
-    /// Only the share Pitboard writes is read back as one.
+    /// Installed to switch nothing, the service runs `pitboard watch --no-switch` and says so.
+    /// Installed again to switch, or again to switch nothing, it reads back as it was written
+    /// last, and a service an earlier Pitboard wrote reads as the share it switches at.
     #[test]
-    fn only_a_share_written_as_pitboard_writes_it_is_read() {
-        let options = |given: &[&str]| given.iter().map(|o| (*o).to_string()).collect::<Vec<_>>();
-        assert_eq!(share(&options(&["--at", "90"])), Some(at(90)));
+    fn a_service_that_never_switches_runs_watch_with_no_switch_and_reads_back_so() {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
+            let ctx = machine.ctx(&[]);
+            let location =
+                install(&ctx, Permit::for_a_test(), Switching::Never).expect("installed");
+            let installed = |switching| Installed::Yes {
+                location: location.clone(),
+                switching: Some(switching),
+            };
+            assert_eq!(status(&ctx), installed(Switching::Never));
+            let written = machine.written(&ctx);
+            assert!(
+                written.contains("watch --scheduled --no-switch")
+                    || written.contains(
+                        "<string>watch</string>\n    <string>--scheduled</string>\n    \
+                         <string>--no-switch</string>"
+                    ),
+                "{written}"
+            );
+            assert!(!written.contains("--at"), "{written}");
+
+            install(&ctx, Permit::for_a_test(), at(90)).expect("switching");
+            assert_eq!(
+                status(&ctx),
+                installed(at(90)),
+                "as an earlier Pitboard wrote it"
+            );
+            install(&ctx, Permit::for_a_test(), Switching::Never).expect("not switching");
+            assert_eq!(status(&ctx), installed(Switching::Never));
+        }
+    }
+
+    /// Only what Pitboard writes is read back.
+    #[test]
+    fn only_what_pitboard_writes_is_read() {
+        let given = |words: &[&str]| words.iter().map(|o| (*o).to_string()).collect::<Vec<_>>();
+        assert_eq!(switching(&given(&["--at", "90"])), Some(at(90)));
+        assert_eq!(switching(&given(&["--no-switch"])), Some(Switching::Never));
+        for written in [at(90), Switching::Never] {
+            assert_eq!(switching(&options(written)), Some(written), "{written:?}");
+        }
         for unread in [
             &["--at", "100"][..],
             &["--at", "ninety"],
             &["--at"],
             &[],
             &["--at", "90", "--once"],
+            &["--no-switch", "--at", "90"],
+            &["--at", "90", "--no-switch"],
+            &["--no-switch", "--once"],
+            &["--no-switch=true"],
         ] {
-            assert_eq!(share(&options(unread)), None, "{unread:?}");
+            assert_eq!(switching(&given(unread)), None, "{unread:?}");
         }
     }
 }

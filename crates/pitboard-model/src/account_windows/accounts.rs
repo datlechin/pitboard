@@ -1,5 +1,5 @@
-//! Which accounts have a window, what each window is titled, how the menus offer them, and
-//! what forgetting an account deletes of its window.
+//! Which accounts have a window, which of them a front offers, what each window is titled, how
+//! the menus offer them, and what forgetting an account deletes of its window.
 
 use super::{stores, this_machine};
 use crate::Front;
@@ -80,11 +80,25 @@ pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
         .collect()
 }
 
-/// The windows `account` has among those of `accounts`, one for each site of its tool: what
-/// its row's own menu offers to open. The site is checked as well as the store: two tools'
-/// accounts can share an account id.
-pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec<WindowAccount> {
-    window_accounts(accounts)
+/// The windows `front` offers of `accounts`: each one's, where the front has account windows,
+/// and none where it has none. What every menu, row, picker and quick action offers.
+pub(crate) fn offered_windows(front: Front, accounts: &[Account]) -> Vec<WindowAccount> {
+    if front.offers_account_windows() {
+        window_accounts(accounts)
+    } else {
+        Vec::new()
+    }
+}
+
+/// The windows `account` has among those `front` offers of `accounts`, one for each site of its
+/// tool: what its row's own menu offers to open. The site is checked as well as the store: two
+/// tools' accounts can share an account id.
+pub(crate) fn windows_of_account(
+    front: Front,
+    account: &Account,
+    accounts: &[Account],
+) -> Vec<WindowAccount> {
+    offered_windows(front, accounts)
         .into_iter()
         .filter(|window| {
             pitboard_sites::Site::of_provider(account.provider.code()).any(|site| {
@@ -98,9 +112,10 @@ pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec
         .collect()
 }
 
-/// One menu entry per site that has an account with a window, in the sites' order.
-pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
-    let windows = window_accounts(accounts);
+/// One menu entry per site that has an account with a window `front` offers, in the sites'
+/// order.
+pub(crate) fn site_menus(front: Front, accounts: &[Account]) -> Vec<SiteMenu> {
+    let windows = offered_windows(front, accounts);
     pitboard_sites::ALL
         .iter()
         .filter_map(|site| {
@@ -137,7 +152,7 @@ pub(crate) fn forget_message(front: Front, account: &Account, accounts: &[Accoun
              needs a sign-in in {app}."
         );
     }
-    let windows = windows_of_account(account, accounts);
+    let windows = windows_of_account(front, account, accounts);
     if windows.is_empty() {
         return "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your \
                 browser."
@@ -275,12 +290,15 @@ pub(crate) mod tests {
 
     #[test]
     fn a_site_with_one_account_is_one_item_and_with_several_a_submenu() {
-        let menus = site_menus(&[
-            account(Some("work"), ProviderId::Claude, "a"),
-            account(Some("main"), ProviderId::Codex, "b"),
-            account(Some("spare"), ProviderId::Codex, "c"),
-            account(None, ProviderId::Claude, "d"),
-        ]);
+        let menus = site_menus(
+            Front::MacMenuBar,
+            &[
+                account(Some("work"), ProviderId::Claude, "a"),
+                account(Some("main"), ProviderId::Codex, "b"),
+                account(Some("spare"), ProviderId::Codex, "c"),
+                account(None, ProviderId::Claude, "d"),
+            ],
+        );
         let [
             SiteMenu::One { title, window },
             SiteMenu::Several {
@@ -298,7 +316,9 @@ pub(crate) mod tests {
         assert_eq!(site.host, "chatgpt.com");
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["main", "spare"]);
-        assert!(site_menus(&[account(None, ProviderId::Claude, "d")]).is_empty());
+        assert!(
+            site_menus(Front::MacMenuBar, &[account(None, ProviderId::Claude, "d")]).is_empty()
+        );
     }
 
     /// An account's own windows, not another tool's account with the same account id.
@@ -310,13 +330,30 @@ pub(crate) mod tests {
                 account(Some("main"), ProviderId::Codex, "same"),
             ]
         };
-        let claude = windows_of_account(&account(Some("work"), ProviderId::Claude, "same"), &all());
+        let of = |account| windows_of_account(Front::MacMenuBar, &account, &all());
+        let claude = of(account(Some("work"), ProviderId::Claude, "same"));
         assert_eq!(claude.len(), 1);
         assert_eq!(claude[0].site.host, "claude.ai");
-        let codex = windows_of_account(&account(Some("main"), ProviderId::Codex, "same"), &all());
+        let codex = of(account(Some("main"), ProviderId::Codex, "same"));
         assert_eq!(codex.len(), 1);
         assert_eq!(codex[0].site.host, "chatgpt.com");
-        assert!(windows_of_account(&unplaced(ProviderId::Codex), &all()).is_empty());
+        assert!(of(unplaced(ProviderId::Codex)).is_empty());
+    }
+
+    // The GNOME app has none yet, so nothing offers one there.
+    #[test]
+    fn a_front_without_account_windows_offers_none() {
+        let accounts = [
+            account(Some("work"), ProviderId::Claude, "a"),
+            account(Some("main"), ProviderId::Codex, "b"),
+        ];
+        assert_eq!(offered_windows(Front::MacMenuBar, &accounts).len(), 2);
+        assert_eq!(offered_windows(Front::Gnome, &accounts), []);
+        assert_eq!(site_menus(Front::Gnome, &accounts), []);
+        assert_eq!(
+            windows_of_account(Front::Gnome, &accounts[0], &accounts),
+            []
+        );
     }
 
     /// Removing an account that has a window deletes what that window keeps too, and a
@@ -331,8 +368,9 @@ pub(crate) mod tests {
         );
         assert_eq!(
             forget_message(Front::Gnome, &work(), &[work()]),
-            "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this \
-             computer, so using it again needs a sign-in in your browser."
+            "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your \
+             browser.",
+            "a front with no account windows keeps nothing of one"
         );
         assert_eq!(
             forget_message(Front::WindowsNotificationArea, &work(), &[work()]),

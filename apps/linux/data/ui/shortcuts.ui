@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Keyboard Shortcuts: each key the window answers, a row each with its keys as GTK says them,
+     which dialogs/shortcuts.rs adds. Every word is the model's. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardShortcuts" parent="AdwDialog">
+    <property name="content-width">420</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar"/>
+        </child>
+        <property name="content">
+          <object class="AdwPreferencesPage">
+            <child>
+              <object class="AdwPreferencesGroup" id="keys"/>
+            </child>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+</interface>

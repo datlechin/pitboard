@@ -99,6 +99,8 @@ pub(crate) enum Picking {
     ReadFailed(String),
     /// What arrived is not opened.
     Refused(LinkRefusal),
+    /// The front has no account windows: the browser opens the link, whatever the accounts.
+    NoWindows(SiteLink),
     /// No enrolled account has a window on the link's site.
     NoAccount(SiteLink),
     /// The accounts with a window on the link's site, and the one chosen until the person
@@ -140,6 +142,10 @@ pub(crate) struct Windows {
     web_scheme: String,
     /// How long a link waits before it can be opened.
     arming_delay: Duration,
+    // whether the front has account windows to open a link in
+    offered: bool,
+    // whether the front takes a site's own link, pasted or dropped, beside a Pitboard link
+    pasted: bool,
     // Where the engine deletes a store's folder only as its browser process exits.
     deletion_lingers: bool,
     kept: Kept,
@@ -182,11 +188,13 @@ pub(crate) struct Windows {
 }
 
 impl Windows {
-    pub(crate) fn new(arming_delay: Duration) -> Windows {
+    pub(crate) fn new(arming_delay: Duration, offered: bool, pasted: bool) -> Windows {
         Windows {
             link_scheme: LINK_SCHEME.into(),
             web_scheme: WEB_SCHEME.into(),
             arming_delay,
+            offered,
+            pasted,
             deletion_lingers: false,
             kept: Kept::Unread,
             enrolled: None,
@@ -214,11 +222,16 @@ impl Windows {
             // WebView2 deletes a profile's folder only as its browser process exits.
             Engine::WebView2 => true,
             Engine::WebKit => false,
-            // No app runs on Linux, which answers as the Mac does.
+            // Nothing is measured until the Linux app has account windows (M8).
             Engine::WebKitGtk => false,
         };
         link_scheme.clone_into(&mut self.link_scheme);
         web_scheme.clone_into(&mut self.web_scheme);
+    }
+
+    /// The Pitboard links read are of `link_scheme`, for a front with no windows to name it.
+    pub(crate) fn reads_links_of(&mut self, link_scheme: &str) {
+        link_scheme.clone_into(&mut self.link_scheme);
     }
 
     /// The rules of `account`'s window.
@@ -592,12 +605,27 @@ impl Windows {
     // MARK: The link waiting
 
     /// A Pitboard link the app was asked to open, replacing one still waiting. It is read as
-    /// strictly as any link from outside, since anything on the machine can open one.
+    /// strictly as any link from outside, since anything on the machine can open one. Where
+    /// the front takes a link pasted or dropped, text that is not a Pitboard link of this
+    /// build's scheme is read as a site's own link, by the same rule.
     pub(crate) fn link_arrived(&mut self, text: &str) {
+        let link = if self.pasted {
+            // Pasted text comes with the white space it was copied with.
+            let text = pitboard_sites::trimmed(text);
+            if pitboard_sites::WebAddress::parse(text).scheme()
+                == self.link_scheme.to_ascii_lowercase()
+            {
+                pitboard_sites::read_pitboard_link(text, &self.link_scheme)
+            } else {
+                pitboard_sites::SiteLink::parse(text)
+            }
+        } else {
+            pitboard_sites::read_pitboard_link(text, &self.link_scheme)
+        };
         self.arrivals += 1;
         self.arrival = Some(Arrival {
             id: self.arrivals,
-            link: pitboard_sites::read_pitboard_link(text, &self.link_scheme).map(SiteLink::from),
+            link: link.map(SiteLink::from),
         });
     }
 
@@ -662,6 +690,9 @@ impl Windows {
             Err(refusal) => return Some(Picking::Refused(refusal.clone())),
             Ok(link) => link.clone(),
         };
+        if !self.offered {
+            return Some(Picking::NoWindows(link));
+        }
         let Some(status) = status else {
             return Some(problem.map_or(Picking::Reading, |problem| {
                 Picking::ReadFailed(problem.to_owned())

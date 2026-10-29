@@ -125,7 +125,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             })
         }
         Footing::CodexUnused => Some(SetupStep {
-            title: words::USE_WITH_CODEX.into(),
+            title: words::use_with_codex(seen.front),
             detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {

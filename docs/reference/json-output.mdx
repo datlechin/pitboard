@@ -110,8 +110,8 @@ In the order of `pitboard --help`:
 | `rename` | `from`, `to` and `email`. |
 | `forget` | `label` and `email`. |
 | `watch` | One envelope per event, as [Watch events](/reference/json-output#watch-events) lists. |
-| `watch install` | `installed` (`true`), `threshold`, the share it switches at, and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
-| `watch status` | `installed`. When `true`, also `threshold`, `null` where the job names none the way Pitboard writes it, and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
+| `watch install` | `installed` (`true`), `threshold`, the share it switches at, `switches`, and `path`, the job's file. With `--no-switch`, `threshold` is `null` and `switches` is `false`. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
+| `watch status` | `installed`. When `true`, also `threshold`, `switches` and `path`, or `task` on Windows. A service that never switches has a `threshold` of `null` and `switches` of `false`. Where the job says neither the way Pitboard writes it, both are `null`. Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `watch uninstall` | `installed` (`false`) and `removed`, `false` when nothing was installed. |
 | `warm` | `range`, with `from` and `to` as `HH:MM`; `halted`, `null`, or an object with `reason`, a `warm_up_halted` code from [Watch events](/reference/json-output#watch-events), where nothing can be warmed up here; and `accounts`, one object per Claude Code account with `label` and `on`. An account turned on also has `state`: `due`, `running`, `resting`, `waiting` or `held`, with `until` and `next_at` where they are known and, for `held`, `reason`, a code from [Watch events](/reference/json-output#watch-events). |
 | `warm on`, `warm off` | `label`, `on`, and `changed`, `false` when it was so already. |
@@ -238,11 +238,11 @@ Each object in `awaiting`:
 
 ## Watch events
 
-Each event's envelope has `command` set to `watch`. With `--once`, `watch` prints one event. The `data` of every event has `event`. Every event but the warm-up ones also has `threshold`, the share it switches at, such as `95`.
+Each event's envelope has `command` set to `watch`. With `--once`, `watch` prints one event. The `data` of every event has `event`. Every event but the warm-up ones also has `threshold`, the share it switches at, such as `95`. With `--no-switch`, `threshold` is `null`.
 
 | `event` | When | Other fields |
 | --- | --- | --- |
-| `watching` | `watch` starts. Not printed with `--once`. | `warm`, where an account is turned on for warm-ups: `range` and `accounts`, their labels |
+| `watching` | `watch` starts. Not printed with `--once`. | `switches`, `false` with `--no-switch`, and `warm`, where an account is turned on for warm-ups: `range` and `accounts`, their labels |
 | `idle` | No limit of the account in use has reached the share. | `account`, `limit`, `as_of` and `held_until` |
 | `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit` and `adoption` |
 | `waiting` | A limit reached the share, and a try at switching away came to nothing. | `from`, `limit` and `until` |

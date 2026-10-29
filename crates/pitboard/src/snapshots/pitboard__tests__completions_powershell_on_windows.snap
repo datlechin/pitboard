@@ -91,6 +91,7 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
         }
         'pitboard;watch' {
             [CompletionResult]::new('--at', '--at', [CompletionResultType]::ParameterName, 'Switch once a limit of the account in use reaches this share, from 50 to 99')
+            [CompletionResult]::new('--no-switch', '--no-switch', [CompletionResultType]::ParameterName, 'Never switch, and only warm up the accounts `pitboard warm on` turned on')
             [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
@@ -103,6 +104,7 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
         }
         'pitboard;watch;install' {
             [CompletionResult]::new('--at', '--at', [CompletionResultType]::ParameterName, 'Switch once a limit of the account in use reaches this share, from 50 to 99')
+            [CompletionResult]::new('--no-switch', '--no-switch', [CompletionResultType]::ParameterName, 'Never switch, and only warm up the accounts `pitboard warm on` turned on')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Open Link: the link waiting and what can be done with it, or, while none waits, what
+     arrives here, with Paste Link, and what a link dragged over it does. Every word is the
+     model's, set by dialogs/open_link.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardOpenLink" parent="AdwDialog">
+    <property name="content-width">420</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar"/>
+        </child>
+        <property name="content">
+          <object class="AdwStatusPage" id="status">
+            <style>
+              <class name="compact"/>
+            </style>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">12</property>
+                <property name="halign">center</property>
+                <child>
+                  <object class="GtkLabel" id="link">
+                    <property name="wrap">True</property>
+                    <property name="wrap-mode">word-char</property>
+                    <property name="justify">center</property>
+                    <property name="visible">False</property>
+                    <style>
+                      <class name="monospace"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="action">
+                    <property name="halign">center</property>
+                    <property name="visible">False</property>
+                    <style>
+                      <class name="pill"/>
+                      <class name="suggested-action"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="paste">
+                    <property name="halign">center</property>
+                    <property name="visible">False</property>
+                    <style>
+                      <class name="pill"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+</interface>

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+Name=Pitboard
+Comment=Switch to an account by its name
+Icon=com.usepitboard.Pitboard
+X-KDE-PluginInfo-Name=com.usepitboard.Pitboard
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus
+# The trailing * has KRunner ask only a Pitboard that is running: a search never starts it.
+X-Plasma-DBusRunner-Service=com.usepitboard.Pitboard*
+X-Plasma-DBusRunner-Path=/com/usepitboard/Pitboard/Runner

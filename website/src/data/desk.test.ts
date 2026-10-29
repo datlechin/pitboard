@@ -14,38 +14,49 @@ const catalogue = readdirSync(
   .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
   .join("\n");
 const menu = repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarContent.swift");
-// a Rust string literal as it reads once its line continuations are joined
-const appWords = repo("crates/pitboard-model/src/present/app_words.rs").replace(/\\\n\s*/g, "");
-// each command's words in app_words(), as the menu takes them, and as app_words.rs makes them
+// app_words.rs with its string literals' line continuations joined and its code on one line
+const appWords = repo("crates/pitboard-model/src/present/app_words.rs")
+  .replace(/\\\n\s*/g, "")
+  .replace(/\s+/g, " ")
+  .replace(/\( /g, "(");
+// each command's words as the menu takes them, from app_words() or the macOS app's own
+// catalogue, and as app_words.rs makes them
 const said: Record<string, [string, string]> = {
-  "Add Account…": ["addAccount", "add_account: words::add_account(front, true),"],
-  Refresh: ["refresh", "refresh: words::REFRESH.into(),"],
+  "Add Account…": ["words.menu.addAccount", "add_account: words::add_account(front, true),"],
+  Refresh: ["words.menu.refresh", "refresh: words::REFRESH.into(),"],
   "Open Pitboard": [
-    "openPitboard",
+    "words.menu.openPitboard",
     'open_pitboard: titled(front, "Open Pitboard", "Open Pitboard"),',
   ],
-  "Settings…": ["settings", 'settings: titled(front, "Settings…", "Settings"),'],
+  "Settings…": ["words.menu.settings", "settings: words::settings(front, true),"],
   "Check for Updates…": [
-    "checkForUpdates",
-    'check_for_updates: titled(front, "Check for Updates…", "Check for updates"),',
+    "macWords.checkForUpdates",
+    'check_for_updates: "Check for Updates…".into(),',
   ],
-  "About Pitboard": ["about", 'about: titled(front, "About Pitboard", "About Pitboard"),'],
-  "Pitboard Help": ["help", 'help: titled(front, "Pitboard Help", "Pitboard help"),'],
-  "Quit Pitboard": ["quit", 'Front::MacMenuBar | Front::Gnome => "Quit Pitboard",'],
+  "About Pitboard": [
+    "words.menu.about",
+    'about: titled(front, "About Pitboard", "About Pitboard"),',
+  ],
+  "Pitboard Help": [
+    "words.menu.help",
+    'Front::MacMenuBar | Front::WindowsNotificationArea => { titled(front, "Pitboard Help", "Pitboard help") }',
+  ],
+  "Quit Pitboard": ["words.menu.quit", 'Front::MacMenuBar => "Quit Pitboard",'],
 };
 
 // From an item's words to the next item: the modifiers SwiftUI gives it.
 function item(title: string): string {
-  const [word, made] = said[title];
+  const [taken, made] = said[title];
   assert.ok(appWords.includes(made), made);
-  const start = menu.indexOf(`words.menu.${word}`);
+  const start = menu.indexOf(taken);
   assert.ok(start >= 0, `MenuBarContent.swift has ${title}`);
-  const rest = menu.slice(start + word.length + 11);
+  const rest = menu.slice(start + taken.length);
   const end = rest.search(/Button[ ({]|Link\(|SiteMenuItems|\/\/ MARK/);
   return rest.slice(0, end < 0 ? undefined : end);
 }
 
 test("the macOS menu's commands have the keys MenuBarContent.swift gives them, and no others", () => {
+  assert.ok(catalogue.includes('Front::MacMenuBar if menu_item => "Settings…",'));
   for (const c of menuCommands) {
     if (c === null || c.more) continue;
     const shortcut = /\.keyboardShortcut\("(.)"\)/.exec(item(c.title))?.[1];

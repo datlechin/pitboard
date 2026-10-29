@@ -144,7 +144,7 @@ public static class IconMenu
 
         return updates.Beta
             ? []
-            : [new IconMenuEntry.Command(Words.Menu.CheckForUpdates, new IconCommand.CheckForUpdates()) { Id = "menu.checkForUpdates" }];
+            : [new IconMenuEntry.Command(Words.Own.CheckForUpdates, new IconCommand.CheckForUpdates()) { Id = "menu.checkForUpdates" }];
     }
 
     // An account's window entry: its title is the account's label, as the account's own entry is.

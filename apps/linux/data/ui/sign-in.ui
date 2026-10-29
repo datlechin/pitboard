@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Add Account and Sign In Again: Cancel at the header's start and the step's button at its
+     end; the tool picked, the account signed in to again, and once a sign-in is under way, what
+     it waits for, the sign-in page's address to copy or open, the code the browser shows, and
+     what went wrong, said inside. Every word is the model's, set by dialogs/sign_in.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardSignIn" parent="AdwDialog">
+    <!-- Room for "Signing In to Claude Code" between Cancel and Submit Code. -->
+    <property name="content-width">500</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="show-start-title-buttons">False</property>
+            <property name="show-end-title-buttons">False</property>
+            <child type="start">
+              <object class="GtkButton" id="cancel"/>
+            </child>
+            <child type="end">
+              <object class="GtkButton" id="step">
+                <style>
+                  <class name="suggested-action"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkScrolledWindow">
+            <property name="hscrollbar-policy">never</property>
+            <property name="propagate-natural-height">True</property>
+            <property name="child">
+              <object class="AdwClamp">
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">12</property>
+                    <property name="margin-top">12</property>
+                    <property name="margin-bottom">24</property>
+                    <property name="margin-start">12</property>
+                    <property name="margin-end">12</property>
+                    <child>
+                      <object class="GtkLabel" id="message">
+                        <property name="wrap">True</property>
+                        <property name="xalign">0</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggleGroup" id="tools">
+                        <property name="visible">False</property>
+                        <property name="homogeneous">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkListBox" id="fields">
+                        <property name="selection-mode">none</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                        <child>
+                          <object class="AdwActionRow" id="account">
+                            <property name="use-markup">False</property>
+                            <property name="visible">False</property>
+                            <style>
+                              <class name="property"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="code">
+                            <property name="use-markup">False</property>
+                            <property name="visible">False</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="note">
+                        <property name="wrap">True</property>
+                        <property name="xalign">0</property>
+                        <property name="visible">False</property>
+                        <style>
+                          <class name="caption"/>
+                          <class name="dim-label"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="refused">
+                        <property name="wrap">True</property>
+                        <property name="xalign">0</property>
+                        <property name="visible">False</property>
+                        <style>
+                          <class name="error"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="waiting">
+                        <property name="spacing">12</property>
+                        <property name="halign">center</property>
+                        <property name="visible">False</property>
+                        <!-- libadwaita's spinner as an image, which the pictures hold still
+                             (docs/facts/linux-app.md, The pictures). -->
+                        <child>
+                          <object class="GtkImage" id="spinner">
+                            <property name="pixel-size">32</property>
+                            <property name="paintable">
+                              <object class="AdwSpinnerPaintable">
+                                <property name="widget">spinner</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="progress">
+                            <property name="wrap">True</property>
+                            <style>
+                              <class name="dim-label"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="steps">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">6</property>
+                        <property name="visible">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="link">
+                        <property name="spacing">12</property>
+                        <property name="halign">center</property>
+                        <property name="homogeneous">True</property>
+                        <property name="visible">False</property>
+                        <child>
+                          <object class="GtkButton" id="copy_link">
+                            <style>
+                              <class name="pill"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="open_link">
+                            <style>
+                              <class name="pill"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkListBox" id="missing_list">
+                        <property name="selection-mode">none</property>
+                        <property name="visible">False</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                        <child>
+                          <object class="AdwActionRow" id="missing">
+                            <property name="use-markup">False</property>
+                            <child type="prefix">
+                              <object class="GtkImage">
+                                <property name="icon-name">dialog-warning-symbolic</property>
+                                <property name="accessible-role">presentation</property>
+                              </object>
+                            </child>
+                            <child type="suffix">
+                              <object class="GtkButton" id="missing_link">
+                                <property name="valign">center</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkListBox" id="failure_list">
+                        <property name="selection-mode">none</property>
+                        <property name="visible">False</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                        <child>
+                          <object class="AdwActionRow" id="failure">
+                            <property name="use-markup">False</property>
+                            <child type="prefix">
+                              <object class="GtkImage">
+                                <property name="icon-name">dialog-error-symbolic</property>
+                                <property name="accessible-role">presentation</property>
+                              </object>
+                            </child>
+                            <child type="suffix">
+                              <object class="GtkButton" id="failure_next">
+                                <property name="valign">center</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="undo">
+                        <property name="halign">center</property>
+                        <property name="visible">False</property>
+                        <style>
+                          <class name="pill"/>
+                        </style>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+</interface>

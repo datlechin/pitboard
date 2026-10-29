@@ -495,6 +495,118 @@ fn the_windows_are_the_enrolled_accounts_of_each_site() {
     );
 }
 
+/// The Linux app has no account windows until WebKitGTK 2.56 reaches the distributions it runs
+/// on (brief `webwindows`): no menu, row or quick action offers one, and a link that arrives
+/// is handed to the browser whatever the accounts, with no account to choose and nothing that
+/// opens a window.
+#[test]
+fn the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser() {
+    let gnome = Front::Gnome;
+    let mut machine = machine();
+    let mut model = started_on(gnome, &mut machine);
+    let shown = model.shown();
+    assert_eq!(
+        (shown.account_windows.accounts, shown.account_windows.menus),
+        (Vec::new(), Vec::new())
+    );
+    let actions: Vec<crate::ActionKind> = (shown.sections.iter())
+        .flat_map(|section| &section.accounts)
+        .flat_map(|item| item.actions.iter().map(|action| action.kind))
+        .collect();
+    assert!(!actions.is_empty(), "the rows' own menus");
+    assert!(
+        !actions.contains(&crate::ActionKind::OpenWindow),
+        "{actions:?}"
+    );
+    let quick = shown.quick_actions.expect("offered");
+    assert!(
+        !quick
+            .iter()
+            .any(|action| matches!(action.ask, QuickAsk::OpenWindow { .. })),
+        "{quick:?}"
+    );
+
+    model.send(shared("https://claude.ai/new", LINK_SCHEME));
+    let (title, detail) = words::no_windows(gnome, "claude.ai");
+    let waiting = picker(&model);
+    assert_eq!(
+        waiting.shown,
+        PickerShown::NoWindows {
+            title,
+            link: crate::SiteLink::from(
+                pitboard_sites::SiteLink::parse("https://claude.ai/new").expect("a link")
+            ),
+            link_text: "claude.ai/new".into(),
+            detail,
+            in_browser: words::open_in_browser(gnome),
+        }
+    );
+    model.later(Duration::from_secs(5));
+    model.tick();
+    model.send(Intent::OpenLink {
+        arrival: waiting.arrival,
+        store: claude("w"),
+    });
+    model.run(&mut machine);
+    assert_eq!(picker(&model), waiting, "never armed, and nothing to open");
+    assert_eq!(open_window(&model, &claude("w")), None);
+}
+
+/// The Linux app's Open Link takes a link pasted or dropped on it: a site's own link, with the
+/// white space it was copied with, or a Pitboard link of the build's scheme, each read by the
+/// rule a link from outside is. A front whose links come from its Share extension alone reads
+/// only a Pitboard link.
+#[test]
+fn a_link_pasted_where_the_front_takes_one_is_read_as_a_site_link_or_a_pitboard_link() {
+    let waiting = |model: &Hand| match picker(model).shown {
+        PickerShown::NoWindows { link, .. } => Ok(link.url),
+        PickerShown::Refused { reason, .. } => Err(reason),
+        other => panic!("{other:?}"),
+    };
+    let mut machine = machine();
+    let mut gnome = started_on(Front::Gnome, &mut machine);
+    for (text, read) in [
+        (
+            " https://claude.ai/chat/1f2e\n",
+            Ok("https://claude.ai/chat/1f2e".to_owned()),
+        ),
+        (
+            "chatgpt.com/c/68a9",
+            Ok("https://chatgpt.com/c/68a9".into()),
+        ),
+        (
+            "pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fnew",
+            Ok("https://claude.ai/new".into()),
+        ),
+        (
+            "https://example.com/page",
+            Err(pitboard_sites::LinkRefusal::NotASite {
+                host: Some("example.com".into()),
+            }
+            .to_string()),
+        ),
+        (
+            "pitboard://open?url=https://claude.ai/x#c",
+            Err(pitboard_sites::LinkRefusal::Unreadable.to_string()),
+        ),
+    ] {
+        gnome.send(Intent::LinkArrived { text: text.into() });
+        assert_eq!(waiting(&gnome), read, "{text:?}");
+    }
+
+    let mut model = started_on(Front::MacMenuBar, &mut machine);
+    model.send(Intent::LinkArrived {
+        text: "https://claude.ai/chat/1f2e".into(),
+    });
+    assert_eq!(
+        picker(&model).shown,
+        PickerShown::Refused {
+            title: words::cannot_open_link(Front::MacMenuBar),
+            reason: pitboard_sites::LinkRefusal::Unreadable.to_string(),
+        }
+    );
+}
+
 /// A window that cannot show its page yet says what it waits for in the model's words, as
 /// the Open Link window does: the accounts being read, or, where they could not be and
 /// nothing is known, why, with a way to try again that reads them again. Once they are read,

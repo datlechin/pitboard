@@ -77,7 +77,7 @@ public sealed class IconMenuTests
             ("menu.openPitboard", Words.Menu.OpenPitboard),
             ("menu.addAccount", Words.Menu.AddAccount),
             ("menu.settings", Words.Menu.Settings),
-            ("menu.checkForUpdates", Words.Menu.CheckForUpdates),
+            ("menu.checkForUpdates", Words.Own.CheckForUpdates),
             ("menu.help", Words.Menu.Help),
             ("menu.exit", Words.Menu.Quit),
         })

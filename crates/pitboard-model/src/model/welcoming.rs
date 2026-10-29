@@ -145,7 +145,7 @@ fn the_welcome_offers_open_at_login_as_the_system_says_and_continues_to_the_acco
     let windows = model.on_windows().welcome;
     assert_eq!(
         windows.lines[1],
-        words::where_it_lives(Front::WindowsNotificationArea)
+        words::where_it_lives(Front::WindowsNotificationArea, true)
     );
     assert_eq!(
         windows.icon_link,
@@ -161,7 +161,10 @@ fn the_welcome_offers_open_at_login_as_the_system_says_and_continues_to_the_acco
     let welcome = model.on_a_mac().welcome;
     assert_eq!((welcome.icon_link, welcome.tools_heading), (None, None));
     assert_eq!(welcome.title, words::WELCOME);
-    assert_eq!(welcome.lines[1], words::where_it_lives(Front::MacMenuBar));
+    assert_eq!(
+        welcome.lines[1],
+        words::where_it_lives(Front::MacMenuBar, true)
+    );
     assert_eq!(
         welcome.done,
         Choice {
@@ -231,4 +234,24 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
             "once the welcome has gone on to them"
         );
     }
+}
+
+// Where Pitboard stays once the window is closed follows the status item the desktop gives it,
+// which comes and goes while the welcome is up.
+#[test]
+fn the_gnome_welcome_says_where_pitboard_stays_by_its_status_item() {
+    use crate::Surfaces;
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
+    let mut model = Hand::on(Front::Gnome);
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    let lines = |model: &Hand| model.shown().welcome.lines;
+    assert_eq!(lines(&model)[1], words::where_it_lives(Front::Gnome, false));
+    model.send(Intent::SurfacesChanged {
+        surfaces: Surfaces { status_item: true },
+    });
+    assert_eq!(lines(&model)[1], words::where_it_lives(Front::Gnome, true));
+    let welcome = model.shown().welcome;
+    assert_eq!((welcome.icon_link, welcome.tools_heading), (None, None));
+    assert_eq!(welcome.done.title, words::welcome_done(Front::Gnome));
 }

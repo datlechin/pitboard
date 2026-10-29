@@ -554,6 +554,30 @@ expression: command_tree()
           "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
         },
         {
+          "id": "no_switch",
+          "long": "no-switch",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "NO_SWITCH"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [
+            "at"
+          ],
+          "help": "Never switch, and only warm up the accounts `pitboard warm on` turned on"
+        },
+        {
           "id": "once",
           "long": "once",
           "short": null,
@@ -572,7 +596,9 @@ expression: command_tree()
           "default_values": [
             "false"
           ],
-          "conflicts_with": [],
+          "conflicts_with": [
+            "no_switch"
+          ],
           "help": "Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up"
         },
         {
@@ -666,6 +692,30 @@ expression: command_tree()
               ],
               "conflicts_with": [],
               "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
+            },
+            {
+              "id": "no_switch",
+              "long": "no-switch",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "NO_SWITCH"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [
+                "at"
+              ],
+              "help": "Never switch, and only warm up the accounts `pitboard warm on` turned on"
             },
             {
               "id": "json",

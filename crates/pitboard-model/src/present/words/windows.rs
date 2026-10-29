@@ -42,6 +42,18 @@ pub(crate) fn no_site_account(front: Front, site: &str) -> (String, String) {
     )
 }
 
+// What the Open Link window says on a front with no account windows: its title, and why the
+// browser opens the link.
+pub(crate) fn no_windows(front: Front, site: &str) -> (String, String) {
+    (
+        titled(front, "Open in Your Browser", "Open in your browser"),
+        format!(
+            "Pitboard has no {site} window of its own here, so your browser opens this link as \
+             the account it’s signed in to."
+        ),
+    )
+}
+
 pub(crate) fn open_in_browser(front: Front) -> String {
     titled(front, "Open in Browser", "Open in browser")
 }
@@ -54,15 +66,22 @@ pub(crate) fn cannot_open_link(front: Front) -> String {
     )
 }
 
+// A Linux desktop has no Share menu, so a link is pasted or dropped there.
 pub(crate) fn no_link(front: Front) -> (String, String) {
-    (
-        titled(front, "No Link to Open", "No link to open"),
-        format!(
-            "Share a {} page with Pitboard from your browser’s Share menu to open it as one of \
-             your accounts.",
-            pitboard_sites::Site::names(pitboard_sites::Conjunction::Or)
+    let sites = pitboard_sites::Site::names(pitboard_sites::Conjunction::Or);
+    let detail = match (front, front.offers_account_windows()) {
+        (Front::MacMenuBar | Front::WindowsNotificationArea, _) => format!(
+            "Share a {sites} page with Pitboard from your browser’s Share menu to open it as one \
+             of your accounts."
         ),
-    )
+        (Front::Gnome, true) => {
+            format!("Paste a {sites} link, or drop one here, to open it as one of your accounts.")
+        }
+        (Front::Gnome, false) => {
+            format!("Paste a {sites} link, or drop one here, to open it in your browser.")
+        }
+    };
+    (titled(front, "No Link to Open", "No link to open"), detail)
 }
 
 pub(crate) const DOWNLOAD: &str = "Download";
@@ -94,4 +113,48 @@ pub(crate) fn quit_with_downloads(
         format!("{running} downloads are in progress. {quit} anyway?")
     };
     (title, stops, quit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // GNOME says its account windows' words as a Mac does, in its header capitalisation, and
+    // with none of its own, what the browser opens instead.
+    #[test]
+    fn gnome_words_the_account_windows_as_a_mac_does() {
+        let gnome = Front::Gnome;
+        assert_eq!(
+            quit_with_downloads(gnome, 2),
+            (
+                "2 downloads are in progress. Quit anyway?".into(),
+                "Quitting Pitboard stops them, and they won’t resume.",
+                "Quit"
+            )
+        );
+        assert_eq!(open_in_browser(gnome), "Open in Browser");
+        assert_eq!(
+            no_site_account(gnome, "claude.ai").0,
+            "No claude.ai Account"
+        );
+        assert_eq!(cannot_open_link(gnome), "Can’t Open This Link");
+        assert_eq!(
+            no_windows(gnome, "claude.ai"),
+            (
+                "Open in Your Browser".into(),
+                "Pitboard has no claude.ai window of its own here, so your browser opens this \
+                 link as the account it’s signed in to."
+                    .into()
+            )
+        );
+        assert_eq!(
+            no_link(gnome),
+            (
+                "No Link to Open".into(),
+                "Paste a claude.ai or chatgpt.com link, or drop one here, to open it in your \
+                 browser."
+                    .into()
+            )
+        );
+    }
 }

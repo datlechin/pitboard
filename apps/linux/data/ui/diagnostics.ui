@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Diagnostics: doctor's checks, a group of rows for Pitboard and for each tool under a row that
+     sums them up, or a status page while nothing is checked yet, with Check Again and Copy
+     Report in the header bar. Every word is the model's, set by pages/diagnostics.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardDiagnosticsPage" parent="AdwNavigationPage">
+    <property name="tag">diagnostics</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="AdwWindowTitle" id="window_title"/>
+            </property>
+            <child type="end">
+              <object class="GtkButton" id="check_again">
+                <property name="icon-name">view-refresh-symbolic</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkButton" id="copy_report">
+                <property name="icon-name">edit-copy-symbolic</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkStack" id="stack">
+            <child>
+              <object class="GtkStackPage">
+                <property name="name">waiting</property>
+                <property name="child">
+                  <object class="AdwStatusPage" id="waiting"/>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkStackPage">
+                <property name="name">checks</property>
+                <property name="child">
+                  <object class="AdwPreferencesPage" id="checks">
+                    <child>
+                      <object class="AdwPreferencesGroup">
+                        <child>
+                          <object class="AdwActionRow" id="summary">
+                            <property name="use-markup">False</property>
+                            <child type="prefix">
+                              <object class="GtkImage" id="summary_mark">
+                                <property name="accessible-role">presentation</property>
+                              </object>
+                            </child>
+                            <child type="suffix">
+                              <object class="AdwSpinner" id="checking">
+                                <property name="visible">False</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+</interface>

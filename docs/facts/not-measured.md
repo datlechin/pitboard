@@ -1,8 +1,9 @@
 # Not measured
 
-What nobody has measured about Claude Code, Codex and Claude Desktop, and about watching
-Pitboard's directory, and what Pitboard does where it cannot know. What was read or measured
-is in each tool's register, `crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
+What nobody has measured about Claude Code, Codex, Claude Desktop, watching Pitboard's
+directory, the Linux app and its checks, and what Pitboard does where it cannot know. What was
+read or measured is in each tool's register,
+`crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
 [The app model](app-model.md#watching-pitboards-directory).
 
 ## Claude Code
@@ -184,3 +185,74 @@ These were not measured. Each says what Pitboard does where it cannot know.
 - Headless mutter on GitHub's runners, x86_64 and arm64, in Ubuntu 26.04's image:
   `linux-facts.yml`'s `display` job measures what Docker on the Mac measured
   ([linux.md](linux.md#the-headless-display)).
+
+## The Linux app's checks
+
+Every reading in [the checks' images](linux-app.md#the-checks-images) is arm64, in Docker on a
+Mac. None of CI's Linux app jobs has run yet. Not measured:
+
+- A container job on `ubuntu-26.04-arm`, and headless mutter as a fresh user in a container
+  on GitHub's runners. Each job fails where either does not start.
+- Any x86_64 image.
+- How long each job takes with no cache, and how fast snapshot.ubuntu.com answers a runner,
+  whose stalls from the Mac lasted minutes. Only the jobs' timeouts bound them.
+- `in-container.sh` under podman: only docker has run it.
+
+## The Linux app on a desktop
+
+The app's services were measured against stand-ins on a bus of the tests' own and with systemd's
+autostart generator in the checks' images ([What the Linux app rests on](linux-app.md)), never
+in a desktop's session. Not measured, each for the Linux session machines:
+
+- Whether Plasma starts an autostart entry through `xdg-desktop-autostart.target` as GNOME's
+  systemd session does, and whether it honours `TryExec` there and where Plasma starts
+  without systemd. The app writes `TryExec` either way.
+- The `PATH` and the rest of the environment the app starts with from the launcher, from an
+  autostart entry and by D-Bus activation, on GNOME and on Plasma under Wayland (M7), and so
+  whether a debug build started from an autostart entry would run on the real homes (M10's
+  autostart half). Its D-Bus half was measured on a private bus: a service's program gets the
+  bus's environment ([The builds and their names](linux-app.md#the-builds-and-their-names)). A
+  debug build has no launcher, D-Bus service or autostart entry, and quits outside a fixture.
+- Whether the window comes to the front, and the startup notification ends, when the app opens
+  it from a snapshot after GApplication's `activate` returned, with the activation token GTK
+  4.18 keeps from it (`gtk_application_after_emit` is empty there) or the one a tray or KRunner
+  gave.
+- Which notification backend GLib picks in a Plasma session, which turns on whether anything
+  owns `org.gtk.Notifications` there, and how many buttons Plasma draws. The app posts the
+  same notice to either, with one button at most.
+- Whether a click on a notification in GNOME Shell and in Plasma reaches `app.notice-clicked`
+  with its argument, as the stand-ins of their interfaces do.
+- `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
+  on `false` from the owner of `org.freedesktop.login1`.
+- Whether Plasma 6.8's tray and the AppIndicator extension take the status item, draw its menu
+  with its radio entries and disabled ones, and take it again after plasmashell or GNOME Shell
+  restarts, as the stand-ins of their watcher and host do.
+- Whether Plasma 6.8 and the AppIndicator extension raise the app's window with the token they
+  provide before a click on a menu entry, which the item hands on with the click (M14). KWin's
+  tracking issue lists tokens for a status item's menu as unfinished, read in the research
+  for the plan and not since.
+- Whether Plasma and the AppIndicator extension draw the status icons in the panel's text
+  colour, through KDE's `ColorScheme-Text` class and GTK's symbolic recolouring.
+- Account windows on Linux, which the app has none of until WebKitGTK 2.56: whether claude.ai
+  and chatgpt.com load and sign in there, whether stores stay apart and let go of their files,
+  and in which order `decide-policy` and `create` come (M8); and whether Ubuntu's AppArmor rule
+  on user namespaces lets WebKit's bwrap sandbox run for a packaged app, or the package needs a
+  profile of its own (M13). [Account windows](linux-app.md#account-windows) has what was read.
+- Whether GNOME Shell's search and KRunner reach a running Pitboard and show its results, and
+  whether the window comes to the front for a result GNOME Shell activates, which carries a
+  timestamp and no activation token, and for one KRunner 6.17 or later runs after setting its
+  token.
+- Whether plasmashell 6.4 or later loads the Plasma widget from the package, draws its
+  representations in a panel, on the desktop and in the system tray as `tst_widget` draws them
+  offscreen, and keeps it among the tray's hidden items while Pitboard is not running; and
+  whether its Switch reaches a running Pitboard through plasmashell's own connection
+  ([The Plasma widget](linux-app.md#the-plasma-widget)).
+- Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
+  by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
+  one, then ends where none came.
+- Whether the rpm installs and runs on openSUSE Tumbleweed, as on Fedora. Until a package is
+  built and installed there, Uninstall names `sudo dnf remove` alone for the rpm.
+- What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
+  `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
+  ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
+  nothing sets it, the app says 24 hour times, the schema's default, whatever Plasma shows.

@@ -13,8 +13,11 @@ const catalogue = readdirSync(
   .sort()
   .map((file) => present(`words/${file}`))
   .join("\n");
-// a Rust string literal as it reads once its line continuations are joined
-const appWords = present("app_words.rs").replace(/\\\n\s*/g, "");
+// app_words.rs with its string literals' line continuations joined and its code on one line
+const appWords = present("app_words.rs")
+  .replace(/\\\n\s*/g, "")
+  .replace(/\s+/g, " ")
+  .replace(/\( /g, "(");
 const facts = repo("docs/facts/site.md");
 // the facts' section on the menu bar, its lines joined
 const bar = facts
@@ -62,15 +65,16 @@ test("each item is one the UI tests read, with its key, and dimmed where they re
 test("the app's own items say what PitboardScenes.swift and its commands give them", () => {
   const scenes = mac("App/PitboardScenes.swift");
   for (const [word, said] of [
-    ["menu.about", 'about: titled(front, "About Pitboard", "About Pitboard")'],
+    ["words.menu.about", 'about: titled(front, "About Pitboard", "About Pitboard")'],
+    // Sparkle's, from the macOS app's own catalogue
+    ["macWords.checkForUpdates", 'check_for_updates: "Check for Updates…".into()'],
+    ["words.menu.addAccount", "add_account: words::add_account(front, true)"],
     [
-      "menu.checkForUpdates",
-      'check_for_updates: titled(front, "Check for Updates…", "Check for updates")',
+      "words.menu.help",
+      'help: match front { Front::MacMenuBar | Front::WindowsNotificationArea => { titled(front, "Pitboard Help", "Pitboard help")',
     ],
-    ["menu.addAccount", "add_account: words::add_account(front, true)"],
-    ["menu.help", 'help: titled(front, "Pitboard Help", "Pitboard help")'],
   ]) {
-    assert.ok(scenes.includes(`(words.${word}`), word);
+    assert.ok(scenes.includes(`(${word}`), word);
     assert.ok(appWords.includes(said), said);
   }
   assert.ok(catalogue.includes('titled(front, "Add Account…", "Add account…")'));

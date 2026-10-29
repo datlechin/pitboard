@@ -1403,9 +1403,17 @@ pub(super) const AGAIN_IN_A_TERMINAL: &str = "Turn daily renewal off and on agai
 pub(super) const INSTALL_THE_SERVICE_AGAIN: &str =
     "Install it again with `pitboard watch install`.";
 
-pub(super) fn runs_from_sign_in(at: Option<u8>, program: impl Display) -> String {
-    match at {
-        Some(at) => format!("from sign-in  ·  switches at {at}%  ·  runs {program}"),
+pub(super) fn runs_from_sign_in(
+    switching: Option<crate::watch_service::Switching>,
+    program: impl Display,
+) -> String {
+    use crate::watch_service::Switching;
+    match switching {
+        Some(Switching::At(at)) => format!(
+            "from sign-in  ·  switches at {}%  ·  runs {program}",
+            at.percent()
+        ),
+        Some(Switching::Never) => format!("from sign-in  ·  never switches  ·  runs {program}"),
         None => format!("from sign-in  ·  runs {program}"),
     }
 }
@@ -1496,6 +1504,11 @@ mod tests {
     use crate::host::Kind;
 
     const SID: &str = "S-1-5-21-1004336348-1177238915-682003330-1001";
+
+    fn at(percent: u8) -> crate::watch_service::Switching {
+        let at = crate::duty::autoswitch::Threshold::new(percent).expect("a share");
+        crate::watch_service::Switching::At(at)
+    }
 
     // On Windows two `icacls` a path, and none where the person's SID could not be read.
     #[test]
@@ -2565,8 +2578,15 @@ mod tests {
             "Renewal runs again at its next daily run."
         );
         assert_eq!(
-            runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard"),
+            runs_from_sign_in(Some(at(90)), "/opt/homebrew/bin/pitboard"),
             "from sign-in  ·  switches at 90%  ·  runs /opt/homebrew/bin/pitboard"
+        );
+        assert_eq!(
+            runs_from_sign_in(
+                Some(crate::watch_service::Switching::Never),
+                "/opt/homebrew/bin/pitboard"
+            ),
+            "from sign-in  ·  never switches  ·  runs /opt/homebrew/bin/pitboard"
         );
         assert_eq!(
             runs_from_sign_in(None, "/opt/homebrew/bin/pitboard"),

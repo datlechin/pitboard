@@ -62,8 +62,9 @@ pub use present::{
     NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
     PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
     SheetText, SheetTool, SigningInText, StatusItemShown, StoreDeletion, StowText, TermsShown,
-    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep,
-    WelcomeTool, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WatchServiceShown, WelcomeLogin,
+    WelcomeShown, WelcomeStep, WelcomeTool, WindowQuestion, WindowWaiting, check_name,
+    downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
@@ -71,6 +72,13 @@ pub use present::{
     install_update, links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install,
     still_switching, trash_says, usage_of, webview_runtime_too_old,
     windows_notification_area_words,
+};
+// What the Linux app alone asks of the model, which it links as Rust: no other app's bindings
+// carry it.
+pub use fixture::fixture_refusal;
+pub use present::{
+    GnomeShortcutWords, GnomeWords, Package, PackageRemoval, account_description, countdown,
+    gnome_words, package_removal, search,
 };
 pub use present::{QuickAction, QuickAsk, outside_refused};
 
@@ -257,7 +265,8 @@ pub enum Started {
     /// Over the homes its environment names: every launch of a release build.
     Live,
     /// A debug build in the fixture `PITBOARD_FIXTURE` names, whichever it names:
-    /// `PitboardModel::fixture` refuses one that is none of `fixture_names`.
+    /// `PitboardModel::fixture` refuses one that is none of `fixture_names`, and
+    /// `fixture_refusal` says so before anything is made.
     Fixture { name: String },
     /// A debug build with no fixture, as the system starts one for a link, a widget or a
     /// shortcut, with the person's own homes. What it does then is the front's: the macOS app
@@ -327,6 +336,18 @@ pub(crate) struct Abandoned {
     pub to: String,
     // copies kept rather than deleted, since which one is live is now unknown
     pub logins_kept: u32,
+}
+
+// Whether this machine's own service manager runs `pitboard watch` from each sign-in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WatchService {
+    // doing at a limit what `switching` says, where its job says it the way Pitboard writes it
+    Installed {
+        switching: Option<pitboard_core::watch_service::Switching>,
+    },
+    Absent,
+    // no service manager Pitboard knows how to write to
+    Unsupported,
 }
 
 // Whether anything keeps parked logins alive on this machine without a command being run.

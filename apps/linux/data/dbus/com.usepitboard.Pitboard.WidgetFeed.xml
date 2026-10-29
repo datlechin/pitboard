@@ -1,0 +1,15 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Pitboard's own: the widget feed a Plasma widget reads, at the app's object path's WidgetFeed.
+  Feed is the glance every widget reads, as JSON, empty before the first read and once Pitboard
+  is removed; Revision moves each time what a widget shows changes. Both are read only, and
+  org.freedesktop.DBus.Properties.PropertiesChanged carries both as Revision moves. It has no
+  method: a widget asks for a switch through the app's switch-from-outside action.
+-->
+<node>
+  <interface name="com.usepitboard.Pitboard.WidgetFeed">
+    <property name="Feed" type="s" access="read"/>
+    <property name="Revision" type="t" access="read"/>
+  </interface>
+</node>

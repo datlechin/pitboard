@@ -233,7 +233,12 @@ pub(crate) fn daily_task(gone: bool) -> &'static str {
     }
 }
 
-pub(crate) const TURN_IT_OFF_AND_ON: &str = "Turn it off and on again in Settings.";
+pub(crate) fn turn_it_off_and_on(front: Front) -> String {
+    format!(
+        "Turn it off and on again in {}.",
+        super::settings(front, false)
+    )
+}
 
 // An account's saved sign-in, where its row is not there to say more.
 pub(crate) fn saved_sign_in(ready: bool) -> &'static str {
@@ -363,6 +368,27 @@ mod tests {
         assert_eq!(
             sign_in_files_shared(Front::Gnome),
             "Other people on this computer can read a file that holds a sign-in."
+        );
+        assert_eq!(folder_private(Front::Gnome), "Only you can read it");
+        assert_eq!(
+            folder_shared(Front::Gnome),
+            "Other people on this computer can read it."
+        );
+        assert_eq!(
+            codex_file_shared(Front::Gnome),
+            "Other people on this computer can read Codex’s sign-in file."
+        );
+        assert_eq!(
+            [
+                turn_it_off_and_on(Front::MacMenuBar),
+                turn_it_off_and_on(Front::Gnome),
+                turn_it_off_and_on(Front::WindowsNotificationArea),
+            ],
+            [
+                "Turn it off and on again in Settings.",
+                "Turn it off and on again in Preferences.",
+                "Turn it off and on again in Settings.",
+            ]
         );
         assert_eq!(
             codex_file_shared(Front::WindowsNotificationArea),

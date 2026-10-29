@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.usepitboard.Pitboard</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Pitboard</name>
+  <summary>Switch AI coding tools between your accounts</summary>
+  <description>
+    <p>
+      Pitboard switches Claude Code and OpenAI's Codex CLI between your own accounts without
+      signing you out, and shows what each account has left of its limits.
+    </p>
+    <p>
+      A switch puts the login of the account you choose where the tool reads it, and keeps the
+      one it replaces. Your history, settings and projects stay where they are.
+    </p>
+    <p>
+      Pitboard has no server of its own, and sends each login only to the service that issued
+      it. It is not affiliated with Anthropic or OpenAI.
+    </p>
+  </description>
+  <developer id="com.usepitboard">
+    <name>Pitboard</name>
+  </developer>
+  <launchable type="desktop-id">com.usepitboard.Pitboard.desktop</launchable>
+  <provides>
+    <binary>pitboard-app</binary>
+    <dbus type="user">com.usepitboard.Pitboard</dbus>
+  </provides>
+  <url type="homepage">https://usepitboard.com</url>
+  <url type="help">https://docs.usepitboard.com</url>
+  <url type="bugtracker">https://github.com/datlechin/pitboard/issues</url>
+  <url type="vcs-browser">https://github.com/datlechin/pitboard</url>
+  <url type="contribute">https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md</url>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#dcddd6</color>
+    <color type="primary" scheme_preference="dark">#2c2e33</color>
+  </branding>
+  @RELEASES@
+</component>

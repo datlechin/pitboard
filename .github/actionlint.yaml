@@ -1,6 +1,6 @@
 # GitHub's own Xcode 27 image, which ci.yml's xcode-27 job runs on: actionlint 1.7.12 knows no
-# label that names an Xcode. GitHub's Ubuntu 26.04 images, which ci.yml's linux job runs on,
-# came out of preview on 17 September 2026, after actionlint 1.7.12.
+# label that names an Xcode. GitHub's Ubuntu 26.04 images, which ci.yml's linux and linux-app
+# jobs run on, came out of preview on 17 September 2026, after actionlint 1.7.12.
 self-hosted-runner:
   labels:
     - xcode-27

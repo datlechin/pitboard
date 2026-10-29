@@ -3,7 +3,7 @@
 //! it. Where the real core answers otherwise than the Swift fixture did, the test says so and
 //! holds what the core does.
 
-use super::apps::{CHATGPT, CLAUDE, chatgpt};
+use super::apps::{CHATGPT, CLAUDE, chatgpt, chatgpt_system};
 use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
@@ -693,7 +693,7 @@ fn a_launch_reads_without_being_asked() {
 fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
     use crate::launch::Remedy;
     let launched = made(World::TwoTools);
-    for os in [Os::MacOs, Os::Windows] {
+    for os in [Os::MacOs, Os::Windows, Os::Linux] {
         let chatgpt = chatgpt(os);
         chatgpt.opens(&launched.machine.host);
         let held: Vec<(String, Remedy)> = launched
@@ -702,19 +702,19 @@ fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
             .into_iter()
             .map(|held| (held.kind, held.remedy))
             .collect();
-        assert_eq!(
-            held,
-            [(
-                "chatgpt_app".to_owned(),
-                Remedy::ReopenApp {
-                    app: chatgpt.app_id(),
-                    name: "ChatGPT".into(),
-                }
-            )],
-            "{os:?}"
-        );
+        let remedy = match os {
+            Os::MacOs | Os::Windows => Remedy::ReopenApp {
+                app: chatgpt.app_id(),
+                name: "ChatGPT".into(),
+            },
+            Os::Linux => Remedy::Do {
+                instruction: "quit ChatGPT and open it again".into(),
+            },
+        };
+        assert_eq!(held, [("chatgpt_app".to_owned(), remedy)], "{os:?}");
     }
-    assert_eq!(CHATGPT, chatgpt(OS).app);
+    assert_eq!(CHATGPT, chatgpt(chatgpt_system(FRONT)).app);
+    assert_eq!(chatgpt_system(Front::Gnome), Os::Linux);
     assert_eq!(chatgpt(Os::Windows).app, "OpenAI.Codex_2p2nqsd0c76g0!App");
 }
 
@@ -753,6 +753,65 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
     );
     assert!(launched.apps.is_running(CHATGPT));
     model.shutdown();
+}
+
+/// A live GNOME model names no other apps, and so its fixture names none: in `chatGPTOpen` a
+/// Codex switch asks no quit question and quits nothing, and its warning says to quit ChatGPT.
+#[test]
+fn a_gnome_fixture_asks_no_quit_question_and_says_chatgpt_in_words() {
+    use crate::present::testing::strings_of;
+    let world = World::ChatGptOpen;
+    let launched = make(world, Folder::own("gnome").expect("a folder"), Front::Gnome)
+        .unwrap_or_else(|unmade| panic!("{}: {unmade}", world.name()));
+    let (model, told) = started(&launched);
+    model.send(Intent::SwitchTo {
+        account: AccountKey::new(Tool::Codex, "spare"),
+    });
+    let switched = told.until("the switch, read back", |told| {
+        told.last()
+            .is_some_and(|snapshot| shows_in_use(snapshot).contains(&"codex/spare".into()))
+    });
+    model.shutdown();
+    assert!(
+        switched
+            .iter()
+            .all(|snapshot| snapshot.quit_question.is_none()),
+        "no quit question"
+    );
+    assert_eq!(launched.apps.asked(), [] as [String; 0]);
+    let said = strings_of(switched.last().expect("a snapshot"));
+    assert!(
+        said.iter().any(|said| said.contains("ChatGPT")),
+        "{said:#?}"
+    );
+}
+
+/// A GNOME front has no account windows to name its links' scheme, so its fixture reads the
+/// debug build's: a link that build hands over waits to be opened in the browser.
+#[test]
+fn a_gnome_fixture_reads_the_links_of_its_build() {
+    let world = World::OneTool;
+    let launched = make(
+        world,
+        Folder::own("gnome-links").expect("a folder"),
+        Front::Gnome,
+    )
+    .unwrap_or_else(|unmade| panic!("{}: {unmade}", world.name()));
+    let (model, told) = started(&launched);
+
+    model.send(Intent::LinkArrived {
+        text: "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2F1f2e".into(),
+    });
+
+    let waiting = told.last_where("the link waiting", |last| {
+        last.account_windows.picker.is_some()
+    });
+    model.shutdown();
+    let shown = waiting.account_windows.picker.expect("a link").shown;
+    assert!(
+        matches!(&shown, crate::PickerShown::NoWindows { link, .. } if link.url == "https://claude.ai/chat/1f2e"),
+        "{shown:?}"
+    );
 }
 
 #[test]
@@ -1129,12 +1188,16 @@ fn chatgpt_leaves_the_process_list_as_it_quits() {
     let launched = made(World::ChatGptOpen);
     let (apps, core) = (&launched.apps, &launched.core);
     let copy = apps
-        .running(chatgpt(OS).app_id())
+        .running(chatgpt(chatgpt_system(FRONT)).app_id())
         .expect("asked")
         .expect("running");
-    apps.request_quit(chatgpt(OS).app_id())
+    apps.request_quit(chatgpt(chatgpt_system(FRONT)).app_id())
         .expect("asked to quit");
-    assert_eq!(apps.running(chatgpt(OS).app_id()).expect("asked"), None);
+    assert_eq!(
+        apps.running(chatgpt(chatgpt_system(FRONT)).app_id())
+            .expect("asked"),
+        None
+    );
     assert!(core.holding(ProviderId::Codex).is_empty());
     apps.reopen(copy, false).expect("opened");
     assert_eq!(core.holding(ProviderId::Codex).len(), 1);
@@ -1330,7 +1393,8 @@ fn one_account_is_offered_a_second_until_not_now() {
     );
     model.send(Intent::DeclineSecondAccount { tool: Tool::Claude });
     told.last_where("the next tip, for Codex", |snapshot| {
-        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some(words::USE_WITH_CODEX)
+        snapshot.setup.as_ref().map(|step| step.title.as_str())
+            == Some(words::use_with_codex(FRONT).as_str())
     });
     let started = Instant::now();
     while !launched
@@ -2133,6 +2197,50 @@ fn an_unknown_fixture_is_refused_naming_every_one() {
             assert!(reason.contains("twoTools, oneTool, empty"), "{reason}");
         }
         other => panic!("{:?}", other.map(|_| ())),
+    }
+}
+
+/// A name that is none of them is refused before anything is made, and refused alike by the
+/// question the Linux app asks before it owns a name on the bus, so a launch refused there
+/// leaves the world of the copy already running as it was.
+#[test]
+fn a_refused_name_leaves_the_fixtures_folder_alone() {
+    let own = Folder::own("refused").expect("a folder");
+    let left = own.path().join("pitboard-fixture").join("left by a launch");
+    std::fs::create_dir_all(left.parent().expect("a folder")).expect("a folder");
+    std::fs::write(&left, "kept").expect("left behind");
+
+    for front in [
+        Front::MacMenuBar,
+        Front::WindowsNotificationArea,
+        Front::Gnome,
+    ] {
+        let Some(super::FixtureError::Unknown { reason }) =
+            super::fixture_refusal(front, "twoTool")
+        else {
+            panic!("{front:?}: twoTool is not refused as unknown");
+        };
+        let every = super::fixture_names().join(", ");
+        assert!(reason.contains("\"twoTool\""), "{reason}");
+        assert!(reason.contains(&every), "{reason}");
+        let made = PitboardModel::fixture_in(
+            "twoTool".into(),
+            front,
+            own.path().to_string_lossy().into_owned(),
+            Arc::new(Told::default()),
+            None,
+            Arc::new(Posted::default()),
+            Arc::new(Utc),
+        );
+        assert_eq!(
+            made.map(|_| ()),
+            Err(super::FixtureError::Unknown { reason }),
+            "{front:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&left).expect("still there"), "kept");
+    }
+    for name in super::fixture_names() {
+        assert_eq!(super::fixture_refusal(Front::Gnome, &name), None, "{name}");
     }
 }
 

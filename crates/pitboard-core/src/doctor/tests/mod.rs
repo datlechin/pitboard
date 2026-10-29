@@ -268,7 +268,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         location: Location::File(PathBuf::from("/home/x/watch.plist")),
         program: Some(PathBuf::from("/usr/local/bin/pitboard")),
         program_found: true,
-        at: None,
+        switching: None,
         task: None,
         outdated: false,
         refused: None,

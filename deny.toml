@@ -28,7 +28,9 @@ yanked = "deny"
 ignore = [
   { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained, not vulnerable, and runs only inside askama's derive at build time; every askama release still uses it" },
   # zbus 6.0.0 took these three in as modules of its own, and dropped the blocking API the core
-  # takes zbus 5 for (docs/facts/linux.md). Unmaintained, not vulnerable: zbus 5 still uses them.
+  # takes zbus 5 for (docs/facts/linux.md). Unmaintained, not vulnerable: zbus 5 still uses them,
+  # and so does atspi 0.30.0, the latest, which the Linux app's UI tests alone link as their
+  # AT-SPI client.
   { id = "RUSTSEC-2026-0370", reason = "zvariant is zbus 5's own, merged into zbus 6, which has no blocking API" },
   { id = "RUSTSEC-2026-0371", reason = "zbus_names is zbus 5's own, merged into zbus 6, which has no blocking API" },
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is zbus 5's own, merged into zbus 6, which has no blocking API" },
@@ -41,6 +43,11 @@ version = 2
 # CC0-1.0 is notify's, a public domain dedication with nothing to keep or pass on.
 allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense", "ISC", "BSD-3-Clause", "MPL-2.0", "CC0-1.0"]
 confidence-threshold = 0.9
+# target-lexicon reads a target's name in system-deps' build scripts, which find GTK for the
+# Linux app at build time; none of it is in the program.
+exceptions = [
+  { allow = ["Apache-2.0 WITH LLVM-exception"], crate = "target-lexicon" },
+]
 
 [bans]
 multiple-versions = "warn"

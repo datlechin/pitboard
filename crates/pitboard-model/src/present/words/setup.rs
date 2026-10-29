@@ -1,7 +1,7 @@
 //! What setting Pitboard up says: the setup step and its tips, the welcome, a tool Pitboard
 //! didn't find, and what stands in for a list with nothing in it yet.
 
-use super::{CONTINUE, add_account, this_machine, titled};
+use super::{CONTINUE, add_account, settings, this_machine, titled};
 use crate::Front;
 use crate::Tool;
 use pitboard_core::provider::ProviderId;
@@ -28,7 +28,14 @@ pub(crate) fn not_now(front: Front) -> String {
     titled(front, "Not Now", "Not now")
 }
 
-pub(crate) const USE_WITH_CODEX: &str = "Use Pitboard with Codex";
+// GNOME's header capitalisation heads every word of four letters, a preposition's too.
+pub(crate) fn use_with_codex(front: Front) -> String {
+    match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => "Use Pitboard with Codex",
+        Front::Gnome => "Use Pitboard With Codex",
+    }
+    .into()
+}
 
 pub(crate) const CODEX_UNUSED: &str =
     "Codex is installed. Pitboard reads nothing of it until you add the account it’s signed in to.";
@@ -51,7 +58,12 @@ pub(crate) fn at_limit_tip(at: u8) -> String {
 }
 
 pub(crate) fn open_settings(front: Front) -> String {
-    titled(front, "Open Settings…", "Open settings")
+    match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => {
+            titled(front, "Open Settings…", "Open settings")
+        }
+        Front::Gnome => format!("Open {}", settings(front, true)),
+    }
 }
 
 pub(crate) const WELCOME: &str = "Welcome to Pitboard";
@@ -64,25 +76,40 @@ pub(crate) fn welcome_says(tools: &str) -> String {
     )
 }
 
-pub(crate) fn where_it_lives(front: Front) -> &'static str {
+// `status_item`: the front's system keeps one for Pitboard now, which GNOME's may not.
+pub(crate) fn where_it_lives(front: Front, status_item: bool) -> String {
     match front {
         Front::WindowsNotificationArea => {
-            "Pitboard’s icon is in the notification area. Select ^ to find it."
+            "Pitboard’s icon is in the notification area. Select ^ to find it.".into()
         }
-        Front::MacMenuBar | Front::Gnome => "Pitboard lives in the menu bar.",
+        Front::MacMenuBar => "Pitboard lives in the menu bar.".into(),
+        Front::Gnome if status_item => "Pitboard keeps running once its window is closed, and \
+                                        its icon stays with your other status icons."
+            .into(),
+        Front::Gnome => {
+            format!("{CLOSING_QUITS} Preferences can keep it watching your limits after that.")
+        }
     }
 }
 
-// The welcome's switch to open at login: its title, and what it says.
+// Where no status item keeps Pitboard running, as no stock GNOME has one.
+pub(crate) const CLOSING_QUITS: &str = "Pitboard quits once its window is closed.";
+
+// The welcome's switch to open at login: its title, and what it says. Started at a Linux login,
+// Pitboard opens no window, so it runs rather than opens.
 pub(crate) fn open_at_login(front: Front) -> (&'static str, &'static str) {
     match front {
         Front::WindowsNotificationArea => (
             "Start when you sign in to Windows",
             "Pitboard watches your limits only while it’s running.",
         ),
-        Front::MacMenuBar | Front::Gnome => (
+        Front::MacMenuBar => (
             "Open Pitboard at Login",
             "Pitboard watches your limits only while it’s open.",
+        ),
+        Front::Gnome => (
+            "Start Pitboard at Login",
+            "Pitboard watches your limits only while it’s running.",
         ),
     }
 }
@@ -269,7 +296,10 @@ mod tests {
             pair("Add Account…", "Add account…")
         );
         assert_eq!(both(&not_now), pair("Not Now", "Not now"));
-        assert_eq!(USE_WITH_CODEX, "Use Pitboard with Codex");
+        assert_eq!(
+            both(&use_with_codex),
+            pair("Use Pitboard with Codex", "Use Pitboard with Codex")
+        );
         assert_eq!(
             CODEX_UNUSED,
             "Codex is installed. Pitboard reads nothing of it until you add the account it’s \
@@ -301,10 +331,10 @@ mod tests {
         );
         assert_eq!(
             (
-                where_it_lives(Front::MacMenuBar),
-                where_it_lives(Front::WindowsNotificationArea)
+                where_it_lives(Front::MacMenuBar, true),
+                where_it_lives(Front::WindowsNotificationArea, true)
             ),
-            (
+            pair(
                 "Pitboard lives in the menu bar.",
                 "Pitboard’s icon is in the notification area. Select ^ to find it."
             )
@@ -366,5 +396,58 @@ mod tests {
             )
         );
         assert_eq!(no_activity(Front::WindowsNotificationArea).0, "No activity");
+    }
+
+    // GNOME's header capitalisation on every title and control, an ellipsis only where one asks
+    // for more, and where Pitboard is while its desktop has a status item and while it has none.
+    #[test]
+    fn gnome_sets_up_in_these_words() {
+        let gnome = Front::Gnome;
+        assert_eq!(add_account(gnome, true), "Add Account…");
+        assert_eq!(not_now(gnome), "Not Now");
+        assert_eq!(use_with_codex(gnome), "Use Pitboard With Codex");
+        assert_eq!(add_codex_account(gnome), "Add Codex Account…");
+        assert_eq!(open_settings(gnome), "Open Preferences");
+        assert_eq!(
+            where_it_lives(gnome, true),
+            "Pitboard keeps running once its window is closed, and its icon stays with your \
+             other status icons."
+        );
+        assert_eq!(
+            where_it_lives(gnome, false),
+            "Pitboard quits once its window is closed. Preferences can keep it watching your \
+             limits after that."
+        );
+        assert_eq!(
+            open_at_login(gnome),
+            (
+                "Start Pitboard at Login",
+                "Pitboard watches your limits only while it’s running."
+            )
+        );
+        assert_eq!(welcome_done(gnome), "Continue");
+        assert_eq!(sign_in_asking(gnome), "Sign In…");
+        assert_eq!(
+            claude_code_not_installed(gnome),
+            "Claude Code Isn’t Installed"
+        );
+        assert_eq!(
+            how_to_install_claude_code(gnome),
+            "How to Install Claude Code"
+        );
+        let claude = missing(gnome, ProviderId::Claude);
+        assert_eq!(
+            claude.title,
+            "Pitboard can’t find Claude Code on this computer."
+        );
+        assert_eq!(
+            missing(gnome, ProviderId::Codex).link_title,
+            "How to Install the Codex CLI"
+        );
+        assert_eq!(no_accounts(gnome).0, "No Accounts");
+        assert_eq!(no_accounts_yet(gnome), "No Accounts Yet");
+        assert_eq!(no_accounts_to_show(gnome), "No Accounts to Show");
+        assert_eq!(no_activity(gnome).0, "No Activity");
+        assert_eq!(could_not_read_accounts(gnome), "Couldn’t Read Accounts");
     }
 }

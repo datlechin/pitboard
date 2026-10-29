@@ -19,10 +19,12 @@ itself before the account in use runs out: an app with its setting on, or `pitbo
 One crate, `pitboard-core`, does this for every tool. It reads and writes each tool's login,
 keeps Pitboard's index of accounts, and asks Claude Code's and Codex's services for usage.
 
-Three front ends use the core: the command line, `pitboard`; the menu bar app on macOS 14 or
-later; and the Windows app in the notification area. The apps call the core through UniFFI
-bindings, and show and send what one model in Rust decides. The command line inside each app
-is what its daily renewal runs, and what the `pitboard-app` cask and the MSI put on `PATH`.
+Four front ends use the core: the command line, `pitboard`; the menu bar app on macOS 14 or
+later; the Windows app in the notification area; and the Linux app, GTK 4 and libadwaita, on
+GNOME and KDE Plasma. The apps show and send what one model in Rust decides: the macOS and
+Windows apps call it through UniFFI bindings, and the Linux app links it as a Rust crate. The
+command line inside each app is what its daily renewal runs, and what the `pitboard-app` cask
+and the MSI put on `PATH`.
 
 Each app also gives each enrolled Claude Code and Codex account a window on its tool's site,
 claude.ai or chatgpt.com, where the site's own pages run in WebKit on macOS and WebView2 on
@@ -126,8 +128,8 @@ The other crates:
   - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
     and the free functions an app calls as it starts.
   - `front.rs`: `Front`, the app a model serves, and what follows from it alone: its `Engine`,
-    its system, where a sheet comes up, the `Surfaces` it starts with and whether it keeps
-    quick actions.
+    its system, where a sheet comes up, the `Surfaces` it starts with, whether it has account
+    windows and whether it keeps quick actions.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
@@ -189,6 +191,33 @@ The apps:
     the built app.
   - `Pitboard.Probe`: the session machine's measurements of the app's adapters, never shipped.
   - `Icon`: the drawings `Pitboard.ico` is made from.
+- `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
+  - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
+    launch starts anything (`launch.rs`), the one GApplication the primary instance runs
+    over the model (`application.rs`), the snapshots on the main loop and kept by part
+    (`listener.rs`, `shown.rs`), the window, its accounts page and the keys it answers
+    (`window/`), its Diagnostics and Activity (`pages/`), its dialogs (`dialogs/`) and
+    Preferences (`preferences/`), the status item's face and menu and the searches' results
+    (`presence.rs`), the widget feed a Plasma widget reads (`widget_feed.rs`),
+    the app's only actions on the bus (`outside.rs`), the model's notices, clock and the app's
+    own folder (`notices.rs`, `local_time.rs`, `data_folder.rs`), what the program carries in
+    its GResource (`resources.rs`), and the desktop's services the app speaks for the model, the
+    status item among them, with a fixture's stand-ins for them, and what it answers GNOME's
+    search and KRunner (`platform/`).
+  - `tests/ui/`, `tests/pictures/`: the UI tests, which drive the built program in a fixture
+    over D-Bus and AT-SPI and the window in their own process over a fixture's model, and the
+    pictures of each surface, drawn in-process.
+  - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
+    script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
+    KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
+    the D-Bus interfaces the app serves, each written from its published definition but the
+    widget feed, Pitboard's own (`dbus/`), and the views' GtkBuilder templates (`ui/`).
+  - `plasmoid/`: the Plasma widget in QML, which Meson installs where `plasma_widget` is on,
+    and its tests, which run it over a stand-in for the app on a private bus.
+  - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display
+    the tests run in, the packages an image or CI's container takes, and the run of the
+    checks in a container.
+  - `containers/`: the images `in-container.sh` builds, one per distribution CI checks.
 
 The rest:
 
@@ -417,6 +446,18 @@ keeps it is in the header of the module named.
   of a change, and `uninstall` takes it away before the schedule
   (`the_services_run_is_ended_only_between_changes`,
   `uninstalling_takes_the_watch_service_with_it`).
+- The watch service switches at the share it was installed with, or never, with
+  `--no-switch`, and says which as it is read back
+  (`a_service_that_never_switches_runs_watch_with_no_switch_and_reads_back_so`,
+  `with_no_switch_watch_warms_up_and_never_switches`).
+- Where its front has no status item, closing the window quits the app, so the app offers to
+  run the automatic switch and the warm-ups in the watch service, reads it on each visit to
+  them and installs it only when asked. Installed, it switches only where the settings' choice
+  is Switch, at their share, and never otherwise, installed again as either changes, and the
+  settings say what it does once the window is closed
+  (`without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs_it`,
+  `with_a_status_item_it_is_not_offered`, `the_watch_service_is_read_on_each_visit`,
+  `the_watch_service_follows_the_share_and_limits_says_what_it_does`).
 - Nothing rewrites a task changed in Task Scheduler, which `doctor` warns of
   (`task::drifted`), and the app's start-up repair points a schedule at the command line
   inside the app only where its Pitboard is gone or it runs an app's own program, macOS's
@@ -543,12 +584,24 @@ keeps it is in the header of the module named.
   supports, is asked with the front's `os()`, and `host::OS` is read only by the fixtures, whose
   machine is this one as the core sees it. What one front alone draws is in that front's own
   catalogue, and both shipping fronts' words are tested on every system
-  (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
+  (`each_shipping_fronts_catalogue_says_what_its_app_drew`). One GNOME front serves every Linux
+  desktop, so none of its words names one desktop's settings or another system's place
+  (`no_gnome_word_names_a_desktops_settings_or_another_systems_place`).
 - A snapshot carries the status item's words only while the front has one: the shipping
   fronts from the start, and a front that starts with none once `Intent::SurfacesChanged` says
   one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick
-  actions are offered only by a front that keeps them, the Windows app alone
+  actions are offered only by a front that keeps them, the Windows app and the Linux app
   (`quick_actions_are_offered_only_where_the_front_keeps_them`).
+- Whether a front has account windows, takes a pasted link and keeps quick actions is
+  `Front`'s. The Linux app has no account windows, so nothing offers one and a link that arrives
+  goes to the browser; a link pasted or dropped on it is read as a site's own link or a Pitboard
+  link of the build's scheme, by the rule any link from outside is; and its search finds a
+  switch to each account and Add Account
+  (`the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser`,
+  `a_link_pasted_where_the_front_takes_one_is_read_as_a_site_link_or_a_pitboard_link`,
+  `the_gnome_front_offers_a_switch_for_each_account_and_add_account`). A fixture reads its debug
+  build's links on a front with no account windows to name their scheme
+  (`a_gnome_fixture_reads_the_links_of_its_build`).
 - One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`). Each names the parts that differ
@@ -608,6 +661,125 @@ keeps it is in the header of the module named.
   the model gave it, read only where a link would be, and its switch is a request from outside
   (`LaunchingTests`, `model/quick_actions.rs`).
   Only a Release build writes the list, and `--unregister` deletes it.
+- A build of the Linux app is the release only where Meson built it, and anything Cargo builds
+  alone is the debug build, with an id, a link scheme and an object path of its own
+  (`a_build_is_a_release_only_where_meson_says_so`, `each_build_has_its_own_id_scheme_and_path`).
+  A Linux debug build started without `PITBOARD_FIXTURE`, as D-Bus activation, autostart or a
+  link would start one on the real homes, or in a fixture it cannot make, quits before it owns
+  a bus name (`a_debug_build_outside_a_fixture_quits_before_it_owns_a_name`,
+  `a_fixture_with_a_wrong_name_is_refused_with_every_name`, and in the model
+  `a_refused_name_leaves_the_fixtures_folder_alone`).
+- The Linux app is one GApplication: a second launch hands what it was given to the first and
+  quits, and only the first makes the model, which in a fixture makes its world
+  (`a_second_launch_hands_its_link_to_the_first_and_quits`). It runs while a tray shows its
+  status item, while its window is open and while a switch asked from outside is answered, and
+  ends by GApplication's use count once none of these holds it, so nothing of it runs unseen:
+  closing its window hides it while a tray keeps Pitboard running and quits Pitboard where none
+  does, a window hidden for a tray closes as the tray goes, and a launch at sign-in is held
+  with a tray and ends with none (`with_one_closing_hides_it`,
+  `without_a_tray_closing_the_window_quits`,
+  `the_tray_going_while_the_window_is_hidden_quits`,
+  `signing_in_with_a_tray_starts_held_with_no_window`, `signing_in_with_no_tray_ends`,
+  `the_app_is_held_until_each_request_is_answered`).
+- Any process in the session can call what the Linux app serves on the bus, so each answers
+  only for an id the app gave out and does no more than a click in the app:
+  - its `app.` actions, each taking an id the model issued or none: a notification's click, a
+    switch from outside, which the Plasma widget asks for, and the launcher's Add Account and
+    Refresh. Its window is an `AdwWindow` whose intents are its class's widget actions, which
+    GTK exports nowhere (`the_app_exports_only_its_outside_actions`,
+    `each_launcher_action_is_one_the_app_exports_and_says_its_words`). A switch from outside
+    that is refused is said in a notification
+    (`a_switch_from_outside_that_is_refused_is_said_in_a_notification`);
+  - GNOME's search provider's `ActivateResult` and `LaunchSearch`, and KRunner's `Run`, which
+    take only a result the search they end gave and make its switch a switch from outside, or
+    open the window (`an_id_never_given_activates_nothing`, `activating_a_result_tells_its_id`,
+    `run_tells_the_id_after_its_token`, `launching_a_search_opens_the_window`);
+  - the status item's `Activate`, which opens the window, and its DBusMenu's `Event`,
+    `EventGroup` and `AboutToShow`, which take only an entry the menu shows
+    (`activate_hands_over_the_token_the_host_provided`, `a_clicked_entry_is_told_once_by_its_id`,
+    `about_to_show_is_told_as_a_glance`). The tray draws that menu for the app and tells it of
+    a click, so an entry sends what the same entry of the macOS menu and the Windows icon's
+    sends, an account's switch with its questions, and not a switch from outside, which asks
+    none (`an_account_in_the_tray_menu_sends_what_its_row_sends`,
+    `a_notice_in_the_menu_sends_its_intent_or_opens_its_page`).
+- The Plasma widget reads only the widget feed, over a read-only interface, and switches only
+  through `app.switch-from-outside`, each asked of the connection that owns the app's name, by
+  its unique name, which the bus never starts: it asks nothing of a Pitboard not running and
+  starts none (`the_feed_interface_offers_nothing_to_call`, `tst_widget`). The feed is the model's, said
+  only as `widget_revision` moves, and empty once Pitboard is removed
+  (`the_feed_is_the_models_and_changes_only_with_its_revision`,
+  `after_uninstall_the_feed_is_empty`).
+- The Linux app's `Shown` keeps a snapshot by part by the same rule and compares no part. A
+  list model's row keeps its object while its id is shown, and is told it changed where its
+  value differs from the one it held (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
+  `a_snapshot_not_newer_is_dropped`, `a_row_keeps_its_object_across_snapshots`).
+- The Linux window shows each account's limits in the model's words, each bar tinted by the
+  step the model says the limit is at, and holds no threshold of its own
+  (`each_account_shows_its_limits_with_their_level`). What the model asks a question for, an
+  account's action or a notice's button, asks it first as an Adwaita alert, which answers with
+  the model's default and closes as Cancel
+  (`a_notices_buttons_send_their_intents_asking_first_where_it_says`,
+  `a_question_answers_with_its_default_and_close_responses`).
+- The Linux app's sheets are the model's, each an Adwaita dialog with its buttons in its header:
+  Add Account and Sign In Again sign in with the code the browser shows and name the account
+  added, a failure is said inside the sheet with what was typed still there, and Escape while
+  signing in is the sign-in's Cancel, and on Name, Rename and Clean Up theirs
+  (`adding_an_account_signs_in_with_the_fixtures_code_and_names_it`,
+  `a_failure_stays_in_the_dialog`, `escape_while_signing_in_cancels_it`,
+  `rename_asks_in_a_dialog_whose_header_holds_its_buttons_and_escape_is_cancel`). A link
+  dropped on the window or pasted in Open Link reaches the model as it came, and Open in
+  Browser hands it to the browser, a fixture's stand-in opener in a fixture
+  (`a_dropped_link_opens_open_link`, `a_pasted_link_opens_open_link`,
+  `open_in_browser_hands_the_link_to_the_opener`).
+- In a fixture the Linux app writes, posts and registers nothing outside the fixture's folder,
+  and leaves every home it was given as it found it, beside Mesa's shader cache
+  (`a_fixture_writes_nothing_outside_its_folder`,
+  `a_fixture_launch_owns_the_devel_name_and_leaves_its_homes_as_its_world_made_them`).
+- The Linux app's own data folder is its id in `$XDG_DATA_HOME`, each build its own, never in
+  Pitboard's directory, so `pitboard uninstall` leaves it and the app's Uninstall takes it back,
+  and it is one the core's guard keeps a build for tests out of (`data_folder.rs`,
+  `the_data_folder_is_the_one_the_cores_guard_refuses`,
+  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
+- Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
+  (`neither_search_starts_pitboard`). Each hands the app back only an id it was given in that
+  search (`an_id_never_given_activates_nothing`).
+- A Linux notification's click reaches the app only as `app.notice-clicked`, with the argument
+  the notice gave it (`a_notice_posts_its_default_action_and_button_as_app_actions`,
+  `a_click_on_a_freedesktop_server_reaches_the_notices_action_with_its_argument`).
+- The Linux app starts at sign-in by one autostart entry that names its program and tries it
+  first. Turning it off removes that entry alone, and Uninstall that entry and the app's own
+  data and cache folders (`turning_it_off_removes_only_its_own_entry`,
+  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`). Preferences turns it on
+  and off and then tells the model what the desktop has
+  (`start_at_sign_in_writes_the_entry_and_tells_the_model`). Once the model has removed
+  Pitboard, the app takes those back and names its package manager's command, the build's
+  package's (`uninstall_removes_the_apps_leftovers_and_names_the_package_command`).
+- The Linux app's Preferences send what the person set only where it differs from what the
+  model shows, so drawing a snapshot sends nothing, and read the schedule, the watch service and
+  the command line again each time Advanced is shown
+  (`a_setting_sends_only_a_value_that_differs`,
+  `the_schedule_command_line_and_watch_service_are_read_on_each_visit`).
+- The Linux window answers each window request once, and the place it names: the accounts,
+  Diagnostics or Activity over them, each reading again what it shows as it opens, Preferences on
+  its page, or the first launch's welcome, over which what its Add starts comes up
+  (`the_welcome_shows_once_and_adds_from_itself`, `diagnostics_copies_the_redacted_report`,
+  `activity_lists_each_change_in_its_columns`). Keyboard Shortcuts lists every key the window
+  answers, its own and the toolkit's (`every_shortcut_the_window_answers_is_listed_with_its_keys`).
+- The Linux app makes the files of its own link scheme, so a link reaches the model as written,
+  where GVfs would write it again (`a_link_opened_is_handed_on_as_written`).
+- In a fixture, the Linux app's stand-ins for the autostart entry, the notifications, the tray
+  and the browser write only in the fixture's folder and reach no bus
+  (`a_fixtures_stand_ins_write_only_in_its_folder`).
+- The Linux status item comes and goes with the tray watcher's name, never a poll, and asks the
+  bus to start nothing (`an_item_registers_once_a_watcher_appears_and_again_after_it_returns`,
+  `with_no_watcher_nothing_registers_and_the_tray_is_said_to_be_absent`).
+- A change to the Linux status item's menu is said the way each tray reads one again: new or
+  gone entries with a new revision, and a changed entry, which keeps its number, by its
+  properties (`a_new_menu_raises_the_revision_and_says_so`,
+  `an_entry_that_changes_says_what_changed_and_keeps_its_number`).
+- Only a Meson release build installs anything, and it claims `com.usepitboard.Pitboard` and
+  `pitboard://` alone: `check-linux-app.sh` fails a tree that holds a fixture's text,
+  `.Devel`, `pitboard-debug` or a file outside its layout (`test-linux-app.py`).
 
 ### Account windows
 

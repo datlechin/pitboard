@@ -32,6 +32,7 @@ and later, the `rust-version` in `Cargo.toml`.
 | `shellcheck` 0.11.0 or later, Python 3.11 or later | The install script and the release's scripts |
 | Xcode with Swift 6.2 or later, XcodeGen | [The macOS app](#the-macos-app) |
 | .NET 10 SDK | [The C# bindings](#the-c-bindings) |
+| podman or docker | [The Linux app](#the-linux-app) |
 | Node 24 or later | [Website](#website) |
 
 ## Rules
@@ -77,7 +78,7 @@ lint and a run of the `fixture::` tests of its own.
 CI checks the workspace on Rust 1.91 too:
 
 ```sh
-cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
+cargo hack check --rust-version --workspace-behavior=cargo --workspace --exclude pitboard-linux --all-targets --locked
 ```
 
 Only a Mac compiles `rusqlite`, so CI also checks `pitboard-core`, `pitboard` and
@@ -140,7 +141,9 @@ buttons are the system's: `PrimaryButton` and `CloseButton` in a WinUI `ContentD
 identifier, so the macOS UI tests find those, a pop-up's choices and the Settings window's
 panes by their words. Those words, and any sentence a UI test reads, sit in
 `apps/macos/UITests/Words.swift` or `apps/windows/Pitboard.UITests/Words.cs`, the one place a
-change to the model's words reaches the UI tests.
+change to the model's words reaches the UI tests. The Linux app's find a widget by its
+GtkBuilder id, which GTK 4.22 gives AT-SPI, and take their words from the model in
+`apps/linux/tests/ui/words.rs`.
 
 For a change to the install script, `packaging/install.sh`, another template in `packaging/`,
 or `.github/scripts/fill-template.sh`, which fills them at release time:
@@ -167,9 +170,23 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
 python3 .github/scripts/test-release.py
 ```
 
-The macOS app, Windows, the Windows app, Linux and the website have checks of their own, in
-their sections. CI's `all-green` check fails when any other job failed or was cancelled, and a
-pull request needs it to pass.
+For a change to the Linux app's scripts, `apps/linux/scripts`,
+`apps/linux/data/metainfo-releases.py` and `.github/scripts/check-linux-app.sh`:
+
+```sh
+shellcheck -s sh apps/linux/scripts/cargo-build.sh apps/linux/scripts/install-deps.sh \
+  apps/linux/scripts/headless.sh apps/linux/scripts/in-container.sh \
+  apps/linux/scripts/check.sh .github/scripts/check-linux-app.sh
+python3 .github/scripts/test-linux-app.py
+```
+
+`test-linux-app.py` leaves `check-linux-app.sh`'s cases out where `desktop-file-validate` and
+`appstreamcli` are not on `PATH`, as on a Mac. `apps/linux/scripts/in-container.sh debian-13
+scripts` runs every case, as [The Linux app](#the-linux-app) says.
+
+The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
+their own, in their sections. CI's `all-green` check fails when any other job failed or was
+cancelled, and a pull request needs it to pass.
 
 ## The macOS app
 
@@ -712,6 +729,124 @@ EOF
 docker run --rm --user pbfacts --network none pitboard-linux-display sh -c \
   'sh /opt/linux-runner-facts.sh display --out /report/display.json && cat /report/display.json'
 ```
+
+## The Linux app
+
+The Linux app is Rust in `apps/linux`, on GTK 4 and libadwaita, which Meson builds and
+installs. The [code map](ARCHITECTURE.md#code-map) says what each folder holds. It is a member
+of the workspace but not a default member: GTK's and libadwaita's development files are on no
+machine but the app's own, so `cargo build`, `clippy` and `nextest` leave it out unless asked
+with `-p pitboard-linux` or `--workspace`, and off Linux it compiles as nothing. Its floor is
+Debian 13's GTK 4.18, libadwaita 1.7 and GLib 2.84, and Rust 1.92.
+
+Read the [Linux rules in AGENTS.md](AGENTS.md#on-linux) first. The app's checks run in a
+container, with podman or else docker, as CI runs them:
+
+```sh
+apps/linux/scripts/in-container.sh debian-13
+apps/linux/scripts/in-container.sh ubuntu-26.04 release
+```
+
+`in-container.sh` builds an image of the distribution from `apps/linux/containers`, tagged by
+what it is made from, and runs each step of `apps/linux/scripts/check.sh` named, in a fresh
+container:
+
+| Step | What it runs |
+| --- | --- |
+| `lint` | `cargo clippy -p pitboard-linux --all-targets --locked`, without the fixtures and with them |
+| `test` | `cargo nextest run --locked -p pitboard-linux --features fixture` under `headless.sh`, but for the UI tests and the pictures |
+| `ui` | the UI tests and the pictures the same way, which need GTK 4.22, the pictures kept in `$PITBOARD_LINUX_PICTURES`, else `linux-pictures` in Cargo's target folder |
+| `release` | Meson's setup, compile, tests and install of the release, then `check-linux-app.sh` on what it installed |
+| `floor` | `cargo hack check --rust-version -p pitboard-linux --all-targets --locked` |
+| `scripts` | `test-linux-app.py`, with `desktop-file-validate` and `appstreamcli` required |
+| `widget` | `qmllint` on the Plasma widget, then its tests under `headless.sh` over a stand-in for the app, in Breeze and in Breeze Dark, which need Plasma 6.4's QML modules, the pictures kept as `ui` keeps its own |
+
+With no step it runs the steps of the distribution's job on CI: `lint`, `test`, `ui` and
+`release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint`, `test` and
+`widget` on `fedora-44`. A container runs as uid 1000, sees the repository and this machine's Cargo
+registry read only, and keeps Cargo's and Meson's folders in the volume
+`pitboard-linux-app-target`. Only a `cargo fetch` before the steps has the network, for
+Cargo's git checkouts. The release's link, at more than one job, takes most of 8 GiB: where
+the machine or Docker's VM has less, set `CARGO_BUILD_JOBS=1`.
+
+`apps/linux/scripts/headless.sh <command>` runs a command as the app's tests run: as a user,
+never root, in a headless mutter with one virtual monitor, on a private session bus, with
+every home, XDG folder and temporary folder fresh and removed after.
+
+`.github/scripts/check-linux-app.sh` fails the install tree of a release:
+
+- whose `pitboard-app` holds a fixture's text, or a file of which names
+  `com.usepitboard.Pitboard.Devel` or `pitboard-debug`;
+- that holds a file the layout in [the Linux app's facts](docs/facts/linux-app.md#the-install-layout)
+  does not name, or lacks one it names;
+- whose launcher or KRunner runner `desktop-file-validate` refuses, or whose metainfo
+  `appstreamcli validate --no-net` refuses;
+- whose D-Bus service starts anything but `/usr/bin/pitboard-app --gapplication-service`, or
+  is for another name than `com.usepitboard.Pitboard`, or whose launcher handles more than
+  `pitboard://`;
+- whose search provider or KRunner runner would start Pitboard;
+- whose Plasma widget, where it has one, is another id's.
+
+`test-linux-app.py` tests each of these where `desktop-file-validate` and `appstreamcli` are
+on `PATH`, and `TEST_LINUX_APP_TOOLS` names the ones that must be, as the `scripts` step and CI
+set it.
+
+### The Linux app on CI
+
+Each job runs in an image named by digest, installs what `install-deps.sh` lists, builds as
+the container's root, and runs the `test` step from a nextest archive as a fresh user:
+
+- `linux-app`, on `ubuntu-26.04` and `ubuntu-26.04-arm`, in Ubuntu 26.04: `lint`, the tests
+  and `release`, and on x86_64 `ui`, whose pictures it uploads as `linux-app-pictures`, kept for
+  7 days, a run that failed included.
+- `linux-app-floor`, in Debian 13: `lint`, the tests and `floor`.
+- `linux-app-fedora`, in Fedora 44: `lint`, the tests and `widget`, whose pictures it uploads
+  as `linux-widget-pictures`, kept for 7 days, a run that failed included.
+
+`install-deps.sh` takes Debian's and Ubuntu's packages from one snapshot of their archives,
+named in it. Fedora keeps none, so its job takes the packages of the day. A new snapshot is a
+change to `install-deps.sh`, which builds every image again. Each job uploads its JUnit report
+when it fails.
+
+### Run the Linux debug build
+
+Read the [Linux rules in AGENTS.md](AGENTS.md#on-linux) first. A debug build runs only in a
+fixture, on the private bus and the headless display `headless.sh` gives it: started without
+`PITBOARD_FIXTURE` it says so and quits before it owns a name, as it would started by D-Bus
+activation, at sign-in or for a link, on the real homes. Its window shows on no screen, so
+`in-container.sh ubuntu-26.04 ui` draws each surface into the `linux-pictures` folder in the
+target volume, and CI's `linux-app-pictures` holds the same.
+
+On a Linux machine with what `install-deps.sh` lists, build it with the fixtures, then start it
+in one under `headless.sh`, which gives it fresh homes. A second copy started with a link hands
+it to the first and quits:
+
+```sh
+cargo build -p pitboard-linux --features fixture
+apps/linux/scripts/headless.sh sh -c '
+  PITBOARD_FIXTURE=twoTools target/debug/pitboard-app & first=$!
+  sleep 2
+  PITBOARD_FIXTURE=twoTools target/debug/pitboard-app \
+    "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2F"
+  kill "$first"'
+```
+
+`--sign-in` starts it with no window, held while a tray shows it, and ended after a while where
+none does: under `headless.sh`, a name of the test's own, `org.kde.StatusNotifierWatcher`, is a
+fixture's tray. `--add-account` and `--refresh` ask the running copy for what the launcher's
+actions ask. A build without the fixtures refuses a fixture and
+names the command above. A debug build keeps apart from a release:
+
+| | Debug build | Release build |
+| --- | --- | --- |
+| App id and bus name | `com.usepitboard.Pitboard.Devel` | `com.usepitboard.Pitboard` |
+| Link scheme | `pitboard-debug://` | `pitboard://` |
+| Data folder | `linux` in the fixture's folder | `$XDG_DATA_HOME/com.usepitboard.Pitboard` |
+| Notifications, start at sign-in, tray, browser | the fixture's stand-ins, which write JSON lines in `linux` in the fixture's folder | the desktop's |
+| Installs | nothing: only Meson installs, and only the release | what [the install layout](docs/facts/linux-app.md#the-install-layout) lists |
+
+The fixture's folder is `pitboard-fixture` in the temporary directory, which each launch in a
+fixture empties first.
 
 ## Tool registers
 

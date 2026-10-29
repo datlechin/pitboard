@@ -67,13 +67,14 @@ pub(crate) fn named_with_tool(label: &str, tool: &str) -> String {
     format!("{label} ({tool})")
 }
 
-// "work" on macOS, whose subtitle says the rest; "work (42%)", "old (sign-in expired)" on Windows.
+// "work" on macOS, whose subtitle says the rest; "work (42%)", "old (sign-in expired)" on Windows
+// and in a status item's menu on Linux, whose entries have no subtitle.
 pub(crate) fn named_in_menu(front: Front, title: &str, aside: Option<&str>) -> String {
     match (front, aside) {
-        (Front::WindowsNotificationArea, Some(aside)) => {
+        (Front::WindowsNotificationArea | Front::Gnome, Some(aside)) => {
             format!("{title} ({})", uncapitalised(aside))
         }
-        (Front::WindowsNotificationArea, None) | (Front::MacMenuBar | Front::Gnome, _) => {
+        (Front::WindowsNotificationArea | Front::Gnome, None) | (Front::MacMenuBar, _) => {
             title.to_owned()
         }
     }
@@ -98,6 +99,13 @@ pub(crate) fn nameless_login(unusable: bool) -> &'static str {
     } else {
         "Unknown sign-in"
     }
+}
+
+// "Claude Code, Team 5x": the tool an account is for, where it is named, and its plan, as the
+// Linux app says them under the account's name.
+pub(crate) fn tool_and_plan(tool: Option<&str>, plan: Option<&str>) -> Option<String> {
+    let said: Vec<&str> = tool.into_iter().chain(plan).collect();
+    (!said.is_empty()).then(|| said.join(", "))
 }
 
 // "work, Team 5x, in use", as VoiceOver and Narrator say a row; `sign_in` what stops a switch.
@@ -240,13 +248,15 @@ pub(crate) fn limit_reached(title: &str, clock: Option<&str>) -> String {
 }
 
 // The menu's line: "5-hour 42% used, Weekly 12%", each limit by its name beside its bar, and
-// in sentence case on Windows.
+// in sentence case on Windows and GNOME, whose guidelines give it to text that runs on.
 pub(crate) fn limits_line(front: Front, limits: &[(String, String)]) -> String {
     let said: Vec<String> = (limits.iter().enumerate())
         .map(|(at, (name, figure))| match (at, front) {
             (0, _) => format!("{name} {}", used(figure)),
-            (_, Front::WindowsNotificationArea) => format!("{} {figure}", uncapitalised(name)),
-            (_, Front::MacMenuBar | Front::Gnome) => format!("{name} {figure}"),
+            (_, Front::WindowsNotificationArea | Front::Gnome) => {
+                format!("{} {figure}", uncapitalised(name))
+            }
+            (_, Front::MacMenuBar) => format!("{name} {figure}"),
         })
         .collect();
     said.join(", ")
@@ -563,6 +573,18 @@ mod tests {
             named_in_menu(Front::WindowsNotificationArea, "spare", None),
             "spare"
         );
+        assert_eq!(
+            limits_line(Front::Gnome, &limits),
+            "5-hour 42% used, weekly 12%, weekly (Fable) 3%",
+            "text that runs on, in GNOME's sentence case"
+        );
+        assert_eq!(
+            named_in_menu(Front::Gnome, "work", Some("64%")),
+            "work (64%)",
+            "a status item's menu entry has no subtitle on Linux"
+        );
+        assert_eq!(named_in_menu(Front::Gnome, "spare", None), "spare");
+        assert_eq!(in_use(Front::Gnome), "In Use");
         assert_eq!(updated("12:00"), "Updated 12:00");
         assert_eq!(READING, "Reading…");
         assert_eq!(NOT_READ_YET, "Not read yet");

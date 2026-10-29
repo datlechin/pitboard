@@ -48,11 +48,11 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use app_words::{
-    AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
-    SheetWords, WindowWords, WindowsNotificationAreaWords, already_there, app_words,
-    install_update, links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install,
-    still_switching, trash_says, usage_of, webview_runtime_too_old,
-    windows_notification_area_words,
+    AccountWindowWords, ActivityWords, AppWords, GnomeShortcutWords, GnomeWords, MacMenuBarWords,
+    MenuWords, SettingsWords, SheetWords, WindowWords, WindowsNotificationAreaWords,
+    account_description, already_there, app_words, countdown, gnome_words, install_update,
+    links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install, still_switching,
+    trash_says, usage_of, webview_runtime_too_old, windows_notification_area_words,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
@@ -60,10 +60,10 @@ pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
-    MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
+    MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown, WatchServiceShown,
 };
-pub use quick_actions::{QuickAction, QuickAsk, outside_refused};
-pub use removal::RemovalShown;
+pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
+pub use removal::{Package, PackageRemoval, RemovalShown, package_removal};
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
 pub use welcome::{WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool};
@@ -1021,6 +1021,76 @@ mod tests {
             }
         }
         assert!(found.is_empty(), "{found:#?}");
+    }
+
+    // Critique 14: one front on every Linux desktop, Plasma's as well as GNOME's, so no word of
+    // it names one desktop's settings, nor a place another system has.
+    #[test]
+    fn no_gnome_word_names_a_desktops_settings_or_another_systems_place() {
+        use crate::model::Sheet;
+        use crate::model::testing::records::warning;
+        use crate::present::testing::{account, claude_code, codex, read, status, strings_of};
+        use crate::{Package, Surfaces, gnome_words, notice_buttons, package_removal};
+        use pitboard_core::status::Standing;
+        const PLACES: [&str; 8] = [
+            "settings >",
+            "system settings",
+            "login items",
+            "finder",
+            "menu bar",
+            "notification area",
+            "taskbar",
+            "control center",
+        ];
+        let gnome = Front::Gnome;
+        let accounts = vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build(),
+            account(Some("main"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .uuid("m")
+                .build(),
+        ];
+        let mut said = Vec::new();
+        for status_item in [false, true] {
+            let mut state = read(
+                status(accounts.clone(), vec![warning("fallback_login", "")]),
+                vec![claude_code(), codex()],
+            );
+            state.surfaces = Surfaces { status_item };
+            state.sheet = Some(Sheet::Add { tool: None });
+            said.extend(strings_of(&present_on(gnome, &state, MIDDAY, &Utc)));
+            said.push(words::where_it_lives(gnome, status_item));
+        }
+        said.extend(strings_of(&app_words(gnome)));
+        said.extend(strings_of(&gnome_words()));
+        said.extend(strings_of(&notice_buttons(gnome)));
+        said.extend(strings_of(&downloads_quit_question(gnome, 2)));
+        for package in [Package::Deb, Package::Rpm, Package::Unknown] {
+            said.extend(strings_of(&package_removal(package, &[])));
+        }
+        said.extend([
+            words::cannot_schedule(gnome, true),
+            words::cannot_link(gnome),
+            words::no_scheduler(gnome),
+            words::turn_it_off_and_on(gnome),
+            words::open_settings(gnome),
+            words::warm_up_settings(gnome),
+            words::sign_in_again_button(gnome),
+            words::switch_button(gnome, "personal"),
+            words::uninstall_pitboard(gnome),
+        ]);
+        let named: Vec<&String> = said
+            .iter()
+            .filter(|said| {
+                let said = said.to_lowercase();
+                PLACES.iter().any(|place| said.contains(place))
+            })
+            .collect();
+        assert!(named.is_empty(), "{named:#?}");
     }
 
     /// A moment later today is a clock time, and one on another day names its day as well,

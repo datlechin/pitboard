@@ -51,7 +51,7 @@ pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
         title: words::WELCOME.into(),
         lines: vec![
             words::welcome_says(&pitboard_core::words::listed(&names)),
-            words::where_it_lives(seen.front).into(),
+            words::where_it_lives(seen.front, seen.state.surfaces.status_item),
         ],
         icon_link: match seen.front {
             Front::WindowsNotificationArea => Some(SetupLink {

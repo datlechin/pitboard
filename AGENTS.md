@@ -255,6 +255,9 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never run a test or a debug build of the app on a desktop's own bus or display. Each runs on
   a private bus, as `dbus-run-session` starts one, and anything graphical in
   `mutter --headless` on that bus, with `DISPLAY` unset and `GSETTINGS_BACKEND=memory`.
+- Run the Linux app's tests and its debug build only under `apps/linux/scripts/headless.sh`,
+  which gives them a private bus, a headless mutter and fresh homes and `XDG_*` folders.
+  [The Linux session machines](#the-linux-session-machines) are the exception.
 - Never let a test reach a real portal, `dconf-service`, notification server,
   StatusNotifierWatcher or keyring prompter. A test plays the ones it needs on a bus of its
   own.
@@ -272,6 +275,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   them only for what no reading of a build settles.
 - Never measure a running tool on a Linux machine that holds logins. Use
   [the Linux session machines](#the-linux-session-machines).
+- Never run `apps/linux/scripts/install-deps.sh` on a machine of your own. It installs packages
+  and Rust as root, for an image `in-container.sh` builds and CI's containers alone.
 - Never run `.github/scripts/linux-runner-facts.sh` on a machine of your own, but its display
   parts in a container. It makes Linux users, mounts file systems and installs packages.
 - Only `linux-runner-facts.sh`, only through `linux-facts.yml` on a GitHub-hosted runner, may

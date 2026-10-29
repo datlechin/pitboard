@@ -100,6 +100,7 @@ fn platform(apps: Arc<dyn OtherApps>) -> Platform {
         earlier: None,
         windows: None,
         widget_feed: None,
+        link_scheme: None,
     }
 }
 
@@ -226,6 +227,7 @@ fn the_glance_is_written_to_the_file_the_app_names() {
         Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             widget_feed: Some(glance.clone()),
+            link_scheme: None,
             ..platform(StandInApps::new(&[], true))
         },
         QUICK,
@@ -277,6 +279,7 @@ fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
         Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             widget_feed: Some(glance.clone()),
+            link_scheme: None,
             ..platform(StandInApps::new(&[], true))
         },
         QUICK,
@@ -1387,6 +1390,7 @@ fn model_telling_time(
             earlier: None,
             windows: None,
             widget_feed: None,
+            link_scheme: None,
         },
         cadence,
     );
@@ -1762,6 +1766,7 @@ fn model_posting(
             earlier: None,
             windows: None,
             widget_feed: None,
+            link_scheme: None,
         },
         QUICK,
     );

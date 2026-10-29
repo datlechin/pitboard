@@ -82,6 +82,7 @@ set edit:completion:arg-completer[pitboard] = {|@words|
         }
         &'pitboard;watch'= {
             cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --no-switch 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
             cand --once 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up'
             cand --json 'Print JSON instead of text'
             cand -h 'Print help'
@@ -93,6 +94,7 @@ set edit:completion:arg-completer[pitboard] = {|@words|
         }
         &'pitboard;watch;install'= {
             cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --no-switch 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
             cand --json 'Print JSON instead of text'
             cand -h 'Print help'
             cand --help 'Print help'

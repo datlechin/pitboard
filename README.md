@@ -40,8 +40,9 @@ lists every request.
 
 The command line runs on macOS, Windows and Linux. The app runs on macOS 14 or later and on
 Windows 11 24H2 or later, and includes the command line. Pitboard for Windows is in beta, and
-its files are not signed. On Linux, Pitboard builds and passes its tests, but has not been run
-with real logins.
+its files are not signed. On Linux, Pitboard builds and passes its tests, its app for GNOME and
+KDE Plasma included, which is tested headless on Debian 13, Ubuntu 26.04 and Fedora 44. Neither
+has been run with real logins, and the app has not been run in a desktop session.
 
 ## Install
 

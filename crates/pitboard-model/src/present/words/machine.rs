@@ -1,7 +1,9 @@
 //! What Settings and Activity say of this machine: keeping saved sign-ins fresh, what happens
 //! at a limit, warm-ups, the command line, updates, uninstalling, and each change listed.
 
-use super::{sign_in_standing, store_in_front, this_machine, titled, typeset};
+use super::{
+    CLOSING_QUITS, settings, sign_in_standing, store_in_front, this_machine, titled, typeset,
+};
 use crate::Front;
 use crate::model::AtLimit;
 use pitboard_core::status::Standing;
@@ -42,7 +44,7 @@ pub(crate) fn no_scheduler(front: Front) -> String {
 /// app there is only the app itself to schedule, which renews nothing.
 pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
     if !temporary {
-        return "This copy of Pitboard has no command line inside it to run on a schedule.".into();
+        return no_command_line(front, "on a schedule");
     }
     match front {
         Front::MacMenuBar => {
@@ -50,9 +52,10 @@ pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
              from a temporary copy, which is gone once Pitboard quits."
                 .into()
         }
-        // No app runs on Linux.
-        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
-                         from a temporary copy, which is gone once Pitboard quits."
+        // The Linux app is installed by its package, and a copy run from anywhere else is the
+        // one a person is told to install.
+        Front::Gnome => "Install Pitboard from its package first. Until then it runs from a \
+                         temporary copy, which is gone once Pitboard quits."
             .into(),
         // The Windows app is installed by its installer, and a copy run from anywhere else,
         // such as from inside a zip, is the one a person is told to install.
@@ -63,6 +66,69 @@ pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
         }
     }
 }
+
+// The Linux package puts the command line beside the app, where the other apps hold it inside.
+fn no_command_line(front: Front, to_run: &str) -> String {
+    let place = match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => "inside",
+        Front::Gnome => "beside",
+    };
+    format!("This copy of Pitboard has no command line {place} it to run {to_run}.")
+}
+
+/// Why the watch service cannot be turned on from this copy of the app, as daily renewal
+/// cannot: it runs the command line long after the app has quit.
+pub(crate) fn cannot_watch(front: Front, temporary: bool) -> String {
+    if temporary {
+        cannot_schedule(front, true)
+    } else {
+        no_command_line(front, "in the background")
+    }
+}
+
+// Preferences' switch for it, which the Linux app titles so.
+pub(crate) const WATCH_IN_THE_BACKGROUND: &str = "Watch in the Background";
+
+// Under the watch service's switch, which switches at its share or never, as Limits says.
+pub(crate) fn watch_service_about(
+    front: Front,
+    switching: pitboard_core::watch_service::Switching,
+) -> String {
+    use pitboard_core::watch_service::Switching;
+    match switching {
+        Switching::At(at) => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}% and warming up \
+             the accounts {} turns on, from each login.",
+            this_machine(front),
+            at.percent(),
+            warm_up(front)
+        ),
+        Switching::Never => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on warming up the accounts {} turns on, from \
+             each login, and never switches Claude Code.",
+            this_machine(front),
+            warm_up(front)
+        ),
+    }
+}
+
+// After the at-limit note on a front whose window's closing quits Pitboard: what switches then.
+pub(crate) fn switching_once_closed(watched: bool) -> String {
+    if watched {
+        "Once its window is closed, the watch service goes on switching it.".into()
+    } else {
+        format!(
+            "Once its window is closed, nothing switches it unless {WATCH_IN_THE_BACKGROUND} is on."
+        )
+    }
+}
+
+// After Notify Me's note where the watch service is on, which notifies nobody.
+pub(crate) const NOTIFYING_ONCE_CLOSED: &str =
+    "Once its window is closed, nothing notifies you, and the watch service only warms up.";
+
+// Under Do Nothing, where the watch service is on.
+pub(crate) const ONLY_WARMING_UP: &str = "The watch service only warms up, and never switches.";
 
 pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
     format!("From {lowest}% to {highest}%")
@@ -149,7 +215,12 @@ pub(crate) fn warm_up(front: Front) -> String {
 }
 
 pub(crate) fn warm_up_settings(front: Front) -> String {
-    titled(front, "Warm-Up Settings…", "Warm-up settings")
+    match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => {
+            titled(front, "Warm-Up Settings…", "Warm-up settings")
+        }
+        Front::Gnome => format!("{} {}", warm_up(front), settings(front, true)),
+    }
 }
 
 pub(crate) fn warm_up_now(front: Front) -> String {
@@ -181,8 +252,18 @@ pub(crate) fn warm_hours(
 
 pub(crate) const NONE_TO_WARM: &str = "Add a Claude Code account to warm it up.";
 
-pub(crate) const WARM_UP_NOTE: &str = "Pitboard starts each account’s 5-hour limit again as soon \
-                                       as it resets, within these hours, while it’s open.";
+// `once_closed`: where closing the window quits Pitboard, whether the watch service goes on.
+pub(crate) fn warm_up_note(once_closed: Option<bool>) -> String {
+    let runs = match once_closed {
+        None => "while it’s open",
+        Some(false) => "while its window is open",
+        Some(true) => "and the watch service goes on once its window is closed",
+    };
+    format!(
+        "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these \
+         hours, {runs}."
+    )
+}
 
 pub(crate) fn warm_up_failed(failed: &str) -> String {
     format!("The last warm-up didn’t start: {failed}")
@@ -257,9 +338,8 @@ pub(crate) fn cannot_link(front: Front) -> String {
              from a temporary copy, and a link to that would break."
                 .into()
         }
-        // No app runs on Linux.
-        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
-                         from a temporary copy, and a link to that would break."
+        Front::Gnome => "Install Pitboard from its package first. Until then it runs from a \
+                         temporary copy, and a link to that would break."
             .into(),
         Front::WindowsNotificationArea => {
             "Install Pitboard first. Until then Windows runs it from a temporary \
@@ -285,14 +365,32 @@ pub(crate) fn uninstall_pitboard(front: Front) -> String {
 
 pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
 
-pub(crate) const UNINSTALL_SAYS: &str = "Pitboard deletes its saved sign-ins, settings and \
-                                         account windows. Each tool stays signed in to the \
-                                         account in use, and you sign in to the others again to \
-                                         use them.";
+pub(crate) fn uninstall_says(front: Front) -> String {
+    let deletes = if front.offers_account_windows() {
+        "its saved sign-ins, settings and account windows"
+    } else {
+        "its saved sign-ins and settings"
+    };
+    format!(
+        "Pitboard deletes {deletes}. Each tool stays signed in to the account in use, and you \
+         sign in to the others again to use them."
+    )
+}
 
 pub(crate) const UNINSTALL: &str = "Uninstall";
 
 pub(crate) const UNINSTALLING: &str = "Uninstalling Pitboard…";
+
+// Once the Linux app has deleted Pitboard's own data, over what its package manager does.
+pub(crate) const REMOVE_THE_APP: &str = "Remove the App";
+
+pub(crate) const DATA_DELETED: &str = "Pitboard’s saved sign-ins and settings are deleted.";
+
+// What the Linux app could not take back of its own once Pitboard's data was deleted, as its
+// system said why: "/home/dana/.cache/com.usepitboard.Pitboard: Permission denied".
+pub(crate) fn could_not_remove(failed: &str) -> String {
+    format!("Pitboard couldn’t remove {failed}.")
+}
 
 pub(crate) const KEPT_ITS_FOLDER: &str = "Pitboard couldn’t remove everything";
 
@@ -643,15 +741,68 @@ mod tests {
         assert_eq!(
             (
                 warm_up(Front::MacMenuBar),
+                warm_up(Front::Gnome),
                 warm_up(Front::WindowsNotificationArea)
             ),
-            ("Warm-Up".into(), "Warm-up".into())
+            ("Warm-Up".into(), "Warm-Up".into(), "Warm-up".into())
+        );
+        assert_eq!(
+            (
+                warm_up_settings(Front::MacMenuBar),
+                warm_up_settings(Front::Gnome),
+                warm_up_settings(Front::WindowsNotificationArea)
+            ),
+            (
+                "Warm-Up Settings…".into(),
+                "Warm-Up Preferences".into(),
+                "Warm-up settings".into()
+            ),
+            "GNOME's guidelines give Preferences no ellipsis"
+        );
+        assert_eq!(warm_up_now(Front::Gnome), "Warm Up Now");
+        assert_eq!(
+            at_limit_choice(Front::Gnome, AtLimit::Switch),
+            "Switch Automatically"
         );
         assert_eq!(NONE_TO_WARM, "Add a Claude Code account to warm it up.");
         assert_eq!(
-            WARM_UP_NOTE,
+            warm_up_note(None),
             "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
              these hours, while it’s open."
+        );
+        assert_eq!(
+            warm_up_note(Some(false)),
+            "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
+             these hours, while its window is open."
+        );
+        assert_eq!(
+            warm_up_note(Some(true)),
+            "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
+             these hours, and the watch service goes on once its window is closed."
+        );
+        assert_eq!(
+            switching_once_closed(true),
+            "Once its window is closed, the watch service goes on switching it."
+        );
+        assert_eq!(
+            switching_once_closed(false),
+            "Once its window is closed, nothing switches it unless Watch in the Background is \
+             on."
+        );
+        let at = |percent| {
+            pitboard_core::watch_service::Switching::At(
+                pitboard_core::duty::autoswitch::Threshold::new(percent).expect("a share"),
+            )
+        };
+        assert_eq!(
+            watch_service_about(Front::Gnome, at(95)),
+            "Pitboard quits once its window is closed. Turned on, this computer goes on switching \
+             Claude Code at 95% and warming up the accounts Warm-Up turns on, from each login."
+        );
+        assert_eq!(
+            watch_service_about(Front::Gnome, pitboard_core::watch_service::Switching::Never),
+            "Pitboard quits once its window is closed. Turned on, this computer goes on warming \
+             up the accounts Warm-Up turns on, from each login, and never switches Claude Code."
         );
         assert_eq!(
             warm_up_failed("Claude Code failed."),
@@ -671,16 +822,27 @@ mod tests {
         assert_eq!(
             (
                 uninstall_pitboard(Front::MacMenuBar),
+                uninstall_pitboard(Front::Gnome),
                 uninstall_pitboard(Front::WindowsNotificationArea)
             ),
-            ("Uninstall Pitboard…".into(), "Uninstall…".into()),
+            (
+                "Uninstall Pitboard…".into(),
+                "Uninstall Pitboard…".into(),
+                "Uninstall…".into()
+            ),
             "it asks before it acts"
         );
         assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
         assert_eq!(
-            UNINSTALL_SAYS,
+            uninstall_says(Front::MacMenuBar),
             "Pitboard deletes its saved sign-ins, settings and account windows. Each tool stays \
              signed in to the account in use, and you sign in to the others again to use them."
+        );
+        assert_eq!(
+            uninstall_says(Front::Gnome),
+            "Pitboard deletes its saved sign-ins and settings. Each tool stays signed in to the \
+             account in use, and you sign in to the others again to use them.",
+            "a front with no account windows has none to delete"
         );
         assert_eq!(UNINSTALL, "Uninstall");
         assert_eq!(UNINSTALLING, "Uninstalling Pitboard…");
@@ -737,7 +899,7 @@ mod tests {
 
     /// What the settings and the machine pane say of this machine name it as each system
     /// names itself, and say what a copy run from a temporary place is to do in that system's
-    /// words. No app runs on Linux, so its sentences name no system's own places.
+    /// words. The Linux app is installed by its package, and names no other system's places.
     #[test]
     fn what_is_said_of_this_machine_names_it_as_its_system_does() {
         assert_eq!(
@@ -758,16 +920,25 @@ mod tests {
             checking(Front::WindowsNotificationArea),
             "Checking this PC…"
         );
-        for front in [
-            Front::MacMenuBar,
-            Front::Gnome,
-            Front::WindowsNotificationArea,
-        ] {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
             assert_eq!(
                 cannot_schedule(front, false),
                 "This copy of Pitboard has no command line inside it to run on a schedule."
             );
         }
+        assert_eq!(
+            cannot_schedule(Front::Gnome, false),
+            "This copy of Pitboard has no command line beside it to run on a schedule.",
+            "its package puts the command line beside the app"
+        );
+        assert_eq!(
+            cannot_watch(Front::Gnome, false),
+            "This copy of Pitboard has no command line beside it to run in the background."
+        );
+        assert_eq!(
+            cannot_watch(Front::Gnome, true),
+            cannot_schedule(Front::Gnome, true)
+        );
         assert_eq!(
             cannot_schedule(Front::MacMenuBar, true),
             "Move Pitboard to your Applications folder first. Until then macOS runs it from a \
@@ -780,13 +951,18 @@ mod tests {
         );
         assert_eq!(
             cannot_schedule(Front::Gnome, true),
-            "First move Pitboard to a folder it will stay in. Until then it runs from a \
-             temporary copy, which is gone once Pitboard quits."
+            "Install Pitboard from its package first. Until then it runs from a temporary copy, \
+             which is gone once Pitboard quits."
         );
         assert_eq!(
             cannot_link(Front::Gnome),
-            "First move Pitboard to a folder it will stay in. Until then it runs from a \
-             temporary copy, and a link to that would break."
+            "Install Pitboard from its package first. Until then it runs from a temporary copy, \
+             and a link to that would break."
+        );
+        assert_eq!(
+            renewal_about(Front::Gnome, false),
+            "This computer refreshes your saved sign-ins once a day, so one you leave alone \
+             doesn’t expire."
         );
         assert_eq!(
             cannot_schedule(Front::WindowsNotificationArea, true),

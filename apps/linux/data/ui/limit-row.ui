@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One limit of an account: its name, when it resets, its bar and its figure. Every word is
+     the model's, set by window/limit_row.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardLimitRow" parent="AdwActionRow">
+    <property name="activatable">False</property>
+    <property name="use-markup">False</property>
+    <child type="suffix">
+      <object class="GtkLevelBar" id="bar">
+        <property name="valign">center</property>
+        <property name="width-request">120</property>
+        <property name="max-value">100</property>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkLabel" id="figure">
+        <property name="width-chars">4</property>
+        <property name="xalign">1</property>
+        <style>
+          <class name="numeric"/>
+        </style>
+      </object>
+    </child>
+  </template>
+</interface>

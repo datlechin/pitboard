@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/usepitboard/Pitboard">
+    <file compressed="true">com.usepitboard.Pitboard.metainfo.xml</file>
+    <file>icons/scalable/apps/com.usepitboard.Pitboard.svg</file>
+    <file>icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg</file>
+    <file>dbus/org.kde.StatusNotifierItem.xml</file>
+    <file>dbus/com.canonical.dbusmenu.xml</file>
+    <file>dbus/org.gnome.Shell.SearchProvider2.xml</file>
+    <file>dbus/org.kde.krunner1.xml</file>
+    <file>dbus/com.usepitboard.Pitboard.WidgetFeed.xml</file>
+    <file>ui/window.ui</file>
+    <file>ui/accounts-page.ui</file>
+    <file>ui/account-group.ui</file>
+    <file>ui/limit-row.ui</file>
+    <file>ui/notice-row.ui</file>
+    <file>ui/sign-in.ui</file>
+    <file>ui/sheet.ui</file>
+    <file>ui/open-link.ui</file>
+    <file>ui/preferences.ui</file>
+    <file>ui/diagnostics.ui</file>
+    <file>ui/activity.ui</file>
+    <file>ui/welcome.ui</file>
+    <file>ui/shortcuts.ui</file>
+    <file>style.css</file>
+  </gresource>
+</gresources>

@@ -32,6 +32,18 @@ priority = 100
 # time, neither happened.
 [test-groups]
 credential-manager = { max-threads = 1 }
+# Each launch of the Linux app owns the debug build's one name on the bus headless.sh gives.
+linux-app = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "binary_id(pitboard-linux::ui)"
+test-group = "linux-app"
+
+# A picture is drawn twice and held the same, and a window drawn beside another loses the focus
+# to it between the two, which dims its header bar.
+[[profile.default.overrides]]
+filter = "binary_id(pitboard-linux::pictures)"
+test-group = "linux-app"
 
 [[profile.default.overrides]]
 filter = """

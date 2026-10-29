@@ -6,7 +6,7 @@ use crate::Front;
 use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
-use crate::{AccountKey, AutoSwitched, FoundCommandLine, Schedule};
+use crate::{AccountKey, AutoSwitched, FoundCommandLine, Schedule, WatchService};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::state::Key;
 
@@ -24,6 +24,24 @@ pub struct MachineShown {
     pub at_limit: AtLimitShown,
     /// Warming up accounts, as the settings show it.
     pub warm: WarmShown,
+    /// The watch service, while no status item keeps Pitboard running once its window closes.
+    #[uniffi(default)]
+    pub watch_service: Option<WatchServiceShown>,
+}
+
+/// The watch service, as the settings show it, beside their own title for it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WatchServiceShown {
+    // what was asked for while a change is under way, so the switch does not snap back
+    pub on: bool,
+    // turning it off always can
+    pub enabled: bool,
+    // while it is not installed: why this machine or this copy cannot run it
+    pub note: Option<String>,
+    // why the last change failed, until the next, where `note` does not say it
+    pub failed: Option<String>,
+    // what it runs once the window is closed, under its switch
+    pub about: String,
 }
 
 /// Warming up accounts, as the settings show it: the span of each day, each Claude Code
@@ -192,7 +210,57 @@ pub(crate) fn machine(seen: &Seen) -> MachineShown {
         command_line: command_line(seen),
         at_limit: at_limit(seen),
         warm: warm(seen),
+        watch_service: watch_service(seen),
     }
+}
+
+/// Whether the watch service runs once the window is closed, where nothing else then would:
+/// `None` where a status item keeps Pitboard running, so what runs goes on.
+fn once_closed(seen: &Seen) -> Option<bool> {
+    let machine = &seen.state.machine;
+    let installed = matches!(machine.watch_service, Some(WatchService::Installed { .. }));
+    seen.state
+        .offers_watch_service()
+        .then(|| machine.watching.unwrap_or(installed))
+}
+
+/// The watch service, as daily renewal is shown beside it, where the front offers it.
+fn watch_service(seen: &Seen) -> Option<WatchServiceShown> {
+    let on = once_closed(seen)?;
+    let machine = &seen.state.machine;
+    let installed = match machine.watch_service {
+        Some(WatchService::Installed { switching }) => Some(switching),
+        _ => None,
+    };
+    let cannot = machine
+        .own
+        .filter(|own| !own.lasting())
+        .map(|own| words::cannot_watch(seen.front, own.temporary));
+    let note = match &machine.watch_service {
+        Some(WatchService::Installed { .. }) => None,
+        Some(WatchService::Unsupported) => Some(words::no_scheduler(seen.front)),
+        Some(WatchService::Absent) | None => cannot.clone(),
+    };
+    let failed = machine
+        .watch_failed
+        .as_ref()
+        .map(|failed| match failed {
+            ScheduleFailure::CannotSchedule { temporary } => {
+                words::cannot_watch(seen.front, *temporary)
+            }
+            ScheduleFailure::Refused { message } => message.clone(),
+        })
+        .filter(|failed| note.as_ref() != Some(failed));
+    let switching = installed
+        .flatten()
+        .unwrap_or_else(|| seen.state.preferences.watch_switching());
+    Some(WatchServiceShown {
+        on,
+        enabled: machine.watching.is_none() && (installed.is_some() || cannot.is_none()),
+        note,
+        failed,
+        about: words::watch_service_about(seen.front, switching),
+    })
 }
 
 /// Warming up accounts, from what the core last said of it.
@@ -251,7 +319,7 @@ fn warm(seen: &Seen) -> WarmShown {
         .unwrap_or_else(|| range.to_string()),
         accounts,
         standing,
-        note: words::WARM_UP_NOTE.into(),
+        note: words::warm_up_note(once_closed(seen)),
         enabled: overview.is_some(),
     }
 }
@@ -268,6 +336,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
     let choice = state.preferences.at_limit();
+    let switching = choice == AtLimit::Switch;
     let note = words::at_limit_note(
         seen.front,
         choice,
@@ -278,7 +347,14 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .any(|warning| warning.code == "fallback_login"),
         pitboard_core::switch::ADOPTION_CEILING_SECONDS,
     );
-    let switching = choice == AtLimit::Switch;
+    let closed = once_closed(seen).and_then(|watched| match (choice, watched) {
+        (AtLimit::Switch, watched) => Some(words::switching_once_closed(watched)),
+        (AtLimit::Notify, true) => Some(words::NOTIFYING_ONCE_CLOSED.into()),
+        (AtLimit::Nothing, true) => Some(words::ONLY_WARMING_UP.into()),
+        (AtLimit::Notify | AtLimit::Nothing, false) => None,
+    });
+    let said: Vec<String> = note.into_iter().chain(closed).collect();
+    let note = (!said.is_empty()).then(|| said.join(" "));
     AtLimitShown {
         title: words::BEFORE_RUNNING_OUT.into(),
         choice,
@@ -620,7 +696,7 @@ mod tests {
             assert_eq!(windows.none_enrolled, None);
             assert_eq!(windows.accounts[0].title, "work", "its name alone");
             assert_eq!(windows.standing, said, "{on}");
-            assert_eq!(windows.note, words::WARM_UP_NOTE);
+            assert_eq!(windows.note, words::warm_up_note(None));
         }
     }
 }

@@ -44,6 +44,18 @@ pub(crate) fn sessions_follow_in(tool: Option<&str>) -> String {
     }
 }
 
+// "Sessions already open follow in 0:31": `label`, then the time `left` in seconds as a timer
+// draws it, hours first from an hour on, and nought once it has passed.
+pub(crate) fn counting_down(label: &str, left: i64) -> String {
+    let left = left.max(0);
+    let (hours, minutes, seconds) = (left / 3600, left % 3600 / 60, left % 60);
+    if hours > 0 {
+        format!("{label} {hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{label} {minutes}:{seconds:02}")
+    }
+}
+
 // The tool is named in the title above it, and a file behind its store in Clean Up's notice.
 pub(crate) fn follows(adoption: &pitboard_core::provider::Adoption) -> String {
     use pitboard_core::provider::Adoption;
@@ -201,12 +213,12 @@ pub(crate) fn sign_in_again(front: Front, asks: bool) -> String {
     }
 }
 
-// A notification's button, which opens the sign-in: Windows ends a command that asks for more
-// with an ellipsis, a toast's too, where a macOS action is a short term.
+// A notification's button, which opens the sign-in: Windows and GNOME end a command that asks
+// for more with an ellipsis, a notification's too, where a macOS action is a short term.
 pub(crate) fn sign_in_again_button(front: Front) -> String {
     let asks = match front {
-        Front::WindowsNotificationArea => true,
-        Front::MacMenuBar | Front::Gnome => false,
+        Front::WindowsNotificationArea | Front::Gnome => true,
+        Front::MacMenuBar => false,
     };
     sign_in_again(front, asks)
 }
@@ -231,11 +243,12 @@ pub(crate) fn update_config(front: Front) -> String {
     )
 }
 
-// A notification's button: macOS draws the one its category registered, and a toast takes any.
+// A notification's button: macOS draws the one its category registered, and a toast or a GNOME
+// notification takes any.
 pub(crate) fn switch_button(front: Front, label: &str) -> String {
     match front {
-        Front::WindowsNotificationArea => switch_to(label),
-        Front::MacMenuBar | Front::Gnome => SWITCH.into(),
+        Front::WindowsNotificationArea | Front::Gnome => switch_to(label),
+        Front::MacMenuBar => SWITCH.into(),
     }
 }
 
@@ -732,5 +745,27 @@ mod tests {
             pair("Update Claude Code’s Config", "Update Claude Code’s config")
         );
         assert_eq!(both(&switch_back), pair("Switch Back", "Switch back"));
+    }
+
+    // GNOME heads a notice and its buttons as a Mac does, and like Windows puts an ellipsis on a
+    // notification's button that asks for more and the account's name on its Switch.
+    #[test]
+    fn gnome_notices_in_these_words() {
+        let gnome = Front::Gnome;
+        assert_eq!(
+            limit_notification(gnome, "5-hour", None, false),
+            "5-Hour Limit Almost Reached"
+        );
+        assert_eq!(
+            sign_in_title(gnome, Standing::LoginRefused),
+            "Sign-In No Longer Works"
+        );
+        assert_eq!(sign_in_again_button(gnome), "Sign In Again…");
+        assert_eq!(switch_button(gnome, "personal"), "Switch to personal");
+        assert_eq!(switch_back_to(gnome, "work"), "Switch Back to work");
+        assert_eq!(finish(gnome, false), "Finish Adding…");
+        assert_eq!(cancel_switch(gnome, true), "Cancel Switch…");
+        assert_eq!(clean_up(gnome, true), "Clean Up…");
+        assert_eq!(update_config(gnome), "Update Claude Code’s Config");
     }
 }

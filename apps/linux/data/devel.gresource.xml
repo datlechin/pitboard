@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The debug build's own icon, which build.rs compiles into the debug build alone, so a release
+     names nothing of the debug build's. -->
+<gresources>
+  <gresource prefix="/com/usepitboard/Pitboard">
+    <file>icons/scalable/apps/com.usepitboard.Pitboard.Devel.svg</file>
+  </gresource>
+</gresources>

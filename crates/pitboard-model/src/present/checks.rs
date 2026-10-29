@@ -278,7 +278,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
             ("schedule", Level::Ok) => detail = words::RUNS_ONCE_A_DAY.into(),
             ("schedule", level) => {
                 detail = words::daily_task(level == Level::Fail).into();
-                advice = Some(words::TURN_IT_OFF_AND_ON.into());
+                advice = Some(words::turn_it_off_and_on(seen.front));
                 action = Some(settings(SettingsSection::Advanced));
             }
             ("fallback_login", _) => {

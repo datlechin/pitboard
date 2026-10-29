@@ -42,7 +42,7 @@ struct MenuBarContent: View {
             }
             .keyboardShortcut(",")
             if updates.available {
-                Button(words.menu.checkForUpdates) { updates.check() }
+                Button(macWords.checkForUpdates) { updates.check() }
             }
         }
         Section {

@@ -24,13 +24,14 @@ use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard};
 use pitboard_core::switch::warm::{WarmUp, told_apart};
 use pitboard_core::usage::Window;
+use pitboard_core::watch_service::Switching;
 use pitboard_core::words;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::process::ExitCode;
 use std::time::Duration;
 
-/// The share `watch` and its service switch at.
+/// The share `watch` and its service switch at, or that they never switch.
 #[derive(clap::Args)]
 pub(crate) struct Share {
     /// Switch once a limit of the account in use reaches this share, from 50 to 99
@@ -42,6 +43,9 @@ pub(crate) struct Share {
             .range(i64::from(Threshold::LOWEST)..=i64::from(Threshold::HIGHEST)),
     )]
     at: u8,
+    /// Never switch, and only warm up the accounts `pitboard warm on` turned on
+    #[arg(long, conflicts_with = "at")]
+    no_switch: bool,
 }
 
 impl Share {
@@ -49,6 +53,23 @@ impl Share {
     pub(crate) fn threshold(&self) -> Threshold {
         Threshold::new(self.at).unwrap_or_default()
     }
+
+    pub(crate) fn switching(&self) -> Switching {
+        if self.no_switch {
+            Switching::Never
+        } else {
+            Switching::At(self.threshold())
+        }
+    }
+}
+
+// What a line of `watch`'s JSON says it does at a limit: the share, or none, and whether it
+// switches, none where an installed service does not say.
+fn switching_json(switching: Option<Switching>) -> Value {
+    json!({
+        "threshold": switching.and_then(Switching::at).map(Threshold::percent),
+        "switches": switching.map(|switching| switching != Switching::Never),
+    })
 }
 
 #[derive(Subcommand)]
@@ -76,49 +97,61 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
     let this_home = pitboard.schedule_renews_this_home();
     match what {
         WatchCommand::Install { share } => {
-            let threshold = share.threshold();
-            match pitboard.watch_service_install(threshold) {
+            let switching = share.switching();
+            match pitboard.watch_service_install(switching) {
                 Err(error) => Report::failed(Some("watch"), error),
-                Ok(location) => Report::done(
-                    "watch",
-                    located(
-                        json!(true),
-                        &location,
-                        json!({ "threshold": threshold.percent() }),
-                    ),
-                    format!(
-                        "Pitboard watches Claude Code in the background from now on, and at each \
-                         sign-in. It switches once a limit of the account in use reaches {}%, \
-                         and warms up the accounts `pitboard warm on` turned on.\n{}{location}\n\n\
-                         {}\n",
-                        threshold.percent(),
-                        match pitboard_core::host::OS {
-                            Os::Linux => {
-                                "Your user's systemd runs it while you are signed in. To keep \
-                                 it running when you are not, run `loginctl enable-linger`.\n"
-                            }
-                            Os::MacOs | Os::Windows => "",
+                Ok(location) => {
+                    let linger = match pitboard_core::host::OS {
+                        Os::Linux => {
+                            "Your user's systemd runs it while you are signed in. To keep it \
+                             running when you are not, run `loginctl enable-linger`.\n"
+                        }
+                        Os::MacOs | Os::Windows => "",
+                    };
+                    Report::done(
+                        "watch",
+                        located(json!(true), &location, switching_json(Some(switching))),
+                        match switching {
+                            Switching::At(at) => format!(
+                                "Pitboard watches Claude Code in the background from now on, and \
+                                 at each sign-in. It switches once a limit of the account in use \
+                                 reaches {}%, and warms up the accounts `pitboard warm on` turned \
+                                 on.\n{}{location}\n\n{}\n",
+                                at.percent(),
+                                linger,
+                                terms()
+                            ),
+                            Switching::Never => format!(
+                                "Pitboard watches Claude Code in the background from now on, and \
+                                 at each sign-in. It never switches, and only warms up the \
+                                 accounts `pitboard warm on` turned on.\n{linger}{location}\n\n\
+                                 {}\n",
+                                terms()
+                            ),
                         },
-                        terms()
-                    ),
-                ),
+                    )
+                }
             }
         }
         WatchCommand::Status => {
             let (data, human) = match pitboard.watch_service() {
-                Installed::Yes { location, at } => (
-                    located(
-                        json!(true),
-                        &location,
-                        json!({ "threshold": at.map(Threshold::percent) }),
-                    ),
+                Installed::Yes {
+                    location,
+                    switching,
+                } => (
+                    located(json!(true), &location, switching_json(switching)),
                     format!(
                         "Pitboard watches Claude Code in the background{}.\n{location}\n{}",
-                        at.map(|at| format!(
-                            ", and switches once a limit of the account in use reaches {}%",
-                            at.percent()
-                        ))
-                        .unwrap_or_default(),
+                        match switching {
+                            Some(Switching::At(at)) => format!(
+                                ", and switches once a limit of the account in use reaches {}%",
+                                at.percent()
+                            ),
+                            Some(Switching::Never) => ", and never switches: it only warms up the \
+                                                       accounts `pitboard warm on` turned on"
+                                .to_string(),
+                            None => String::new(),
+                        },
                         if this_home {
                             String::new()
                         } else {
@@ -186,10 +219,11 @@ pub(crate) fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
 /// Watches until it is stopped, saying the account it watches whenever its last line said
 /// something else, every switch, and each thing that stops one once. A refusal is asked again
 /// no sooner than the core waits after as many failed attempts, as the app does. `scheduled`
-/// is a run of the watch service, which no Ctrl-C stops.
+/// is a run of the watch service, which no Ctrl-C stops. Where `switching` says it never
+/// switches, it only reads and warms up.
 pub(crate) fn run(
     pitboard: &Pitboard,
-    threshold: Threshold,
+    switching: Switching,
     scheduled: bool,
     as_json: bool,
 ) -> ExitCode {
@@ -200,18 +234,8 @@ pub(crate) fn run(
     emit(
         &Report::done(
             "watch",
-            watching_json(threshold, warming.as_ref()),
-            format!(
-                "Watching Claude Code. Pitboard switches to another of your accounts once a \
-                 limit of the one in use reaches {}%{}. {}\n",
-                threshold.percent(),
-                warming.as_ref().map(warms).unwrap_or_default(),
-                if scheduled {
-                    "Stop it with `pitboard watch uninstall`."
-                } else {
-                    "Stop with Ctrl-C."
-                }
-            ),
+            watching_json(switching, warming.as_ref()),
+            started(switching, warming.as_ref(), scheduled),
         ),
         as_json,
     );
@@ -233,12 +257,15 @@ pub(crate) fn run(
         let due = refusals.due(instant(decided_at), every());
         if stamps != seen || instant(now) >= due || now < decided_at {
             (seen, decided_at) = (stamps, now);
-            let outcome = decided(
-                refusals.waits(instant(now)),
-                || pitboard.auto_look(threshold),
-                || pitboard.auto_switch(threshold),
-            );
-            if let Some(outcome) = outcome {
+            let outcome = switching.at().and_then(|threshold| {
+                decided(
+                    refusals.waits(instant(now)),
+                    || pitboard.auto_look(threshold),
+                    || pitboard.auto_switch(threshold),
+                )
+                .map(|outcome| (outcome, threshold))
+            });
+            if let Some((outcome, threshold)) = outcome {
                 match &outcome {
                     Ok(_) => refusals.ended(),
                     Err(_) => {
@@ -274,6 +301,32 @@ pub(crate) fn run(
             read_at,
             refusals.due(instant(decided_at), every()),
         ));
+    }
+}
+
+/// The line `watch` starts with: what it does at a limit, what it warms up, and how it stops.
+fn started(switching: Switching, warming: Option<&Overview>, scheduled: bool) -> String {
+    let warmed = warming.map(warms).unwrap_or_default();
+    let stop = if scheduled {
+        "Stop it with `pitboard watch uninstall`."
+    } else {
+        "Stop with Ctrl-C."
+    };
+    match switching {
+        Switching::At(at) => format!(
+            "Watching Claude Code. Pitboard switches to another of your accounts once a \
+             limit of the one in use reaches {}%{}. {}\n",
+            at.percent(),
+            warmed,
+            stop
+        ),
+        Switching::Never if warming.is_some_and(|overview| !warms_any(overview)) => format!(
+            "Watching Claude Code. Pitboard never switches accounts, and no account is turned on \
+             for warm-ups: turn one on with `pitboard warm on <account>`. {stop}\n"
+        ),
+        Switching::Never => {
+            format!("Watching Claude Code. Pitboard never switches accounts{warmed}. {stop}\n")
+        }
     }
 }
 
@@ -359,10 +412,14 @@ impl Told {
     }
 }
 
-/// The `watching` event's data: the share it switches at, and the accounts it warms up with
-/// the span of the day, where any is turned on.
-fn watching_json(threshold: Threshold, warming: Option<&Overview>) -> Value {
-    let mut data = json!({ "event": "watching", "threshold": threshold.percent() });
+/// The `watching` event's data: the share it switches at, or none, whether it switches, and
+/// the accounts it warms up with the span of the day, where any is turned on.
+fn watching_json(switching: Switching, warming: Option<&Overview>) -> Value {
+    let mut data = json!({
+        "event": "watching",
+        "threshold": switching.at().map(Threshold::percent),
+        "switches": switching != Switching::Never,
+    });
     if let Some(overview) = warming.filter(|overview| warms_any(overview)) {
         data["warm"] = json!({
             "range": crate::warm::range_json(overview.range),
@@ -760,6 +817,7 @@ mod tests {
         let data = installed.result.as_ref().expect("installed").clone();
         assert_eq!(data["installed"], true);
         assert_eq!(data["threshold"], 90);
+        assert_eq!(data["switches"], true);
         assert!(
             data["path"].is_string() || data["task"].is_string(),
             "{data}"
@@ -788,13 +846,19 @@ mod tests {
             installed.human
         );
 
-        let here = run(&default, WatchCommand::Status).human;
+        let here = run(&default, WatchCommand::Status);
         assert!(
-            here.starts_with(
+            here.human.starts_with(
                 "Pitboard watches Claude Code in the background, and switches once a limit of \
                  the account in use reaches 90%.\n"
             ),
-            "{here}"
+            "{}",
+            here.human
+        );
+        let data = here.result.expect("read");
+        assert_eq!(
+            (&data["threshold"], &data["switches"]),
+            (&json!(90), &json!(true))
         );
         let there = run(&elsewhere, WatchCommand::Status).human;
         assert!(
@@ -823,6 +887,93 @@ mod tests {
         assert_eq!(
             run(&default, WatchCommand::Uninstall).human,
             "Nothing was watching Claude Code in the background.\n"
+        );
+    }
+
+    /// `watch install --no-switch` says the service never switches, and `status` reads that
+    /// back, its share null; installed again with a share, it switches at that one. On a
+    /// machine in memory, whose scheduler asks nobody.
+    #[test]
+    fn a_service_that_never_switches_says_so_and_reads_back_so() {
+        use pitboard_core::context::Context;
+        use pitboard_core::testing::MemoryHost;
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let home = scratch.path().to_path_buf();
+        let program = home.join("bin/pitboard");
+        std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
+        std::fs::write(&program, "").expect("a command line");
+        let pitboard = Pitboard::new(
+            Context::new(home)
+                .with_schedule_program(program)
+                .with_memory_stores(MemoryHost::new()),
+        );
+        let share = |given: &[&str]| {
+            let parsed = <Share as clap::FromArgMatches>::from_arg_matches(
+                &<Share as clap::Args>::augment_args(clap::Command::new("watch"))
+                    .get_matches_from(std::iter::once("watch").chain(given.iter().copied())),
+            );
+            parsed.expect("a share")
+        };
+        let install = |given: &[&str]| {
+            service(
+                &pitboard,
+                &WatchCommand::Install {
+                    share: share(given),
+                },
+            )
+        };
+        let read = || {
+            let report = service(&pitboard, &WatchCommand::Status);
+            let data = report.result.expect("read");
+            (
+                report.human,
+                data["threshold"].clone(),
+                data["switches"].clone(),
+            )
+        };
+
+        let installed = install(&["--no-switch"]);
+        let data = installed.result.as_ref().expect("installed");
+        assert_eq!(
+            (&data["installed"], &data["threshold"], &data["switches"]),
+            (&json!(true), &Value::Null, &json!(false))
+        );
+        assert!(
+            installed.human.starts_with(
+                "Pitboard watches Claude Code in the background from now on, and at each \
+                 sign-in. It never switches, and only warms up the accounts `pitboard warm on` \
+                 turned on.\n"
+            ),
+            "{}",
+            installed.human
+        );
+        let (human, threshold, switches) = read();
+        assert!(
+            human.starts_with(
+                "Pitboard watches Claude Code in the background, and never switches: it only \
+                 warms up the accounts `pitboard warm on` turned on.\n"
+            ),
+            "{human}"
+        );
+        assert_eq!((threshold, switches), (Value::Null, json!(false)));
+
+        install(&["--at", "80"]).result.expect("installed again");
+        let (human, threshold, switches) = read();
+        assert!(human.contains("reaches 80%"), "{human}");
+        assert_eq!((threshold, switches), (json!(80), json!(true)));
+        install(&["--no-switch"]).result.expect("and again");
+        assert_eq!(read().2, json!(false));
+    }
+
+    #[test]
+    fn watch_starts_by_saying_whether_it_switches() {
+        assert_eq!(
+            watching_json(Switching::At(Threshold::DEFAULT), None),
+            json!({"event": "watching", "threshold": 95, "switches": true})
+        );
+        assert_eq!(
+            watching_json(Switching::Never, None),
+            json!({"event": "watching", "threshold": null, "switches": false})
         );
     }
 
@@ -1407,14 +1558,32 @@ mod tests {
             off.accounts[0].on = false;
             assert_eq!(warms(&off), "");
             assert_eq!(
-                watching_json(Threshold::DEFAULT, Some(&off)).get("warm"),
+                watching_json(Switching::At(Threshold::DEFAULT), Some(&off)).get("warm"),
                 None
             );
             let on = overview(Some(Halt::ProgramMissing), None);
             let said = anstream::adapter::strip_str(&warms(&on)).to_string();
             assert_eq!(said, ", and warms up work from 06:00 to 22:00");
+            let never = |warming| {
+                anstream::adapter::strip_str(&started(Switching::Never, warming, false)).to_string()
+            };
             assert_eq!(
-                watching_json(Threshold::DEFAULT, Some(&on))["warm"]["accounts"],
+                never(Some(&on)),
+                "Watching Claude Code. Pitboard never switches accounts, and warms up work from \
+                 06:00 to 22:00. Stop with Ctrl-C.\n"
+            );
+            assert_eq!(
+                never(Some(&off)),
+                "Watching Claude Code. Pitboard never switches accounts, and no account is turned \
+                 on for warm-ups: turn one on with `pitboard warm on <account>`. Stop with \
+                 Ctrl-C.\n"
+            );
+            assert_eq!(
+                never(None),
+                "Watching Claude Code. Pitboard never switches accounts. Stop with Ctrl-C.\n"
+            );
+            assert_eq!(
+                watching_json(Switching::At(Threshold::DEFAULT), Some(&on))["warm"]["accounts"],
                 json!(["work"])
             );
         }
