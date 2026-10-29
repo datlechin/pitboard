@@ -5,8 +5,8 @@
 //! A move is recorded before anything is copied (`vault.moving_to`). Every park this home's
 //! records name is written into the new form and read back, the save that names the new form
 //! lists what leaves the old one (`vault.leaving`), and each is then deleted from there and taken
-//! off the list. Every change settles first, so a move cut short at any step is finished forward
-//! by the next change before anything else writes a park, and renewal waits for it. A park
+//! off the list. Every change settles first, and every renewal finishes a move first, so a move cut
+//! short at any step is finished forward before anything else writes a park. A park
 //! another home keeps in a vault every home shares is that home's, and stays where it is.
 
 use super::Settled;
@@ -674,11 +674,11 @@ mod tests {
         all_in(&m, VaultForm::Files, &parks, "once the keyring opens");
     }
 
-    // The renewal inside every `pitboard` writes a park, which a move cut short would leave in
-    // the form it is leaving. A run the schedule started waits too, and keeps no refusal.
-    #[test]
-    fn a_renewal_waits_for_a_move_cut_short() {
-        let m = two_parked_on(MemoryHost::by_form(), "move-renewal-waits");
+    // Every park due, its access lapsed, and each renewal answered.
+    fn due_on(host: Arc<MemoryHost>, name: &str) -> Rig {
+        let m = two_parked_on(host, name);
+        harness::renews(&m, "there-refresh", "there-refresh-2");
+        harness::renews(&m, "away-refresh", "away-refresh-2");
         let mut state = state::load(&m.ctx).expect("state");
         for account in &mut state.accounts {
             if let Some(park) = account.parked.as_mut() {
@@ -686,18 +686,62 @@ mod tests {
             }
         }
         state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        m
+    }
+
+    fn renewals(run: &[(Key, super::super::Renewal)]) -> Vec<&'static str> {
+        run.iter().map(|(_, outcome)| outcome.code()).collect()
+    }
+
+    // The renewal inside every `pitboard` writes a park, which a move cut short would leave in
+    // the form it is leaving, so it finishes the move first, under the lock it holds, as a change
+    // does. Waiting for a change instead let parks lapse where only the schedule runs.
+    #[test]
+    fn a_renewal_finishes_a_move_cut_short_before_it_renews() {
+        for scheduled in [false, true] {
+            let m = due_on(MemoryHost::by_form(), &format!("move-renewal-{scheduled}"));
+            let died = fault::killing("vault.copied", || moved(&m, VaultForm::Files));
+            assert_eq!(died.unwrap_err(), "vault.copied");
+            let ctx = if scheduled {
+                m.ctx.clone().started_by_the_schedule()
+            } else {
+                m.ctx.clone()
+            };
+
+            let run = renew_due(&ctx, Permit::for_a_test(), Due::ToStayAlive);
+
+            assert_eq!(renewals(&run), ["renewed", "renewed"], "{scheduled}");
+            all_in(
+                &m,
+                VaultForm::Files,
+                &parked_services(&m),
+                "renewed in files",
+            );
+            assert_eq!(crate::schedule::refused(&m.ctx), None);
+        }
+    }
+
+    // As any store's refusal of a renewal: nothing is renewed or moved, and a run the schedule
+    // started keeps it for doctor to say, where a run by hand keeps nothing.
+    #[test]
+    fn a_renewal_the_store_keeps_from_finishing_a_move_renews_nothing_and_says_so() {
+        let m = due_on(MemoryHost::by_form(), "move-renewal-locked");
         let died = fault::killing("vault.copied", || moved(&m, VaultForm::Files));
         assert_eq!(died.unwrap_err(), "vault.copied");
-        let before = (state_file(&m), in_files(&m), in_the_secret_service(&m));
+        m.mem.vault().fault_all(Fault::Locked);
+        let before = (state_file(&m), in_files(&m));
 
         assert!(renew_parked(&m.ctx, Permit::for_a_test()).is_empty());
+        assert_eq!(crate::schedule::refused(&m.ctx), None, "by hand");
         let scheduled = m.ctx.clone().started_by_the_schedule();
         assert!(renew_due(&scheduled, Permit::for_a_test(), Due::ToStayAlive).is_empty());
 
+        assert_eq!((state_file(&m), in_files(&m)), before);
+        let kept = crate::schedule::refused(&m.ctx).expect("kept for doctor");
         assert_eq!(
-            (state_file(&m), in_files(&m), in_the_secret_service(&m)),
-            before
+            kept.codes.into_iter().collect::<Vec<_>>(),
+            ["credential_store_locked"]
         );
-        assert_eq!(crate::schedule::refused(&m.ctx), None);
+        assert_eq!(kept.vault, Some(Vault::SecretService));
     }
 }

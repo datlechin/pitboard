@@ -93,6 +93,10 @@ pub(super) const A_SWITCH_DID_NOT_FINISH: &str = "a switch did not finish";
 pub(super) const THE_NEXT_CHANGE_FINISHES_IT: &str =
     "The next `pitboard use`, `enroll` or `forget` finishes it before anything else.";
 
+// A renewal finishes a move of the parks too, and `pitboard status` renews first.
+pub(super) const THE_NEXT_RENEWAL_FINISHES_IT: &str = "The next `pitboard status`, `use`, \
+     `enroll` or `forget`, or daily renewal, finishes it before anything else.";
+
 pub(super) fn waiting_to_be_deleted(vault: usize, folders: usize) -> String {
     match (vault, folders) {
         (vault, 0) => format!("{vault} waiting to be deleted"),

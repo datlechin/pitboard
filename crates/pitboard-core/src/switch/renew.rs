@@ -7,6 +7,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::permit::Permit;
 use crate::provider::{LoginKind, Provider};
+use crate::schedule::StoreAnswer;
 use crate::state::{Key, Park, ParkKind, State};
 use crate::{park, state};
 use serde_json::Value;
@@ -77,15 +78,16 @@ impl Due {
 }
 
 /// Renew every parked login whose access token has expired or is about to. Nothing is done
-/// while another Pitboard run holds the lock, a switch waits to be finished, or a move of the
-/// parks does: a renewal replaces the refresh token, and nothing may install the old copy
-/// meanwhile or write a park into the form a move is leaving.
+/// while another Pitboard run holds the lock or a switch waits to be finished: a renewal
+/// replaces the refresh token, and nothing may install the old copy meanwhile. A move of the
+/// parks cut short is finished first, as a change finishes it, so no park is written into the
+/// form it is leaving, and nothing is renewed where the store refuses that.
 pub(crate) fn renew_parked(ctx: &Context, permit: Permit) -> Vec<(Key, Renewal)> {
     renew_due(ctx, permit, Due::ToBeAsked)
 }
 
 /// The same, for whichever reason. A run the schedule started keeps what the store refused it,
-/// under the lock ([`crate::schedule::ran`]).
+/// the move's finish among it, under the lock ([`crate::schedule::ran`]).
 pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Renewal)> {
     let Some(_exclusive) = try_exclusive(ctx, permit) else {
         return Vec::new();
@@ -96,12 +98,14 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
     let Ok(mut state) = state::load(ctx) else {
         return Vec::new();
     };
-    // A move of the parks cut short is the next change's to finish, before any park is written.
+    // Where only the schedule runs, no change comes to finish it, and the parks would lapse.
     if state
         .vault
         .as_ref()
         .is_some_and(|vault| vault.moving_to.is_some())
+        && let Err(refused) = super::vault::finish(ctx, permit, &mut state)
     {
+        crate::schedule::ran(ctx, permit, StoreAnswer::of(&refused));
         return Vec::new();
     }
     let now = ctx.now();
@@ -169,7 +173,7 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
         })
         .collect();
     purge(ctx, permit, &mut state);
-    crate::schedule::ran(ctx, permit, &outcomes);
+    crate::schedule::ran(ctx, permit, StoreAnswer::renewing(&outcomes));
     outcomes
 }
 

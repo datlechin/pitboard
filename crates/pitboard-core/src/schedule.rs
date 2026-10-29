@@ -228,33 +228,72 @@ pub(crate) fn refused(ctx: &Context) -> Option<Refused> {
     (!kept.codes.is_empty()).then_some(kept)
 }
 
-/// A run of renewal came to `outcomes`, under the lock renewal takes. A run the schedule started
-/// keeps the codes the store refused its parked logins with, and forgets them once the store
-/// opened for every parked login it asked about. A run that asked about none keeps what was
-/// kept, and a run somebody started keeps nothing: it says nothing of what the schedule's runs
-/// meet.
-pub(crate) fn ran(ctx: &Context, permit: Permit, outcomes: &[(Key, Renewal)]) {
-    if !started_this_run(ctx, Job::Renew) || outcomes.is_empty() {
+/// What a run asked of the store its parked logins are in, and what that answered.
+pub(crate) enum StoreAnswer {
+    NotAsked,
+    /// It opened for every parked login the run asked about.
+    Opened,
+    /// It refused one or more with these codes.
+    Refused(BTreeSet<String>),
+}
+
+impl StoreAnswer {
+    /// What a run of renewal came to: the codes the store refused its parked logins with,
+    /// opened where it refused none, and not asked where the run renewed none.
+    pub(crate) fn renewing(outcomes: &[(Key, Renewal)]) -> StoreAnswer {
+        if outcomes.is_empty() {
+            return StoreAnswer::NotAsked;
+        }
+        let codes: BTreeSet<String> = outcomes
+            .iter()
+            .filter_map(|(_, outcome)| match outcome {
+                Renewal::Failed(error) => StoreAnswer::refusing(error),
+                _ => None,
+            })
+            .collect();
+        if codes.is_empty() {
+            StoreAnswer::Opened
+        } else {
+            StoreAnswer::Refused(codes)
+        }
+    }
+
+    /// What `error` says of the store: its refusal, or nothing of it.
+    pub(crate) fn of(error: &Error) -> StoreAnswer {
+        StoreAnswer::refusing(error).map_or(StoreAnswer::NotAsked, |code| {
+            StoreAnswer::Refused(BTreeSet::from([code]))
+        })
+    }
+
+    fn refusing(error: &Error) -> Option<String> {
+        match error {
+            Error::Store(refused) => Some(refused.code().to_owned()),
+            _ => None,
+        }
+    }
+}
+
+/// A run of renewal met `answer` from the store, under the lock renewal takes. A run the schedule
+/// started keeps the codes it was refused with, and forgets them once the store opened for every
+/// parked login it asked about. A run that asked about none keeps what was kept, and a run
+/// somebody started keeps nothing: it says nothing of what the schedule's runs meet.
+pub(crate) fn ran(ctx: &Context, permit: Permit, answer: StoreAnswer) {
+    if !started_this_run(ctx, Job::Renew) {
         return;
     }
-    let codes: BTreeSet<String> = outcomes
-        .iter()
-        .filter_map(|(_, outcome)| match outcome {
-            Renewal::Failed(Error::Store(refused)) => Some(refused.code().to_owned()),
-            _ => None,
-        })
-        .collect();
     let path = refused_path(ctx);
     // What the run renewed stands whether or not this is kept.
-    let _ = if codes.is_empty() {
-        ledger::forget(permit, &path)
-    } else {
-        let refused = Refused {
-            at: ctx.now(),
-            vault: crate::store::vault_place(ctx),
-            codes,
-        };
-        ledger::save(permit, &path, &refused)
+    let _ = match answer {
+        StoreAnswer::NotAsked => return,
+        StoreAnswer::Opened => ledger::forget(permit, &path),
+        StoreAnswer::Refused(codes) => {
+            let refused = Refused {
+                at: ctx.now(),
+                vault: crate::store::vault_place(ctx),
+                codes,
+            };
+            ledger::save(permit, &path, &refused)
+        }
     };
 }
 

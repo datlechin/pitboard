@@ -184,7 +184,7 @@ fn judge_form(fact: &FormFact) -> Option<Check> {
             "vault",
             name,
             detail,
-            words::THE_NEXT_CHANGE_FINISHES_IT,
+            words::THE_NEXT_RENEWAL_FINISHES_IT,
         ));
     }
     if let Some((from, parks)) = kept.leaving {

@@ -142,7 +142,8 @@ fn said(kept: &Keeping, folder: &str) -> String {
     }];
     if let Some(to) = kept.moving_to {
         lines.push(format!(
-            "A move into {} is under way: the next change finishes it.",
+            "A move into {} is under way: the next `pitboard status`, change or daily renewal \
+             finishes it.",
             form_words(to, folder)
         ));
     }
@@ -204,7 +205,8 @@ mod tests {
         assert_eq!(
             said(&moving, FOLDER),
             "Parked logins are kept in 0600 files in ~/.pitboard/vault, which only you can read.\n\
-             A move into the login keyring is under way: the next change finishes it.\n"
+             A move into the login keyring is under way: the next `pitboard status`, change or \
+             daily renewal finishes it.\n"
         );
         let left = Keeping {
             leaving: Some((VaultForm::SecretService, 2)),

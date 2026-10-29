@@ -485,7 +485,7 @@ fn the_vault_check_on_linux() {
             ),
             Level::Warn,
             "a move into the login keyring is under way".to_string(),
-            words::THE_NEXT_CHANGE_FINISHES_IT,
+            words::THE_NEXT_RENEWAL_FINISHES_IT,
         ),
         (
             on_linux(

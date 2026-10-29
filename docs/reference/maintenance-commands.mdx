@@ -136,14 +136,14 @@ On Linux, more lines follow, in this order:
 
 | Line | When |
 | --- | --- |
-| `A move into the login keyring is under way: the next change finishes it.` | A move was cut short. |
+| ``A move into the login keyring is under way: the next `pitboard status`, change or daily renewal finishes it.`` | A move was cut short. |
 | `2 parked login(s) wait to be deleted from the login keyring: the next change deletes them.` | A move could not delete every parked login where they were. |
 | `` `pitboard vault move files` keeps them in 0600 files in ~/.pitboard/vault instead. `` | In the Secret Service, with no move waiting. |
 | `No Secret Service answers on this session's bus, so they cannot be read from here. Run Pitboard in your desktop session, where signing in unlocks the login keyring.` | In the Secret Service, where none answers. |
 | `` A Secret Service answers on this session's bus: `pitboard vault move secret-service` keeps them in the login keyring instead. `` | In files, with no move waiting. |
 | `No Secret Service answers on this session's bus, as over SSH or in a container.` | In files, where none answers. |
 
-Nothing moves parked logins between the two by itself. `move` asks both forms what they hold first, and where either is locked or nothing answers for it, it refuses with `credential_store_locked` and changes nothing. Then it records the move in `state.json`, writes each parked login into the new form and reads it back, records the new form, and only then deletes each from the old one. A move cut short is finished by the next change, and daily renewal waits for it. A parked login another Pitboard directory keeps in your login keyring stays there.
+Nothing moves parked logins between the two by itself. `move` asks both forms what they hold first, and where either is locked or nothing answers for it, it refuses with `credential_store_locked` and changes nothing. Then it records the move in `state.json`, writes each parked login into the new form and reads it back, records the new form, and only then deletes each from the old one. A move cut short is finished by the next change or renewal, before anything else writes a parked login: `pitboard status` renews first, and so does daily renewal, which refuses as for any parked login where the store refuses the move. A parked login another Pitboard directory keeps in your login keyring stays there.
 
 | Output | When |
 | --- | --- |

@@ -336,10 +336,10 @@ keeps it is in the header of the module named.
   `a_home_whose_state_file_was_lost_keeps_the_parks_its_files_hold`).
 - Only `pitboard vault move` changes a home's form. It records the move first, writes every park
   into the new form and reads it back before the index names that form, and deletes each from the
-  old form only after; a move cut short is finished forward by the next change, before anything
-  else writes a park (`a_move_killed_after_any_step_is_finished_by_the_next_change`). A park
-  another home keeps in the shared collection stays there
-  (`a_move_leaves_another_homes_parks_where_they_are`).
+  old form only after; a move cut short is finished forward by the next change or renewal, before
+  anything else writes a park (`a_move_killed_after_any_step_is_finished_by_the_next_change`,
+  `a_renewal_finishes_a_move_cut_short_before_it_renews`). A park another home keeps in the
+  shared collection stays there (`a_move_leaves_another_homes_parks_where_they_are`).
 - A locked Secret Service collection, a dismissed prompt and a bus with nothing to answer are
   `credential_store_locked`, never a store with nothing in it
   (`a_locked_collection_is_locked_never_absent`). A run a job started never asks to unlock the
