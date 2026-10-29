@@ -86,13 +86,17 @@ pub(crate) fn move_to(settled: Settled, to: VaultForm) -> Result<(Moved, Vec<War
     if !host.vault_forms().contains(&to) {
         return Err(Error::VaultFormUnsupported { form: to });
     }
-    let from = state
-        .vault
-        .as_ref()
-        .map(|vault| vault.form)
+    let recorded = state.vault.as_ref().map(|vault| vault.form);
+    let from = recorded
         .or_else(|| store::new_home_form(&ctx))
         .unwrap_or(to);
     if from == to {
+        // A home that records no form yet takes the one its first save finds, which may not be
+        // this: the person's command records it now.
+        if recorded.is_none() {
+            state.vault = Some(state::Vault::kept_as(to));
+            state::save(&ctx, permit, &state)?;
+        }
         return Ok(left(&ctx, permit, &mut state, to, false, 0));
     }
     // A move whose names were still in two forms would delete the parks it had just written.
@@ -391,6 +395,45 @@ mod tests {
                 moving_to: None,
                 leaving: None,
             }
+        );
+    }
+
+    // The person's command is the one thing that sets the form. On a home with no state file
+    // yet, where its parks would go that way already, it is recorded all the same, so a Secret
+    // Service that answers later changes nothing.
+    #[test]
+    fn a_move_on_a_new_home_records_the_form_though_nothing_moves() {
+        let host = MemoryHost::by_form();
+        host.secret_service_answers(false);
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let root = scratch.path().to_path_buf();
+        let machine = ScratchMachine::on(Arc::clone(&host), &root, |ctx| {
+            ctx.with_pitboard_home(root.join(".pitboard"))
+        });
+        let settled = settle(&machine.ctx, Permit::for_a_test(), None)
+            .expect("nothing to settle")
+            .0;
+
+        let (done, said) = move_to(settled, VaultForm::Files).expect("kept");
+
+        assert_eq!(
+            done,
+            Moved {
+                to: VaultForm::Files,
+                changed: false,
+                moved: 0,
+                leaving: 0,
+            }
+        );
+        assert!(said.is_empty(), "{said:?}");
+        host.secret_service_answers(true);
+        assert_eq!(
+            state::vault_form(&machine.ctx).expect("read"),
+            Some(VaultForm::Files)
+        );
+        assert_eq!(
+            store::home_form(&machine.ctx).expect("read"),
+            Some(VaultForm::Files)
         );
     }
 

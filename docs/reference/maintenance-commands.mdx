@@ -149,7 +149,7 @@ Nothing moves parked logins between the two by itself. `move` asks both forms wh
 | --- | --- |
 | `Moved 2 parked login(s) into the login keyring.` | It moved them. |
 | `Parked logins are kept in the login keyring from now on.` | There was none to move. |
-| `Parked logins are already kept in the login keyring.` | They were there already. |
+| `Parked logins are already kept in the login keyring.` | They were there already. On a directory that recorded no form yet, `move` records this one. |
 
 A parked login it could not delete from the old form, as from a login keyring locked meanwhile, is said with `parks_pending_removal` and deleted by the next change. Another `move` deletes them first, and refuses while it cannot. On macOS and Windows, `move` refuses with `vault_form_unsupported`.
 
