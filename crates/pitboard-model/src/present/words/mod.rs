@@ -109,13 +109,17 @@ pub(crate) fn utc_date(epoch: i64) -> String {
         .unwrap_or_default()
 }
 
-// The store a sign-in file is left behind. Claude Code leaves none on Linux, so there only a
-// fixture's machine, whose keychain is in memory, shows these words.
+// The store a sign-in file is left behind, said after Claude Code is named. On Linux the file is
+// Claude Code's store and nothing is in front of it, so it leaves none there, and only a
+// fixture's machine shows these words.
 fn store_in_front(front: Front) -> &'static str {
-    pitboard_core::words::store_in_front(match front {
-        Front::MacMenuBar | Front::Gnome => SecretStore::Keychain,
-        Front::WindowsNotificationArea => SecretStore::CredentialManager,
-    })
+    match front {
+        Front::MacMenuBar => pitboard_core::words::store_in_front(SecretStore::Keychain),
+        Front::WindowsNotificationArea => {
+            pitboard_core::words::store_in_front(SecretStore::CredentialManager)
+        }
+        Front::Gnome => "the store it keeps its sign-in in",
+    }
 }
 
 /// How a sentence names the machine the app runs on, as the account windows' alerts do.

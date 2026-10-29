@@ -632,6 +632,14 @@ mod tests {
                  a sign-in file is left behind the keychain."
             )
         );
+        // On Linux the file is Claude Code's store, with no keychain in front of it.
+        assert_eq!(
+            at_limit_note(Front::Gnome, AtLimit::Switch, 95, true, 33).as_deref(),
+            Some(
+                "Pitboard switches Claude Code at 95%, but its running sessions don’t follow while \
+                 a sign-in file is left behind the store it keeps its sign-in in."
+            )
+        );
         assert_eq!(
             (
                 warm_up(Front::MacMenuBar),
