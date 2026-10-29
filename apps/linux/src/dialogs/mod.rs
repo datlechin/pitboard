@@ -8,15 +8,19 @@
 //! [`failure`]), each shown once and taken down when the model drops it. Open Link
 //! ([`open_link`]) comes up as a link arrives, and as the window's menu asks for it.
 //!
-//! Preferences ([`crate::preferences`]) comes up as the model or the window's menu asks for it
-//! and follows what the model shows while it is up; once the model has removed Pitboard, what
-//! Uninstall takes back of the app is said in an alert that quits it.
+//! Preferences ([`crate::preferences`]) and the first launch's welcome ([`welcome`]) come up
+//! as the model asks for them and follow what it shows while they are up; once the model has
+//! removed Pitboard, what Uninstall takes back of the app is said in an alert that quits it.
+//! Keyboard Shortcuts ([`shortcuts`]) and About ([`about`]) come up from the window's menu.
 
+pub mod about;
 pub mod failure;
 pub mod name;
 pub mod open_link;
 pub mod question;
+pub mod shortcuts;
 pub mod sign_in;
+pub mod welcome;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -32,7 +36,9 @@ use crate::shown::Shown;
 use crate::window::Host;
 use name::SheetAlert;
 use open_link::OpenLink;
+use shortcuts::Shortcuts;
 use sign_in::SignIn;
+use welcome::Welcome;
 
 // The dialog up for the model's sheet.
 enum Up {
@@ -106,6 +112,7 @@ pub struct Dialogs {
     // the link Open Link was closed on, which stays put away until the model has heard
     put_away: Cell<Option<u64>>,
     preferences: RefCell<Option<Preferences>>,
+    welcome: RefCell<Option<Welcome>>,
     // what Uninstall takes back, once the model has removed Pitboard
     taken_back: Cell<bool>,
 }
@@ -123,6 +130,7 @@ impl Dialogs {
             open_link: RefCell::default(),
             put_away: Cell::default(),
             preferences: RefCell::default(),
+            welcome: RefCell::default(),
             taken_back: Cell::default(),
         });
         let on = |parts: &[Part], act: fn(&Rc<Dialogs>, &Snapshot)| {
@@ -166,6 +174,7 @@ impl Dialogs {
             Dialogs::follow_preferences,
         );
         on(&[Part::Removal], Dialogs::follow_removal);
+        on(&[Part::Welcome], Dialogs::follow_welcome);
         let snapshot = shown.snapshot().clone();
         dialogs.follow_sheet(&snapshot);
         dialogs.follow_alert(&snapshot);
@@ -338,6 +347,44 @@ impl Dialogs {
         }
         if let Some(over) = self.over.upgrade() {
             preferences::advanced::take_back(self.host.clone()).present(Some(&over));
+        }
+    }
+
+    /// Opens the first launch's welcome, where it is not up.
+    pub fn show_welcome(self: &Rc<Self>) {
+        let Some(over) = self.over.upgrade() else {
+            return;
+        };
+        if self.welcome.borrow().is_some() {
+            return;
+        }
+        let welcome = Welcome::new(self.host.clone());
+        welcome.show(&self.shown.snapshot().welcome);
+        let weak = Rc::downgrade(self);
+        welcome.connect_closed(move |_| {
+            if let Some(dialogs) = weak.upgrade() {
+                dialogs.welcome.take();
+            }
+        });
+        welcome.present(Some(&over));
+        self.welcome.replace(Some(welcome));
+    }
+
+    fn follow_welcome(self: &Rc<Self>, snapshot: &Snapshot) {
+        if let Some(welcome) = self.welcome.borrow().as_ref() {
+            welcome.show(&snapshot.welcome);
+        }
+    }
+
+    pub fn show_shortcuts(&self) {
+        if let Some(over) = self.over.upgrade() {
+            Shortcuts::default().present(Some(&over));
+        }
+    }
+
+    pub fn show_about(&self) {
+        if let Some(over) = self.over.upgrade() {
+            about::about().present(Some(&over));
         }
     }
 }

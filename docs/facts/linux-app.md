@@ -692,6 +692,38 @@ Read at libadwaita 1.7.6 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
 - A control set to the value it shows sends nothing, and the model's values drawn into the
   controls send nothing (`a_setting_sends_only_a_value_that_differs`).
 
+## The keyboard shortcuts
+
+Read at GTK 4.18.6 and libadwaita 1.7.6, and measured in Ubuntu 26.04's image, GTK 4.22.4, by
+`every_shortcut_the_window_answers_is_listed_with_its_keys`, which reads every shortcut
+controller of the window and of its navigation view:
+
+- The window binds Ctrl+N, Ctrl+R, Ctrl+Comma, Ctrl+?, Ctrl+W and Ctrl+Q on its class to its
+  own actions (`window/keys.rs`). Ctrl+? is `question` with Control, which GTK matches with the
+  Shift that types it consumed, and `gtk_accelerator_get_label` says "Ctrl+?".
+- F10 is GtkWindow's: a capture-phase shortcut controller, `gtk-window-menubar-accel`, calls
+  `gtk_window_activate_menubar` (`gtk/gtkwindow.c:1808-1815`), which pops up the first
+  `GtkMenuButton` with `primary` set where the window has no menu bar (`:5992-6031`); a primary
+  menu button adds itself to its root's list as it is rooted (`gtk/gtkmenubutton.c:1395-1456`).
+- Alt+Left, the Back key and Escape go back in `AdwNavigationView`, bound on its class
+  (`src/adw-navigation-view.c:2006-2015`; Escape unless `pop-on-escape` is off).
+- `AdwShortcutsDialog` is libadwaita 1.8's, and GTK 4.18 deprecates `GtkShortcutsWindow` and
+  `GtkShortcutLabel` ([Decisions](#decisions-and-what-they-rest-on)), so Keyboard Shortcuts is
+  an `AdwDialog` of `AdwActionRow`s, each with its keys in a label.
+
+## About
+
+`adw_about_dialog_new_from_appdata` (`src/adw-about-dialog.c:1983-2140` at libadwaita 1.7.6)
+reads the metainfo the program carries in its GResource through AppStream: the icon from its
+`<id>`, the name, the developer's name, the version of its newest release, the website, support
+and issue pages from its `homepage`, `help` and `bugtracker` addresses, and the licence from its
+`project_license`. Asked for the release notes of a version the metainfo has no release of, it
+logs a critical, which a build between releases is, so About asks for none, and its version is
+the program's own. Its icon is the build's id, `.Devel` in a debug build. GtkApplication adds
+the `icons` folder under its resource base path to the icon theme as the app starts
+(`gtk/gtkapplication.c:213-218` at GTK 4.18.6), which a window the pictures draw has no
+application to do, so the pictures add it.
+
 ## The icons
 
 - GNOME's app icon guidelines (developer.gnome.org/hig, App Icons) draw on a 128 px canvas

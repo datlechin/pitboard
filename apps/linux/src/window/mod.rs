@@ -5,23 +5,26 @@
 //! keeps in the window's own action muxer and exports nowhere. It is an `AdwWindow`, since
 //! GtkApplication exports an application window's own action group on the bus
 //! (docs/facts/linux-app.md, What the app exports), so no other process reaches what the window
-//! does. Its keys are bound on its class too. Closing it hides it while a tray keeps Pitboard
-//! running, and quits Pitboard where none does. It keeps its size in the app's data folder, and
-//! tells the model it was looked at each time it maps. Its dialogs are [`crate::dialogs`]'s, and
-//! a link dropped on it is handed to the model, which says what Open Link shows of it.
+//! does. Its keys are bound on its class too ([`keys`]). Closing it hides it while a tray keeps
+//! Pitboard running, and quits Pitboard where none does. It keeps its size in the app's data
+//! folder, and tells the model it was looked at each time it maps. Its dialogs are
+//! [`crate::dialogs`]'s, and a link dropped on it is handed to the model, which says what Open
+//! Link shows of it.
 //!
 //! It answers each window request of the model's once: it comes forward, with the activation
-//! token what asked for it came with, and shows the place asked for, the accounts or
-//! Preferences on its page.
+//! token what asked for it came with, and shows the place asked for, the accounts, Diagnostics
+//! or Activity pushed over them, Preferences on its page, or the first launch's welcome.
 
 mod account_group;
 mod accounts;
 mod accounts_page;
+mod keys;
 mod limit_row;
 mod notices;
 
 pub use account_group::AccountGroup;
 pub use accounts_page::AccountsPage;
+pub use keys::Shortcut;
 pub use limit_row::{LimitRow, level_name};
 pub use notices::NoticeRow;
 
@@ -32,12 +35,13 @@ use std::sync::Arc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::{gio, glib};
 use pitboard_model::{Front, Intent, LocalTime, Part, Place, RemovalShown, WindowRequest};
 use serde::{Deserialize, Serialize};
 
 use crate::data_folder::DataFolder;
 use crate::dialogs::Dialogs;
+use crate::pages::{ActivityPage, DiagnosticsPage};
 use crate::platform::autostart::StartAtSignIn;
 use crate::platform::links;
 use crate::presence::HELP;
@@ -67,6 +71,8 @@ const SIZE: &str = "window.json";
 
 // The tags of the window's pages, as window.ui names them.
 const ACCOUNTS: &str = "accounts";
+const DIAGNOSTICS: &str = "diagnostics";
+const ACTIVITY: &str = "activity";
 
 // What the window remembers of itself, as the Windows app keeps `placement.json`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +102,10 @@ mod imp {
         pub(super) main_menu: TemplateChild<gtk::MenuButton>,
         #[template_child]
         pub(super) accounts_page: TemplateChild<AccountsPage>,
+        #[template_child]
+        pub(super) diagnostics: TemplateChild<DiagnosticsPage>,
+        #[template_child]
+        pub(super) activity: TemplateChild<ActivityPage>,
         pub(super) host: OnceCell<Rc<dyn Host>>,
         pub(super) shown: OnceCell<Shown>,
         pub(super) dialogs: OnceCell<Rc<Dialogs>>,
@@ -111,6 +121,8 @@ mod imp {
 
         fn class_init(class: &mut Self::Class) {
             AccountsPage::ensure_type();
+            DiagnosticsPage::ensure_type();
+            ActivityPage::ensure_type();
             class.bind_template();
             class.install_action("pitboard.add-account", None, |window, _, _| {
                 window.host().send(crate::outside::add_account_intent());
@@ -123,21 +135,37 @@ mod imp {
                     dialogs.show_open_link();
                 }
             });
+            class.install_action("pitboard.diagnostics", None, |window, _, _| {
+                window.show_page(DIAGNOSTICS);
+            });
+            class.install_action("pitboard.activity", None, |window, _, _| {
+                window.show_page(ACTIVITY);
+            });
             class.install_action("pitboard.preferences", None, |window, _, _| {
                 if let Some(dialogs) = window.imp().dialogs.get() {
                     dialogs.show_preferences(None);
                 }
             });
+            class.install_action("pitboard.shortcuts", None, |window, _, _| {
+                if let Some(dialogs) = window.imp().dialogs.get() {
+                    dialogs.show_shortcuts();
+                }
+            });
             class.install_action("pitboard.help", None, |window, _, _| {
                 window.host().open(HELP, window.upcast_ref());
             });
+            class.install_action("pitboard.about", None, |window, _, _| {
+                if let Some(dialogs) = window.imp().dialogs.get() {
+                    dialogs.show_about();
+                }
+            });
             class.install_action("pitboard.quit", None, |window, _, _| window.host().quit());
-            let control = gdk::ModifierType::CONTROL_MASK;
-            class.add_binding_action(gdk::Key::n, control, "pitboard.add-account");
-            class.add_binding_action(gdk::Key::r, control, "pitboard.refresh");
-            class.add_binding_action(gdk::Key::comma, control, "pitboard.preferences");
-            class.add_binding_action(gdk::Key::q, control, "pitboard.quit");
-            class.add_binding_action(gdk::Key::w, control, "window.close");
+            for shortcut in Shortcut::ALL {
+                if let Some(action) = shortcut.action() {
+                    let (key, modifiers) = shortcut.keys();
+                    class.add_binding_action(key, modifiers, action);
+                }
+            }
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -192,6 +220,8 @@ impl Window {
             window.set_maximized(size.maximized);
         }
         imp.accounts_page.follow(shown, window.host());
+        imp.diagnostics.follow(shown, window.host());
+        imp.activity.follow(shown, window.host());
         let _ = imp
             .dialogs
             .set(Dialogs::follow(&window, shown, window.host()));
@@ -226,12 +256,20 @@ impl Window {
         imp.refresh
             .update_property(&[gtk::accessible::Property::Label(&words.window.refresh)]);
         imp.main_menu.set_tooltip_text(Some(&gnome.main_menu));
-        // GNOME's primary menu: the app's own items, then Preferences and Help in one section at
-        // its end, and no Quit (docs/facts/linux-app.md, GNOME's words).
+        // GNOME's primary menu: the app's own items, then Preferences, Keyboard Shortcuts, Help
+        // and About in one section at its end, and no Quit (docs/facts/linux-app.md, GNOME's
+        // words).
         let (own, standard) = (gio::Menu::new(), gio::Menu::new());
         own.append(Some(&gnome.open_link), Some("pitboard.open-link"));
+        own.append(
+            Some(&words.window.diagnostics),
+            Some("pitboard.diagnostics"),
+        );
+        own.append(Some(&words.window.activity), Some("pitboard.activity"));
         standard.append(Some(&words.menu.settings), Some("pitboard.preferences"));
+        standard.append(Some(&gnome.keyboard_shortcuts), Some("pitboard.shortcuts"));
         standard.append(Some(&words.menu.help), Some("pitboard.help"));
+        standard.append(Some(&words.menu.about), Some("pitboard.about"));
         let menu = gio::Menu::new();
         menu.append_section(None, &own);
         menu.append_section(None, &standard);
@@ -285,16 +323,38 @@ impl Window {
     fn show_place(&self, place: Option<Place>) {
         let dialogs = self.imp().dialogs.get();
         match place {
-            None | Some(Place::Checks | Place::Activity | Place::Welcome) => {}
+            None => {}
             Some(Place::Accounts) => {
                 self.imp().navigation.pop_to_tag(ACCOUNTS);
             }
+            Some(Place::Checks) => self.show_page(DIAGNOSTICS),
+            Some(Place::Activity) => self.show_page(ACTIVITY),
             Some(Place::Settings { section }) => {
                 if let Some(dialogs) = dialogs {
                     dialogs.show_preferences(Some(section));
                 }
             }
+            Some(Place::Welcome) => {
+                if let Some(dialogs) = dialogs {
+                    dialogs.show_welcome();
+                }
+            }
         }
+    }
+
+    // Pushed over the accounts, or, where it is shown already, read again.
+    fn show_page(&self, tag: &str) {
+        let imp = self.imp();
+        let navigation = &imp.navigation;
+        if navigation.visible_page_tag().as_deref() == Some(tag) {
+            match tag {
+                DIAGNOSTICS => imp.diagnostics.read_again(),
+                _ => imp.activity.read_again(),
+            }
+            return;
+        }
+        navigation.pop_to_tag(ACCOUNTS);
+        navigation.push_by_tag(tag);
     }
 
     fn kept_size(&self) -> Option<Size> {
@@ -394,7 +454,10 @@ mod tests {
         let add = pitboard_model::Sheet::Add { tool: None };
         let _ = crate::dialogs::sign_in::SignIn::new(add, host.clone());
         let _ = crate::dialogs::open_link::OpenLink::new(host.clone());
-        let _ = crate::preferences::Preferences::new(host, &shown.snapshot());
+        let _ = crate::preferences::Preferences::new(host.clone(), &shown.snapshot());
+        let _ = crate::dialogs::welcome::Welcome::new(host);
+        let _ = crate::dialogs::shortcuts::Shortcuts::default();
+        let _ = crate::dialogs::about::about();
         window.destroy();
     }
 }

@@ -16,6 +16,10 @@
     <file>ui/sign-in.ui</file>
     <file>ui/open-link.ui</file>
     <file>ui/preferences.ui</file>
+    <file>ui/diagnostics.ui</file>
+    <file>ui/activity.ui</file>
+    <file>ui/welcome.ui</file>
+    <file>ui/shortcuts.ui</file>
     <file>style.css</file>
   </gresource>
 </gresources>

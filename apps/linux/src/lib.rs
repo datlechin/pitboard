@@ -8,8 +8,8 @@
 //! is [`resources`]'s.
 //!
 //! The model's snapshots reach the main loop through [`listener`] and are kept by part in
-//! [`shown`], which [`window`] and its [`dialogs`], [`preferences`] among them, and
-//! [`presence`], the status item and the searches, follow. The app's only actions on the bus are [`outside`]'s. The model's notices
+//! [`shown`], which [`window`], its [`pages`] and its [`dialogs`], [`preferences`] among them,
+//! and [`presence`], the status item and the searches, follow. The app's only actions on the bus are [`outside`]'s. The model's notices
 //! are posted by [`notices`], its clock is [`local_time`]'s, and the app's own folder is
 //! [`data_folder`]'s.
 #![cfg(target_os = "linux")]
@@ -23,6 +23,7 @@ pub mod listener;
 pub mod local_time;
 pub mod notices;
 pub mod outside;
+pub mod pages;
 pub mod platform;
 pub mod preferences;
 pub mod presence;

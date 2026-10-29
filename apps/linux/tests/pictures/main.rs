@@ -21,8 +21,8 @@ use pitboard_linux::preferences::Preferences;
 use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{AccountGroup, Host, Window};
 use pitboard_model::{
-    AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, PitboardModel,
-    PlatformError, Sheet, Snapshot, Tool,
+    AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, Pane, PitboardModel,
+    Place, PlatformError, Sheet, Snapshot, Tool,
 };
 
 const PATIENCE: Duration = Duration::from_secs(30);
@@ -177,16 +177,19 @@ fn hold_still(widget: &gtk::Widget) {
     }
 }
 
-// The app's style sheet, which AdwApplication loads from the resource as the app starts, and
-// which a window drawn here has no application to load it.
+// The app's style sheet and icons, which AdwApplication and GtkApplication take from the
+// resource as the app starts, and which a window drawn here has no application to take.
 fn styled() {
+    let display = gtk::gdk::Display::default().expect("headless.sh's display");
     let css = gtk::CssProvider::new();
     css.load_from_resource(&format!("{}/style.css", pitboard_linux::resources::BASE));
     gtk::style_context_add_provider_for_display(
-        &gtk::gdk::Display::default().expect("headless.sh's display"),
+        &display,
         &css,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+    gtk::IconTheme::for_display(&display)
+        .add_resource_path(&format!("{}/icons", pitboard_linux::resources::BASE));
 }
 
 // What a step of a picture sends the model, and what the model shows once it has taken it.
@@ -568,6 +571,77 @@ fn preferences_advanced() {
         shown.machine.command_line.in_terminal.is_some()
     });
     preferences("preferences-advanced", "advanced", &[listed(), read, found]);
+}
+
+// A page of the window's, pushed over the accounts by its menu's `action`, once `shown` reads
+// what it shows.
+fn page(name: &str, action: &'static str, shown: Step) {
+    picture(
+        name,
+        "oneTool",
+        true,
+        &[listed(), shown],
+        move |window| {
+            window
+                .activate_action(action, None)
+                .expect("the main menu's item");
+        },
+        false,
+    );
+}
+
+#[gtk::test]
+fn diagnostics() {
+    let checked: Step = (Some(Intent::PaneShown { pane: Pane::Checks }), |shown| {
+        let checks = &shown.machine.checks;
+        checks.report.is_some() && !checks.checking
+    });
+    page("diagnostics", "pitboard.diagnostics", checked);
+}
+
+#[gtk::test]
+fn activity() {
+    let read: Step = (
+        Some(Intent::PaneShown {
+            pane: Pane::Activity,
+        }),
+        |shown| !shown.machine.activity.lines.is_empty(),
+    );
+    page("activity", "pitboard.activity", read);
+}
+
+#[gtk::test]
+fn welcome() {
+    let welcomed: Step = (None, |shown| {
+        shown.window_request.place == Some(Place::Welcome) && !shown.welcome.tools.is_empty()
+    });
+    picture("welcome", "firstLaunch", true, &[welcomed], |_| {}, true);
+}
+
+// A dialog the main menu's `action` brings up over the accounts.
+fn from_the_menu(name: &str, action: &'static str) {
+    picture(
+        name,
+        "oneTool",
+        true,
+        &[listed()],
+        move |window| {
+            window
+                .activate_action(action, None)
+                .expect("the main menu's item");
+        },
+        true,
+    );
+}
+
+#[gtk::test]
+fn about() {
+    from_the_menu("about", "pitboard.about");
+}
+
+#[gtk::test]
+fn shortcuts() {
+    from_the_menu("shortcuts", "pitboard.shortcuts");
 }
 
 // The window's account groups, in the order drawn.

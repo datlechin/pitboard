@@ -195,9 +195,10 @@ The apps:
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
     launch starts anything (`launch.rs`), the one held GApplication the primary instance runs
     over the model (`application.rs`), the snapshots on the main loop and kept by part
-    (`listener.rs`, `shown.rs`), the window and its accounts page (`window/`), its dialogs
-    (`dialogs/`) and Preferences (`preferences/`), the status item's face and menu and the
-    searches' results (`presence.rs`),
+    (`listener.rs`, `shown.rs`), the window, its accounts page and the keys it answers
+    (`window/`), its Diagnostics and Activity (`pages/`), its dialogs (`dialogs/`) and
+    Preferences (`preferences/`), the status item's face and menu and the searches' results
+    (`presence.rs`),
     the app's only actions on the bus (`outside.rs`), the model's notices, clock and the app's
     own folder (`notices.rs`, `local_time.rs`, `data_folder.rs`), what the program carries in
     its GResource (`resources.rs`), and the desktop's services the app speaks for the model, the
@@ -717,6 +718,12 @@ keeps it is in the header of the module named.
   the command line again each time Advanced is shown
   (`a_setting_sends_only_a_value_that_differs`,
   `the_schedule_command_line_and_watch_service_are_read_on_each_visit`).
+- The Linux window answers each window request once, and the place it names: the accounts,
+  Diagnostics or Activity over them, each reading again what it shows as it opens, Preferences on
+  its page, or the first launch's welcome, over which what its Add starts comes up
+  (`the_welcome_shows_once_and_adds_from_itself`, `diagnostics_copies_the_redacted_report`,
+  `activity_lists_each_change_in_its_columns`). Keyboard Shortcuts lists every key the window
+  answers, its own and the toolkit's (`every_shortcut_the_window_answers_is_listed_with_its_keys`).
 - The Linux app makes the files of its own link scheme, so a link reaches the model as written,
   where GVfs would write it again (`a_link_opened_is_handed_on_as_written`).
 - In a fixture, the Linux app's stand-ins for the autostart entry, the notifications, the tray
