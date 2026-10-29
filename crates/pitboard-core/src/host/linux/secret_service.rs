@@ -274,7 +274,7 @@ mod tests {
         let ctx = home(scratch.path(), "home", &service);
         assert!(answers(&ctx));
         assert_eq!(
-            super::super::host().new_home_form(&ctx),
+            crate::store::new_home_form(&ctx),
             Some(crate::state::VaultForm::SecretService)
         );
         let (vault, park, permit) = (Vault::of(&ctx), park(0), Permit::for_a_test());
@@ -484,7 +484,7 @@ mod tests {
             refused_every_way(&Vault::of(&ctx), &park(0));
             assert!(!answers(&ctx));
             assert_eq!(
-                super::super::host().new_home_form(&ctx),
+                crate::store::new_home_form(&ctx),
                 Some(crate::state::VaultForm::Files)
             );
         }

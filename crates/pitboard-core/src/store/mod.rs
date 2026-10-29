@@ -302,11 +302,32 @@ fn vault(ctx: &Context) -> Box<dyn RawStore> {
 /// its state file records, else the one a new home takes. `None` where the system keeps them
 /// one way, which reads no file.
 pub(crate) fn home_form(ctx: &Context) -> crate::error::Result<Option<VaultForm>> {
-    let host = ctx.host();
-    if host.vault_forms().is_empty() {
+    if ctx.host().vault_forms().is_empty() {
         return Ok(None);
     }
-    Ok(crate::state::vault_form(ctx)?.or_else(|| host.new_home_form(ctx)))
+    Ok(crate::state::vault_form(ctx)?.or_else(|| new_home_form(ctx)))
+}
+
+/// The form a home that records none takes, where the system offers a choice, asked again at
+/// each look until its first save records it: files where its `vault/` holds a park, or cannot
+/// be read to tell, as in a home whose state file was lost; else the Secret Service where one
+/// answers; else files. A park in `vault/` is never left unread for a store that holds none.
+pub(crate) fn new_home_form(ctx: &Context) -> Option<VaultForm> {
+    let host = ctx.host();
+    if host.vault_forms().is_empty() {
+        return None;
+    }
+    let files_hold_none = matches!(
+        host.vault(ctx, Some(VaultForm::Files)).list(),
+        Ok(Some(names)) if names.is_empty()
+    );
+    Some(
+        if files_hold_none && host.answers(ctx, VaultForm::SecretService) {
+            VaultForm::SecretService
+        } else {
+            VaultForm::Files
+        },
+    )
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about

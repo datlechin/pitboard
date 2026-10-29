@@ -77,8 +77,8 @@ On Linux, `state.json` records how a Pitboard directory keeps its parked logins,
 
 | `form` | Parked logins are | Recorded |
 | --- | --- | --- |
-| `secret_service` | Items in your login keyring | By the directory's first save, where a Secret Service answers with a default collection |
-| `files` | Files in `vault/` | By the directory's first save, where none answers, and for a directory an earlier Pitboard made |
+| `secret_service` | Items in your login keyring | By the directory's first save, where a Secret Service answers with a default collection and `vault/` holds no parked login |
+| `files` | Files in `vault/` | By the directory's first save, where none answers or `vault/` holds a parked login, as after `state.json` was lost, and for a directory an earlier Pitboard made |
 
 Pitboard keeps the form a directory recorded until [`pitboard vault move`](/reference/maintenance-commands#vault) changes it. While a move is under way, `vault` also holds `moving_to`, the form it goes to, and once the new form is recorded, `leaving`, the parked logins still to be deleted from the form it left, with `from` and `parks`.
 

@@ -85,14 +85,6 @@ impl Host for Linux {
         &[VaultForm::SecretService, VaultForm::Files]
     }
 
-    fn new_home_form(&self, ctx: &Context) -> Option<VaultForm> {
-        Some(if self.answers(ctx, VaultForm::SecretService) {
-            VaultForm::SecretService
-        } else {
-            VaultForm::Files
-        })
-    }
-
     fn answers(&self, ctx: &Context, form: VaultForm) -> bool {
         match form {
             VaultForm::SecretService => secret_service::answers(ctx),

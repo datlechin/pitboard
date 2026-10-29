@@ -1317,7 +1317,7 @@ fn recorded_vault(ctx: &Context, state: &State) -> Result<Option<Vault>> {
     }
     match &state.vault {
         Some(vault) => Ok(Some(vault.clone())),
-        None => Ok(vault(ctx)?.or_else(|| host.new_home_form(ctx).map(Vault::kept_as))),
+        None => Ok(vault(ctx)?.or_else(|| crate::store::new_home_form(ctx).map(Vault::kept_as))),
     }
 }
 

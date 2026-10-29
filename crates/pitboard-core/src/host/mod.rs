@@ -925,12 +925,6 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
         &[]
     }
 
-    /// The form a home that records none takes, where the system offers a choice. Asked again
-    /// at each look until the home's first save records it.
-    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
-        None
-    }
-
     /// Whether a vault of `form` answers here, for a form this system offers: files always do,
     /// and the Secret Service where something on this session's bus has a default collection,
     /// locked or not. Nothing is unlocked to tell.

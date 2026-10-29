@@ -73,6 +73,39 @@ fn a_home_keeps_the_vault_form_it_recorded() {
     harness::hold(&m, "a switch in files");
 }
 
+// What `repair` is for: a home whose state file was lost still has its parks in `vault/`, and a
+// Secret Service that answers since says nothing of where they are. They are found there, and
+// the first save records files.
+#[test]
+fn a_home_whose_state_file_was_lost_keeps_the_parks_its_files_hold() {
+    let host = MemoryHost::by_form();
+    host.secret_service_answers(false);
+    let m = machine_on(Arc::clone(&host), "state-file-lost");
+    let there = parked(&m, "there").service;
+    drop(settle(&m.ctx, Permit::for_a_test(), None).expect("settled"));
+    std::fs::remove_file(home::dir(&m.ctx).join("state.json")).expect("lost");
+    host.secret_service_answers(true);
+
+    assert_eq!(
+        store::home_form(&m.ctx).expect("told"),
+        Some(VaultForm::Files)
+    );
+    let reclaimed = repair(
+        settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("nothing to recover")
+            .0,
+    )
+    .expect("repaired")
+    .0;
+    assert_eq!(reclaimed.strangers, vec![there.clone()], "{reclaimed:?}");
+
+    let state = state::load(&m.ctx).expect("none yet");
+    state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+    assert_eq!(recorded(&m), Some(VaultForm::Files));
+    assert_eq!(in_files(&m), vec![there]);
+    assert!(in_the_secret_service(&m).is_empty());
+}
+
 // Files would read as holding none of its parks, and a park written there is one nothing names.
 #[test]
 fn a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files() {

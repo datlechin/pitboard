@@ -90,7 +90,7 @@ pub(crate) fn move_to(settled: Settled, to: VaultForm) -> Result<(Moved, Vec<War
         .vault
         .as_ref()
         .map(|vault| vault.form)
-        .or_else(|| host.new_home_form(&ctx))
+        .or_else(|| store::new_home_form(&ctx))
         .unwrap_or(to);
     if from == to {
         return Ok(left(&ctx, permit, &mut state, to, false, 0));

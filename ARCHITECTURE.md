@@ -331,6 +331,9 @@ keeps it is in the header of the module named.
   0600 files in the home. A home records the form its first save found and keeps it
   (`a_home_keeps_the_vault_form_it_recorded`), and one on the Secret Service never falls back to
   files (`a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files`).
+  A home that records none takes files while its `vault/` holds a park, as one whose state file
+  was lost, so those are never left unread (`store::new_home_form`,
+  `a_home_whose_state_file_was_lost_keeps_the_parks_its_files_hold`).
 - Only `pitboard vault move` changes a home's form. It records the move first, writes every park
   into the new form and reads it back before the index names that form, and deletes each from the
   old form only after; a move cut short is finished forward by the next change, before anything
