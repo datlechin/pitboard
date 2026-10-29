@@ -480,6 +480,18 @@ plasma-workspace v6.4.0 and v6.8.2, which differ there in no call or property th
   `src/declarativeimports/plasmacomponents3/ProgressBar.qml`), so a bar takes the colour of its
   limit's step from a `highlightColor` set on it: neutral for low and negative for out, as the
   pictures show.
+- A panel's popup takes the full representation's `Layout.preferredWidth` and
+  `Layout.preferredHeight` where they are above 0, else its implicit size, held within its
+  `Layout.minimum*` and `Layout.maximum*` (plasma-desktop v6.4.0
+  `desktoppackage/contents/applet/CompactApplet.qml:231-256`, libplasma v6.4.0
+  `src/plasmaquick/appletpopup.cpp:257-345`). So the full representation's minimum is main.qml's
+  switch size, which holds the icon or the placeholder that stands in for the accounts, and
+  `tst_widget.qml` sizes its popup the same way.
+- Plasma's applets turn a `ScrollView`'s horizontal scroll bar off for QTBUG-83890 (bluedevil's
+  `src/applet/qml/FullRepresentation.qml` and plasma-workspace's
+  `applets/devicenotifier/qml/FullRepresentation.qml` on 30 October). With the minimum and the
+  bar left on, the widget's popup showed one over its last limit once it grew to its accounts'
+  height, so the widget turns it off too.
 
 The Plasma each distribution ships: Debian 13 6.3.6, so no widget; Ubuntu 26.04 6.6.4 at its
 release and 6.6.6 in its updates (Launchpad); Fedora 43 6.4.5 at its release and 6.7.5 in its
@@ -493,8 +505,12 @@ service file `run-tests.sh` writes after the bus has started, which dbus-daemon 
 the activation. Measured there, the tests failing first to compile with no widget: the widget
 shows the account in use, each of its limits and the feed's words alone; its Switch asks
 `ActivateAction("switch-from-outside", [<id>])`; and with no Pitboard running it asks nothing,
-the bus starting the stand-in only for the test's own `StartServiceByName`. A TestCase is not
-drawn unless made visible: its items said they were hidden and drew nothing until then.
+the bus starting the stand-in only for the test's own `StartServiceByName`. Its icon with no
+Pitboard running, and its placeholder once the stand-in feeds a glance with no account, are
+drawn whole in the popup. Without a minimum the popup counted only the accounts, the margins and
+the footer, the footer even while hidden: 39 pixels high with no Pitboard running, it cut both.
+A TestCase is not drawn unless made visible: its items said they were hidden and drew nothing
+until then.
 
 ## The install layout
 

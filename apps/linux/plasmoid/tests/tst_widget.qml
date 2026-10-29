@@ -6,6 +6,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import QtTest
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.workspace.dbus as DBus
@@ -31,7 +32,9 @@ TestCase {
         watchedService: test.service
     }
 
-    // As a Plasma popup draws the widget, over the theme's background, reading its own feed.
+    // As a Plasma popup draws the widget, over the theme's background, reading its own feed, and
+    // sizes it: its preferred size, else its implicit size, within its minimum and maximum
+    // (plasma-desktop's CompactApplet.qml, libplasma's AppletPopup).
     component Popup: Rectangle {
         id: background
 
@@ -39,8 +42,10 @@ TestCase {
         readonly property alias full: full
 
         color: Kirigami.Theme.backgroundColor
-        width: full.implicitWidth
-        height: full.implicitHeight
+        width: Math.min(Math.max(full.Layout.preferredWidth > 0 ? full.Layout.preferredWidth
+            : full.implicitWidth, full.Layout.minimumWidth), full.Layout.maximumWidth)
+        height: Math.min(Math.max(full.Layout.preferredHeight > 0 ? full.Layout.preferredHeight
+            : full.implicitHeight, full.Layout.minimumHeight), full.Layout.maximumHeight)
 
         FullRepresentation {
             id: full
@@ -90,6 +95,18 @@ TestCase {
         return JSON.parse(standIn("Asked"));
     }
 
+    // The stand-in feeds `glance` from now on, as Pitboard does once it reads again.
+    function feeds(glance: var) {
+        called({
+            "service": test.service,
+            "path": "/StandIn",
+            "iface": "com.usepitboard.Pitboard.StandIn",
+            "member": "Feed",
+            "signature": "(s)",
+            "arguments": [JSON.stringify(glance)]
+        });
+    }
+
     // A warning from the widget's own QML fails the test that caused it.
     function init() {
         failOnWarning(/com\.usepitboard\.Pitboard\/contents\/ui/);
@@ -117,6 +134,13 @@ TestCase {
             }
         }
         return found;
+    }
+
+    // Whether `item` is drawn whole within `popup`.
+    function whole(item: Item, popup: Item): bool {
+        const at = item.mapToItem(popup, 0, 0);
+        return at.x >= 0 && at.y >= 0 && at.x + item.width <= popup.width
+            && at.y + item.height <= popup.height;
     }
 
     function said(item: Item): list<string> {
@@ -212,10 +236,34 @@ TestCase {
         verify(!pitboard.registered, "the widget started Pitboard");
         compare(feed.glance, null);
         compare(said(drawnPopup.full), []);
+        const icons = drawn(drawnPopup.full).filter(item => item.source === test.service);
+        compare(icons.length, 1);
+        verify(whole(icons[0], drawnPopup), "the icon cut short");
         picture(drawnPopup, "linux-widget-not-running");
 
         // It follows a Pitboard that starts after it, with no poll.
         start();
         tryVerify(() => feed.glance !== null, 10000, "the feed read once Pitboard runs");
+    }
+
+    function test_with_no_accounts_it_says_so() {
+        start();
+        const drawnPopup = shown();
+        const feed = drawnPopup.feed;
+        tryVerify(() => feed.glance !== null, 10000, "the feed read");
+        const words = feed.glance.words;
+        feeds(Object.assign({}, feed.glance, {
+            "accounts": []
+        }));
+        tryVerify(() => feed.glance !== null && feed.glance.accounts.length === 0, 10000,
+            "the accounts gone");
+        waitForRendering(drawnPopup);
+
+        const saying = drawn(drawnPopup.full).filter(item => item.text === words.no_accounts);
+        verify(saying.length > 0, words.no_accounts);
+        for (const item of saying) {
+            verify(whole(item, drawnPopup), `${words.no_accounts} cut short`);
+        }
+        picture(drawnPopup, "linux-widget-no-accounts");
     }
 }

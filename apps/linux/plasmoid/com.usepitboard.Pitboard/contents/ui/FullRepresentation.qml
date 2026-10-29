@@ -24,8 +24,12 @@ PlasmaComponents.Page {
 
     implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: Math.min(
-        shown.implicitHeight + (footer ? footer.implicitHeight : 0) + Kirigami.Units.largeSpacing * 2,
+        shown.implicitHeight + (footer.visible ? footer.implicitHeight : 0)
+            + Kirigami.Units.largeSpacing * 2,
         Kirigami.Units.gridUnit * 26)
+    // main.qml's switch size, which holds the icon or the placeholder in place of the accounts.
+    Layout.minimumWidth: Kirigami.Units.gridUnit * 16
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 10
 
     Kirigami.Icon {
         visible: !full.glance
@@ -49,6 +53,9 @@ PlasmaComponents.Page {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.largeSpacing
         contentWidth: availableWidth
+        // QTBUG-83890, as Plasma's own applets avoid it: the bar stayed over the last limit once
+        // the popup grew.
+        PlasmaComponents.ScrollBar.horizontal.policy: PlasmaComponents.ScrollBar.AlwaysOff
 
         ColumnLayout {
             id: shown
