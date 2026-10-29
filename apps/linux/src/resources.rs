@@ -1,5 +1,6 @@
-//! The program's GResource, which `build.rs` compiles in: its icons, its metainfo, and the D-Bus
-//! interfaces it serves, each written from its published definition in `data/dbus`.
+//! The program's GResource, which `build.rs` compiles in: its icons, its views, its metainfo, and
+//! the D-Bus interfaces it serves, each written from its published definition in `data/dbus`;
+//! and the debug build's own icon, in the debug build alone.
 
 use std::sync::Once;
 
@@ -12,6 +13,9 @@ pub fn register() {
     REGISTERED.call_once(|| {
         gio::resources_register_include!("pitboard.gresource")
             .expect("build.rs compiles the resource into the program");
+        #[cfg(pitboard_debug_build)]
+        gio::resources_register_include!("devel.gresource")
+            .expect("build.rs compiles the debug build's icon into it");
     });
 }
 

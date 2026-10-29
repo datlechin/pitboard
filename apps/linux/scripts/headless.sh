@@ -3,7 +3,7 @@
 # never on a desktop's own bus or display: in a headless mutter with one virtual monitor, on a
 # private session bus, with every home, XDG folder and temporary folder fresh under one folder
 # removed after, and with none of the caller's variables but PATH, TERM, Rust's, Cargo's,
-# rustup's and nextest's.
+# rustup's and nextest's, and the folder the pictures are kept in.
 set -eu
 
 if [ "$#" -eq 0 ]; then
@@ -26,7 +26,7 @@ set -- dbus-run-session -- mutter --headless --wayland --no-x11 --virtual-monito
   -- "$@"
 # Only a name the pattern matched reaches eval, which reads its value.
 for name in $(env | awk -F= '/^(CARGO|RUSTUP|NEXTEST|__CARGO)_[A-Za-z0-9_]*=/ { print $1 }') \
-  RUSTFLAGS RUSTDOCFLAGS RUST_BACKTRACE TERM; do
+  RUSTFLAGS RUSTDOCFLAGS RUST_BACKTRACE TERM PITBOARD_LINUX_PICTURES; do
   if eval "[ -n \"\${$name+set}\" ]"; then
     eval "set -- \"$name=\${$name}\" \"\$@\""
   fi

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The main window: a navigation view whose root page is the accounts, each page with its own
+     header bar, as libadwaita's navigation pages carry their back button. Every word is the
+     model's, set by window/mod.rs. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardWindow" parent="AdwWindow">
+    <property name="default-width">600</property>
+    <property name="default-height">640</property>
+    <property name="width-request">360</property>
+    <property name="height-request">294</property>
+    <property name="content">
+      <object class="AdwNavigationView" id="navigation">
+        <child>
+          <object class="AdwNavigationPage" id="accounts">
+            <property name="tag">accounts</property>
+            <property name="child">
+              <object class="AdwToolbarView">
+                <child type="top">
+                  <object class="AdwHeaderBar">
+                    <property name="title-widget">
+                      <object class="AdwWindowTitle" id="window_title"/>
+                    </property>
+                    <child type="start">
+                      <object class="GtkButton" id="add_account">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="action-name">pitboard.add-account</property>
+                      </object>
+                    </child>
+                    <child type="end">
+                      <object class="GtkMenuButton" id="main_menu">
+                        <property name="icon-name">open-menu-symbolic</property>
+                        <property name="primary">True</property>
+                      </object>
+                    </child>
+                    <child type="end">
+                      <object class="GtkButton" id="refresh">
+                        <property name="icon-name">view-refresh-symbolic</property>
+                        <property name="action-name">pitboard.refresh</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <property name="content">
+                  <object class="PitboardAccountsPage" id="accounts_page"/>
+                </property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </property>
+  </template>
+</interface>

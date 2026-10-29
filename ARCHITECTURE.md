@@ -19,10 +19,12 @@ itself before the account in use runs out: an app with its setting on, or `pitbo
 One crate, `pitboard-core`, does this for every tool. It reads and writes each tool's login,
 keeps Pitboard's index of accounts, and asks Claude Code's and Codex's services for usage.
 
-Three front ends use the core: the command line, `pitboard`; the menu bar app on macOS 14 or
-later; and the Windows app in the notification area. The apps call the core through UniFFI
-bindings, and show and send what one model in Rust decides. The command line inside each app
-is what its daily renewal runs, and what the `pitboard-app` cask and the MSI put on `PATH`.
+Four front ends use the core: the command line, `pitboard`; the menu bar app on macOS 14 or
+later; the Windows app in the notification area; and the Linux app, GTK 4 and libadwaita, on
+GNOME and KDE Plasma. The apps show and send what one model in Rust decides: the macOS and
+Windows apps call it through UniFFI bindings, and the Linux app links it as a Rust crate. The
+command line inside each app is what its daily renewal runs, and what the `pitboard-app` cask
+and the MSI put on `PATH`.
 
 Each app also gives each enrolled Claude Code and Codex account a window on its tool's site,
 claude.ai or chatgpt.com, where the site's own pages run in WebKit on macOS and WebView2 on
@@ -191,14 +193,22 @@ The apps:
   - `Icon`: the drawings `Pitboard.ico` is made from.
 - `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
-    launch starts anything (`launch.rs`), what the program carries in its GResource
-    (`resources.rs`), and the desktop's services the app speaks for the model, the status item
-    among them, with a fixture's stand-ins for them, and what it answers GNOME's search and
-    KRunner (`platform/`).
+    launch starts anything (`launch.rs`), the one held GApplication the primary instance runs
+    over the model (`application.rs`), the snapshots on the main loop and kept by part
+    (`listener.rs`, `shown.rs`), the window (`window/`), the status item's face and menu and the
+    searches' results (`presence.rs`), the app's only actions on the bus (`outside.rs`), the
+    model's notices, clock and the app's own folder (`notices.rs`, `local_time.rs`,
+    `data_folder.rs`), what the program carries in its GResource (`resources.rs`), and the
+    desktop's services the app speaks for the model, the status item among them, with a
+    fixture's stand-ins for them, and what it answers GNOME's search and KRunner
+    (`platform/`).
+  - `tests/ui/`, `tests/pictures/`: the UI tests, which drive the built program in a fixture
+    over D-Bus and AT-SPI, and the pictures of each surface, drawn in-process.
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
-    the D-Bus interfaces the app serves, each written from its published definition (`dbus/`).
+    the D-Bus interfaces the app serves, each written from its published definition (`dbus/`),
+    and the views' GtkBuilder templates (`ui/`).
   - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display
     the tests run in, the packages an image or CI's container takes, and the run of the
     checks in a container.
@@ -637,8 +647,35 @@ keeps it is in the header of the module named.
 - A build of the Linux app is the release only where Meson built it, and anything Cargo builds
   alone is the debug build, with an id, a link scheme and an object path of its own
   (`a_build_is_a_release_only_where_meson_says_so`, `each_build_has_its_own_id_scheme_and_path`).
-  Until it links the model, its program quits before it reaches the session bus
-  (`a_build_with_no_model_quits_before_it_owns_a_name`).
+  A Linux debug build started without `PITBOARD_FIXTURE`, as D-Bus activation, autostart or a
+  link would start one on the real homes, or in a fixture it cannot make, quits before it owns
+  a bus name (`a_debug_build_outside_a_fixture_quits_before_it_owns_a_name`,
+  `a_fixture_with_a_wrong_name_is_refused_with_every_name`, and in the model
+  `a_refused_name_leaves_the_fixtures_folder_alone`).
+- The Linux app is one held GApplication: a second launch hands what it was given to the first
+  and quits, and only the first makes the model, which in a fixture makes its world
+  (`a_second_launch_hands_its_link_to_the_first_and_quits`,
+  `signing_in_starts_held_with_no_window`). Closing its window hides it while a tray keeps
+  Pitboard running and quits Pitboard where none does (`with_one_closing_hides_it`,
+  `without_a_tray_closing_the_window_quits`).
+- The Linux app's only entry points on the bus are its `app.` actions, each taking an id the
+  model issued or none: a notification's click, a switch from outside, and the launcher's Add
+  Account and Refresh, each sending what a click in the app sends. Its window is an `AdwWindow`
+  whose intents are its class's widget actions, which GTK exports nowhere
+  (`the_app_exports_only_its_outside_actions`,
+  `each_launcher_action_is_one_the_app_exports_and_says_its_words`). A switch from outside that
+  is refused is said in a notification
+  (`a_switch_from_outside_that_is_refused_is_said_in_a_notification`).
+- The Linux app's `Shown` keeps a snapshot by part by the same rule, compares none, and keeps a
+  row's object while its id is shown (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
+  `a_snapshot_not_newer_is_dropped`, `a_row_keeps_its_object_across_snapshots`).
+- In a fixture the Linux app writes, posts and registers nothing outside the fixture's folder,
+  and leaves every home it was given as it found it, beside Mesa's shader cache
+  (`a_fixture_writes_nothing_outside_its_folder`,
+  `a_fixture_launch_owns_the_devel_name_and_leaves_its_homes_as_its_world_made_them`).
+- The Linux app's own data folder is its id in `$XDG_DATA_HOME`, each build its own, never in
+  Pitboard's directory, so `pitboard uninstall` leaves it and the app's Uninstall takes it back
+  (`data_folder.rs`, `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
 - Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
   (`neither_search_starts_pitboard`). Each hands the app back only an id it was given in that
   search (`an_id_never_given_activates_nothing`).

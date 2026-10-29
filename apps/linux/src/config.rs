@@ -71,6 +71,12 @@ pub const OBJECT_PATH: &str = BUILD.object_path();
 pub const BINDIR: Option<&str> = option_env!("PITBOARD_BINDIR");
 pub const PACKAGE: Option<Package> = Package::from_setting(option_env!("PITBOARD_PACKAGE"));
 
+/// The program as Meson installs it, which the core finds the command line beside. None for a
+/// build Cargo made alone, wherever it runs from.
+pub fn installed_program() -> Option<String> {
+    BINDIR.map(|bindir| format!("{bindir}/pitboard-app"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

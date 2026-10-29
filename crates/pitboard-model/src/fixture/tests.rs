@@ -2172,6 +2172,50 @@ fn an_unknown_fixture_is_refused_naming_every_one() {
     }
 }
 
+/// A name that is none of them is refused before anything is made, and refused alike by the
+/// question the Linux app asks before it owns a name on the bus, so a launch refused there
+/// leaves the world of the copy already running as it was.
+#[test]
+fn a_refused_name_leaves_the_fixtures_folder_alone() {
+    let own = Folder::own("refused").expect("a folder");
+    let left = own.path().join("pitboard-fixture").join("left by a launch");
+    std::fs::create_dir_all(left.parent().expect("a folder")).expect("a folder");
+    std::fs::write(&left, "kept").expect("left behind");
+
+    for front in [
+        Front::MacMenuBar,
+        Front::WindowsNotificationArea,
+        Front::Gnome,
+    ] {
+        let Some(super::FixtureError::Unknown { reason }) =
+            super::fixture_refusal(front, "twoTool")
+        else {
+            panic!("{front:?}: twoTool is not refused as unknown");
+        };
+        let every = super::fixture_names().join(", ");
+        assert!(reason.contains("\"twoTool\""), "{reason}");
+        assert!(reason.contains(&every), "{reason}");
+        let made = PitboardModel::fixture_in(
+            "twoTool".into(),
+            front,
+            own.path().to_string_lossy().into_owned(),
+            Arc::new(Told::default()),
+            None,
+            Arc::new(Posted::default()),
+            Arc::new(Utc),
+        );
+        assert_eq!(
+            made.map(|_| ()),
+            Err(super::FixtureError::Unknown { reason }),
+            "{front:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&left).expect("still there"), "kept");
+    }
+    for name in super::fixture_names() {
+        assert_eq!(super::fixture_refusal(Front::Gnome, &name), None, "{name}");
+    }
+}
+
 /// Forgets the launches into the folder an app's fixture is kept in once a test is done with
 /// it, however the test ends.
 struct ForgetsTheLaunches;

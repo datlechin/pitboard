@@ -2,14 +2,31 @@
 //!
 //! The glue holds no rule of the model's. It shows what a snapshot says, sends what was asked
 //! of it, and speaks the desktop's services for the model. What a build is, and the names it
-//! answers to, are [`config`]'s; whether a launch starts anything is [`launch`]'s; the
-//! desktop's services, and a fixture's stand-ins for them, are [`platform`]'s; what the program
-//! carries in its GResource is [`resources`]'s.
+//! answers to, are [`config`]'s; whether a launch starts anything is [`launch`]'s; the one held
+//! GApplication the primary instance runs is [`application`]'s; the desktop's services, and a
+//! fixture's stand-ins for them, are [`platform`]'s; what the program carries in its GResource
+//! is [`resources`]'s.
+//!
+//! The model's snapshots reach the main loop through [`listener`] and are kept by part in
+//! [`shown`], which [`window`] and [`presence`], the status item and the searches, follow. The
+//! app's only actions on the bus are [`outside`]'s. The model's notices are posted by
+//! [`notices`], its clock is [`local_time`]'s, and the app's own folder is [`data_folder`]'s.
 #![cfg(target_os = "linux")]
 
+pub mod application;
 pub mod config;
+pub mod data_folder;
 pub mod launch;
+pub mod listener;
+pub mod local_time;
+pub mod notices;
+pub mod outside;
 pub mod platform;
+pub mod presence;
 pub mod resources;
+pub mod shown;
+#[cfg(test)]
+mod testing;
+pub mod window;
 
 pub use launch::run;

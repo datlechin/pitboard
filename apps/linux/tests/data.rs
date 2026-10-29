@@ -96,7 +96,7 @@ fn neither_search_starts_pitboard() {
 // theme's folders (docs/facts/linux-app.md, The icons).
 #[test]
 fn the_resource_holds_the_icons_and_the_metainfo_with_its_releases() {
-    gio::resources_register_include!("pitboard.gresource").unwrap();
+    pitboard_linux::resources::register();
     let base = RELEASE.object_path();
     for icon in [
         "scalable/apps/com.usepitboard.Pitboard.svg",

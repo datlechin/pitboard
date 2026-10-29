@@ -9,6 +9,8 @@ use serde::Serialize;
 
 use super::Failed;
 
+#[cfg(feature = "fixture")]
+pub(crate) use item::WATCHER;
 pub use item::{Desktop, Heard};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

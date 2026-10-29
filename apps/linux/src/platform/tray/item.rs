@@ -18,7 +18,7 @@ use crate::resources;
 
 const INTERFACE: &str = "org.kde.StatusNotifierItem";
 const PATH: &str = "/StatusNotifierItem";
-const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+pub(crate) const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 
 /// What the item hears from the tray, and whether there is one.

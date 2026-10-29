@@ -141,7 +141,9 @@ buttons are the system's: `PrimaryButton` and `CloseButton` in a WinUI `ContentD
 identifier, so the macOS UI tests find those, a pop-up's choices and the Settings window's
 panes by their words. Those words, and any sentence a UI test reads, sit in
 `apps/macos/UITests/Words.swift` or `apps/windows/Pitboard.UITests/Words.cs`, the one place a
-change to the model's words reaches the UI tests.
+change to the model's words reaches the UI tests. The Linux app's find a widget by its
+GtkBuilder id, which GTK 4.22 gives AT-SPI, and take their words from the model in
+`apps/linux/tests/ui/words.rs`.
 
 For a change to the install script, `packaging/install.sh`, another template in `packaging/`,
 or `.github/scripts/fill-template.sh`, which fills them at release time:
@@ -751,14 +753,15 @@ container:
 
 | Step | What it runs |
 | --- | --- |
-| `lint` | `cargo clippy -p pitboard-linux --all-targets --locked` |
-| `test` | `gtk4-builder-tool validate` on each `.ui` file, then `cargo nextest run --locked -p pitboard-linux`, each under `headless.sh`, since the tool needs a display |
+| `lint` | `cargo clippy -p pitboard-linux --all-targets --locked`, without the fixtures and with them |
+| `test` | `cargo nextest run --locked -p pitboard-linux --features fixture` under `headless.sh`, but for the UI tests and the pictures |
+| `ui` | the UI tests and the pictures the same way, which need GTK 4.22, the pictures kept in `$PITBOARD_LINUX_PICTURES`, else `linux-pictures` in Cargo's target folder |
 | `release` | Meson's setup, compile, tests and install of the release, then `check-linux-app.sh` on what it installed |
 | `floor` | `cargo hack check --rust-version -p pitboard-linux --all-targets --locked` |
 | `scripts` | `test-linux-app.py`, with `desktop-file-validate` and `appstreamcli` required |
 
-With no step it runs the steps of the distribution's job on CI: `lint`, `test` and `release`
-on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint` and `test` on
+With no step it runs the steps of the distribution's job on CI: `lint`, `test`, `ui` and
+`release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint` and `test` on
 `fedora-44`. A container runs as uid 1000, sees the repository and this machine's Cargo
 registry read only, and keeps Cargo's and Meson's folders in the volume
 `pitboard-linux-app-target`. Only a `cargo fetch` before the steps has the network, for
@@ -792,7 +795,8 @@ Each job runs in an image named by digest, installs what `install-deps.sh` lists
 the container's root, and runs the `test` step from a nextest archive as a fresh user:
 
 - `linux-app`, on `ubuntu-26.04` and `ubuntu-26.04-arm`, in Ubuntu 26.04: `lint`, the tests
-  and `release`.
+  and `release`, and on x86_64 `ui`, whose pictures it uploads as `linux-app-pictures`, kept for
+  7 days, a run that failed included.
 - `linux-app-floor`, in Debian 13: `lint`, the tests and `floor`.
 - `linux-app-fedora`, in Fedora 44: `lint` and the tests.
 
@@ -800,6 +804,44 @@ the container's root, and runs the `test` step from a nextest archive as a fresh
 named in it. Fedora keeps none, so its job takes the packages of the day. A new snapshot is a
 change to `install-deps.sh`, which builds every image again. Each job uploads its JUnit report
 when it fails.
+
+### Run the Linux debug build
+
+Read the [Linux rules in AGENTS.md](AGENTS.md#on-linux) first. A debug build runs only in a
+fixture, on the private bus and the headless display `headless.sh` gives it: started without
+`PITBOARD_FIXTURE` it says so and quits before it owns a name, as it would started by D-Bus
+activation, at sign-in or for a link, on the real homes. Its window shows on no screen, so
+`in-container.sh ubuntu-26.04 ui` draws each surface into the `linux-pictures` folder in the
+target volume, and CI's `linux-app-pictures` holds the same.
+
+On a Linux machine with what `install-deps.sh` lists, build it with the fixtures, then start it
+in one under `headless.sh`, which gives it fresh homes. A second copy started with a link hands
+it to the first and quits:
+
+```sh
+cargo build -p pitboard-linux --features fixture
+apps/linux/scripts/headless.sh sh -c '
+  PITBOARD_FIXTURE=twoTools target/debug/pitboard-app & first=$!
+  sleep 2
+  PITBOARD_FIXTURE=twoTools target/debug/pitboard-app \
+    "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2F"
+  kill "$first"'
+```
+
+`--sign-in` starts it held with no window, and `--add-account` and `--refresh` ask the running
+copy for what the launcher's actions ask. A build without the fixtures refuses a fixture and
+names the command above. A debug build keeps apart from a release:
+
+| | Debug build | Release build |
+| --- | --- | --- |
+| App id and bus name | `com.usepitboard.Pitboard.Devel` | `com.usepitboard.Pitboard` |
+| Link scheme | `pitboard-debug://` | `pitboard://` |
+| Data folder | `linux` in the fixture's folder | `$XDG_DATA_HOME/com.usepitboard.Pitboard` |
+| Notifications, start at sign-in, tray, browser | the fixture's stand-ins, which write JSON lines in `linux` in the fixture's folder | the desktop's |
+| Installs | nothing: only Meson installs, and only the release | what [the install layout](docs/facts/linux-app.md#the-install-layout) lists |
+
+The fixture's folder is `pitboard-fixture` in the temporary directory, which each launch in a
+fixture empties first.
 
 ## Tool registers
 

@@ -32,13 +32,19 @@ installs it.
 | Object path | `/com/usepitboard/Pitboard` | `/com/usepitboard/Pitboard/Devel` |
 | Search provider | `/com/usepitboard/Pitboard/SearchProvider` | none installed |
 | KRunner runner | `/com/usepitboard/Pitboard/Runner` | none installed |
-| App icon | `com.usepitboard.Pitboard` | `com.usepitboard.Pitboard.Devel`, in the GResource alone |
+| App icon | `com.usepitboard.Pitboard` | `com.usepitboard.Pitboard.Devel`, in the debug build's GResource alone |
 
 `.Devel` is GNOME's suffix for a development build's id, and the object path is the id with
 each dot a slash, as GApplication exports it. A D-Bus service starts its program in the bus's
 activation environment, not the caller's (dbus-update-activation-environment(1), dbus
-1.16.2), so a debug build started that way would run on the real homes: it has neither a
-service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
+1.16.2). Measured in Debian 13's and Ubuntu 26.04's images with dbus-daemon 1.16.2 (M10, the
+D-Bus half): a service file's program, started by `StartServiceByName` from a caller with
+`HOME`, `PITBOARD_HOME` and `XDG_DATA_HOME` of its own, saw the `HOME` and `PITBOARD_HOME`
+the bus was started with and no `XDG_DATA_HOME`. So a debug build started that way would run on
+the real homes: it has neither a service file nor a launcher, and quits before it owns a name
+unless `PITBOARD_FIXTURE` names a fixture it can make (`launch.rs`,
+`a_debug_build_outside_a_fixture_quits_before_it_owns_a_name`). Whether autostart starts a
+program on the session's homes is the Linux session's to measure (Documented, not measured).
 
 ## Decisions and what they rest on
 
@@ -47,7 +53,9 @@ service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
   provider's `BusName` and the runner's service are that name, so their objects are served on
   that connection. ksni 0.3.7 is on zbus 5 with `tokio` its default feature (crates.io), while
   zbus is at 6.1.0: a second connection and an executor beside GLib's main loop. So the app
-  serves StatusNotifierItem and DBusMenu itself, and links no zbus, ksni or ashpd.
+  serves StatusNotifierItem and DBusMenu itself, and links no zbus, ksni or ashpd. Its UI tests
+  alone link atspi 0.30.0, the latest, on zbus 5 with zbus's own async-io executor, as their
+  AT-SPI client, which `deny.toml` allows zbus 5's unmaintained parts for.
 - **Views are GtkBuilder `.ui` XML** in the GResource `build.rs` compiles, so `cargo test`
   reads them with no Meson. Blueprint's latest is 0.22.2 (GNOME/blueprint-compiler tags), a
   0.x language whose output is the same XML.
@@ -101,7 +109,19 @@ service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
 - **UI tests find a widget by its AT-SPI `AccessibleId`**, which GTK 4.22.0 answers with the
   widget's GtkBuilder id (`gtk/gtkwidget.c:8873-8878`, `gtk/a11y/gtkatspicontext.c:802-808`).
   GTK 4.18.6 answers `""` (`gtk/a11y/gtkatspicontext.c:770-771`), so the UI tests run where
-  GTK is 4.22, Ubuntu 26.04's, and the floor's leg runs the rest.
+  GTK is 4.22, Ubuntu 26.04's x86_64 leg (`check.sh ui`), and the other legs run the rest.
+- **The views' templates are checked by building each view.** `gtk4-builder-tool validate`
+  4.22.4 refuses a template whose parent is libadwaita's, "Failed to lookup template parent type
+  AdwApplicationWindow", since it registers GTK's types alone (measured in Ubuntu 26.04's
+  image). So `each_view_is_built_from_its_template_with_no_warning` builds each with GTK's,
+  libadwaita's and GObject's warnings fatal, and the UI tests and the pictures build them too.
+- **No gschema, and the clock read where GNOME's schema is.** The window keeps its size in
+  `window.json` in the app's data folder. The 12 or 24 hour clock is
+  `org.gnome.desktop.interface` `clock-format`, read and followed through GSettings where the
+  schema is installed, as it is in every image. Measured with dconf's GSettings backend, 0.40.0
+  in Debian 13's image and 0.49.0 in Ubuntu 26.04's, on a private bus: a read and a `gsettings
+  monitor` start no `ca.desrt.dconf`, and only a write starts it. So the clock starts no
+  `dconf-service` in the person's session.
 
 ## GNOME's words
 
@@ -202,6 +222,13 @@ from WebKit's and Epiphany's sources and not run:
   `org.freedesktop.Application.ActivateAction` on the app's bus name
   (`js/ui/notificationDaemon.js:513-517`, `src/shell-app.c:1523-1529`), which the bus starts
   where the app is not running.
+
+A notification has a title and a body alone (`g_notification_set_title`, `_set_body`, GIO
+2.84), so a model notice's subtitle, the tool beside another tool's accounts, is the body's first
+line (`src/notices.rs`). Each is posted at `G_NOTIFICATION_PRIORITY_NORMAL`, which GIO keeps
+for most notifications, such as completed downloads; `HIGH` is for what is time-sensitive, such
+as chat messages, and `URGENT` for what needs an answer within a short time, such as a phone
+call (`GNotificationPriority`, `gio/gioenums.h` at 2.84.4).
 
 Measured on a bus of the test's own: a notice posted from another thread reaches a stand-in
 `org.gtk.Notifications` with its default action and its first three buttons as
@@ -514,14 +541,74 @@ Measured in each image above, as uid 1000:
   program as its one child. So an AT-SPI client finds the app on the private bus, and nothing
   of a desktop's.
 - `gtk4-builder-tool validate` needs a display: without one it says "Could not initialize
-  windowing system" and exits 1 on a valid file too. Under the script it passes a valid file,
-  refuses an unknown property with its line and column, and stops at the first file it
-  refuses. So `check.sh` validates in its `test` step, under the script as a user, where CI's
-  lint, run as the container's root, cannot.
+  windowing system" and exits 1 on a valid file too. Under the script it passes a valid file of
+  GTK's types alone, and refuses a template whose parent is libadwaita's (Decisions).
 - nextest 0.9.146 writes a profile's JUnit report under the workspace's `target/nextest`, not
   the archive's target folder, in a run from an archive too: a fresh user's run in a checkout
   root owns failed with "failed to create store dir at `/src/target/nextest/ci`" until that
   folder was the user's. So CI's jobs make it the test user's.
+
+## What the app exports
+
+Measured in Ubuntu 26.04's image, GTK 4.22.4 and GLib 2.88.0, by the UI tests, which read
+`org.gtk.Actions` `DescribeAll` at every object path under the app's own that introspection
+lists (`the_app_exports_only_its_outside_actions`):
+
+- At the app's path GApplication exports its action group: `notice-clicked` and
+  `switch-from-outside`, each taking a string, and `add-account` and `refresh`, taking nothing.
+  `org.freedesktop.Application`'s `ActivateAction` reaches these alone.
+- With the window an `AdwApplicationWindow`, GTK also exported `org.gtk.Actions` at
+  `<app path>/window/1`, empty while the window added no `win.` action: GtkApplication exports
+  each application window's own group. The window is an `AdwWindow`, with which no window path
+  is exported at all.
+- The window's actions, installed on its class (`gtk_widget_class_install_action`) under
+  `pitboard.`, are on no path: GTK keeps them in the widget's action muxer. Its keys are bound
+  on the class too.
+
+## The UI tests
+
+Measured in Ubuntu 26.04's image, GTK 4.22.4, at-spi2-core 2.60.4 and atspi 0.30.0 (crates.io),
+the UI tests' client, on zbus 5's own async-io executor:
+
+- GTK names the app's AT-SPI root by the program's name, `pitboard-app`, though
+  `g_set_application_name` named it Pitboard before GTK started. A window's name is its title.
+- A program holding no window has no node under the registry's root, so `--sign-in` is seen
+  to show nothing until a window opens.
+- `GetActions` gives an action's localized name, "Click", and `GetName` its own, `click`, which
+  the tests press by.
+- A `GtkMenuButton` is a `Button` holding a `ToggleButton`, which has the `click`. Its popover
+  menu is a `Menu` under it once open. Each item is a `MenuItem` whose `Name` is empty, labelled
+  by a label whose `Text` is the item's words: GtkModelButton gives its label the presentation
+  role and points `LABELLED_BY` at it (`gtk/gtkmodelbutton.c` at 4.22.4). Pressing the toggle's
+  `click` opens the popover, and an item's `click` activates its action
+  (`help_in_the_main_menu_opens_the_docs_in_the_browser`), which settles M12's popover
+  `DoAction`.
+- The header bar's window controls are `Button`s named "Close", "Maximize" and "Minimize".
+- Mesa keeps a shader cache in `$XDG_CACHE_HOME/mesa_shader_cache` for any program it draws for
+  with GL on llvmpipe, so a launch's fresh cache folder holds it once a window has been drawn.
+  The tests that hold every home as a fixture found it leave that folder alone, and nothing
+  else.
+
+## The pictures
+
+`tests/pictures` draws each surface in-process, as GTK's reftests do
+(`testsuite/reftests/reftest-snapshot.c`): the window's `GtkWidgetPaintable` snapshotted at
+twice its size, rendered by the window's own renderer into a texture and saved as PNG, light and
+then dark by `AdwStyleManager`. Measured in Ubuntu 26.04's image:
+
+- AdwSpinnerPaintable follows the frame clock of the widget it is given whatever
+  `gtk-enable-animations` says, and keeps still at its first angle with no widget
+  (`src/adw-spinner-paintable.c` at libadwaita 1.7.6). So the pictures turn animations off and
+  hold each spinner still, and say every clock time as one fixed time.
+- A failure to read names the path of the account list, so the pictures make each world in a
+  folder of the same name every run, `/tmp/pitboard-linux-pictures/<state>`.
+- With those, each picture is the same in three runs, with `GSK_RENDERER=opengl`, GskGLRenderer
+  on llvmpipe, which `headless.sh` names, and with `cairo` alike. Every picture differs between
+  the two, so one renderer is kept for all: GL, which a desktop's GTK draws with where Vulkan has
+  no driver, where cairo is GTK's fallback.
+- Snapshotted at twice the window's size, 1200 by 1280 pixels for the 600 by 640 window, the
+  text and the symbolic icons are drawn at that scale, with edges a pixel wide, not enlarged
+  from 1x (looked at in `linux-accounts-noTool-dark.png`).
 
 ## The icons
 

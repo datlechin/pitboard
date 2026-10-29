@@ -17,6 +17,27 @@ path = "src/lib.rs"
 name = "pitboard-app"
 path = "src/main.rs"
 
+# A fixture's stand-ins, the UI tests, which launch the program into a fixture, and the pictures
+# of each surface, drawn over a fixture's model.
+[[test]]
+name = "stand_ins"
+required-features = ["fixture"]
+
+[[test]]
+name = "ui"
+path = "tests/ui/main.rs"
+required-features = ["fixture"]
+
+[[test]]
+name = "pictures"
+path = "tests/pictures/main.rs"
+required-features = ["fixture"]
+
+[features]
+# The worlds a debug build launches into, and the stand-ins for the desktop's services it runs
+# with there. Never in a build Meson makes, which check-linux-app.sh holds.
+fixture = ["pitboard-model/fixture"]
+
 # Linux alone builds the app; elsewhere the crate compiles as nothing, and Cargo matches a
 # build-dependency's cfg against the machine that builds. Each binding is held to the floor,
 # GTK 4.18, libadwaita 1.7 and GLib 2.84, as Debian 13 ships them.
@@ -25,11 +46,19 @@ adw = { package = "libadwaita", version = "0.9.2", features = ["v1_7"] }
 gio = { version = "0.22.10", features = ["v2_84"] }
 glib = { version = "0.22.10", features = ["v2_84"] }
 gtk = { package = "gtk4", version = "0.11.5", features = ["v4_18"] }
-# A fixture's stand-ins write what they would have done as JSON lines.
+# The model's snapshots, told on a thread of its own, reach the main loop through one channel.
+async-channel = "2.5.0"
+pitboard-model.workspace = true
+# A fixture's stand-ins write what they would have done as JSON lines, and the window keeps its
+# size as JSON.
 serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
+# The UI tests' AT-SPI client, on zbus's own async-io executor, with no Tokio. The app never
+# links it.
+atspi = { version = "0.30.0", default-features = false, features = ["connection", "proxies"] }
+futures-lite = "2.6.1"
 tempfile.workspace = true
 
 [target.'cfg(target_os = "linux")'.build-dependencies]

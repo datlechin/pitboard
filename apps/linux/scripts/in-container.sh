@@ -31,7 +31,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 if [ "$#" -eq 0 ]; then
   case $distro in
-    ubuntu-26.04) set -- lint test release ;;
+    ubuntu-26.04) set -- lint test ui release ;;
     debian-13) set -- lint test floor ;;
     *) set -- lint test ;;
   esac

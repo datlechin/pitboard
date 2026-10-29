@@ -2,11 +2,15 @@
 # check.sh <step> [argument...]: one of the Linux app's checks, as CI's jobs and in-container.sh
 # run it on a Linux with install-deps.sh's packages, from the repository's root.
 #
-#   lint                      clippy
-#   test                      every GtkBuilder file through gtk4-builder-tool, then the tests,
-#                             built here, each under headless.sh
+#   lint                      clippy, with the fixtures and without, as Meson builds the release
+#   test                      the tests but the UI tests and the pictures, built here with the
+#                             fixtures, under headless.sh
+#   ui                        the UI tests and the pictures, which need GTK 4.22, the pictures
+#                             kept in $PITBOARD_LINUX_PICTURES, else linux-pictures in Cargo's
+#                             target folder
 #   archive <file>            the tests built into a nextest archive, for another user to run
-#   test <archive> <folder>   the same with that archive's tests, unpacked in the folder
+#   test|ui <archive> <folder>
+#                             the same with that archive's tests, unpacked in the folder
 #   release                   Meson's release build, its tests, its install tree, and
 #                             check-linux-app.sh on that tree
 #   floor                     the app on the Rust its manifest names
@@ -21,8 +25,8 @@ cd "$repo"
 target=${CARGO_TARGET_DIR:-$repo/target}
 
 usage() {
-  echo "usage: check.sh <lint | test [<archive> <folder>] | archive <file> | release | floor |" \
-    "scripts>" >&2
+  echo "usage: check.sh <lint | test [<archive> <folder>] | ui [<archive> <folder>] |" \
+    "archive <file> | release | floor | scripts>" >&2
   exit 2
 }
 
@@ -33,24 +37,32 @@ case $step in
   lint)
     [ "$#" -eq 0 ] || usage
     cargo clippy -p pitboard-linux --all-targets --locked
+    cargo clippy -p pitboard-linux --all-targets --locked --features fixture
     ;;
-  test)
+  test | ui)
+    on_screen='binary_id(pitboard-linux::ui) | binary_id(pitboard-linux::pictures)'
+    case $step in
+      test) filter="not ($on_screen)" ;;
+      ui)
+        filter=$on_screen
+        PITBOARD_LINUX_PICTURES=${PITBOARD_LINUX_PICTURES:-$target/linux-pictures}
+        export PITBOARD_LINUX_PICTURES
+        mkdir -p "$PITBOARD_LINUX_PICTURES"
+        ;;
+    esac
     case $# in
-      0) set -- cargo nextest run --locked -p pitboard-linux ;;
+      0) set -- cargo nextest run --locked -p pitboard-linux --features fixture ;;
       2)
         set -- cargo-nextest nextest run --archive-file "$1" --workspace-remap "$repo" \
           --extract-to "$2"
         ;;
       *) usage ;;
     esac
-    # gtk4-builder-tool validates only on a display, which headless.sh gives a user alone.
-    apps/linux/scripts/headless.sh find apps/linux -name '*.ui' \
-      -exec gtk4-builder-tool validate {} +
-    apps/linux/scripts/headless.sh "$@"
+    apps/linux/scripts/headless.sh "$@" -E "$filter"
     ;;
   archive)
     [ "$#" -eq 1 ] || usage
-    cargo nextest archive --locked -p pitboard-linux --archive-file "$1"
+    cargo nextest archive --locked -p pitboard-linux --features fixture --archive-file "$1"
     ;;
   release)
     [ "$#" -eq 0 ] || usage

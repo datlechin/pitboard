@@ -1060,9 +1060,9 @@ jobs:
 
   # The Linux app on both machines its packages are for, in Ubuntu 26.04's image by digest, with
   # apps/linux/scripts/check.sh's steps, which in-container.sh runs locally: the lint, the tests
-  # and Meson's release, installed and checked. A container's user is root, so root builds, and a
-  # fresh user runs the tests from a nextest archive under headless.sh, as
-  # test-as-standard-user.ps1 does on Windows.
+  # and Meson's release, installed and checked, and on x86_64 the UI tests and the pictures. A
+  # container's user is root, so root builds, and a fresh user runs the tests from a nextest
+  # archive under headless.sh, as test-as-standard-user.ps1 does on Windows.
   linux-app:
     name: linux-app (${{ matrix.arch }})
     strategy:
@@ -1098,6 +1098,21 @@ jobs:
           install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
           setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
             apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
+      - if: matrix.arch == 'x86_64'
+        name: The UI tests and the pictures, as the same user
+        run: |
+          install -d -o pitboard-tests -g pitboard-tests target/linux-app-pictures
+          PITBOARD_LINUX_PICTURES=$PWD/target/linux-app-pictures \
+            setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
+            apps/linux/scripts/check.sh ui "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
+      # What each surface looks like, light and dark, kept where a test failed too.
+      - if: always() && matrix.arch == 'x86_64'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-app-pictures
+          path: target/linux-app-pictures
+          retention-days: 7
+          if-no-files-found: ignore
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

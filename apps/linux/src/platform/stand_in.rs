@@ -13,7 +13,7 @@ use super::Failed;
 use super::autostart::StartAtSignIn;
 use super::links::Opener;
 use super::notifications::{Notice, Notifier};
-use super::tray::{StatusItem, TrayItem};
+use super::tray::{self, StatusItem, TrayItem};
 
 /// The fixture's folder the stand-ins write in.
 pub const FOLDER: &str = "linux";
@@ -120,6 +120,35 @@ pub struct Tray(Lines);
 impl Tray {
     pub fn new(fixture: &Path) -> Tray {
         Tray(Lines::in_fixture(fixture, "tray.jsonl"))
+    }
+
+    /// Tells `told` that a tray shows the item while `org.kde.StatusNotifierWatcher` has an
+    /// owner on `connection`, as a UI test's stand-in watcher owns it there, and that none does
+    /// while it has none: what the desktop's item tells, with nothing registered with the
+    /// watcher. Until dropped.
+    pub fn hear(connection: &gio::DBusConnection, told: impl Fn(tray::Heard) + 'static) -> Hearing {
+        let told = std::rc::Rc::new(told);
+        let gone = told.clone();
+        let watcher = gio::bus_watch_name_on_connection(
+            connection,
+            tray::WATCHER,
+            gio::BusNameWatcherFlags::NONE,
+            move |_, _, _| told(tray::Heard::Tray),
+            move |_, _| gone(tray::Heard::NoTray),
+        );
+        Hearing(Some(Box::new(move || gio::bus_unwatch_name(watcher))))
+    }
+}
+
+/// The watch [`Tray::hear`] keeps.
+// gio 0.22 exports another `WatcherId` than the one its name watch returns.
+pub struct Hearing(Option<Box<dyn FnOnce()>>);
+
+impl Drop for Hearing {
+    fn drop(&mut self) {
+        if let Some(unwatch) = self.0.take() {
+            unwatch();
+        }
     }
 }
 

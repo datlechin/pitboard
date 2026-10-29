@@ -1,6 +1,7 @@
-// The program's GResource: its icons, the D-Bus interfaces it serves, and its metainfo, with the
-// releases CHANGELOG.md holds, written by the script Meson installs the metainfo with. Only a
-// build for Linux on Linux makes it, the one build that links GTK.
+// The program's GResource: its icons, the D-Bus interfaces it serves, its views and its metainfo,
+// with the releases CHANGELOG.md holds, written by the script Meson installs the metainfo with;
+// and in the debug build alone, its own icon, so a release names nothing of the debug build's.
+// Only a build for Linux on Linux makes them, the one build that links GTK.
 
 #[cfg(target_os = "linux")]
 fn main() {
@@ -9,10 +10,13 @@ fn main() {
 
     // A build script reads Cargo's variables from its environment: there is no other way in.
     #[allow(clippy::disallowed_methods)]
-    let (target, out) = (
+    let (target, out, build) = (
         std::env::var("CARGO_CFG_TARGET_OS"),
         std::env::var_os("OUT_DIR"),
+        std::env::var("PITBOARD_BUILD"),
     );
+    println!("cargo::rustc-check-cfg=cfg(pitboard_debug_build)");
+    println!("cargo::rerun-if-env-changed=PITBOARD_BUILD");
     if target.as_deref() != Ok("linux") {
         return;
     }
@@ -45,6 +49,15 @@ fn main() {
         "data/resources.gresource.xml",
         "pitboard.gresource",
     );
+    // As `config::Build` reads it: only Meson's release is the release.
+    if build.as_deref() != Ok("release") {
+        glib_build_tools::compile_resources(
+            &["data"],
+            "data/devel.gresource.xml",
+            "devel.gresource",
+        );
+        println!("cargo::rustc-cfg=pitboard_debug_build");
+    }
 }
 
 #[cfg(not(target_os = "linux"))]

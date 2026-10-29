@@ -17,7 +17,8 @@
 //! library built with the `fixture` feature and one built without: `PitboardModel::fixture`,
 //! `PitboardModel::fixture_in`, `fixture_names` and `fixture_page`. Without the feature no
 //! world is compiled at all, and each refuses, naming the feature, or answers that there is
-//! none.
+//! none. The Linux app, which links the model as Rust, asks `fixture_refusal` before it owns a
+//! name on the bus, so a launch refused there makes nothing.
 
 use crate::Front;
 use crate::model::{Listener, LocalTime, Notifier, OtherApps, PitboardModel};
@@ -81,7 +82,7 @@ pub fn fixture_page(url: String) -> Result<String, FixtureError> {
     #[cfg(not(feature = "fixture"))]
     {
         let _ = url;
-        Err(unavailable())
+        Err(library_unavailable())
     }
 }
 
@@ -112,17 +113,17 @@ impl PitboardModel {
         listener: Arc<dyn Listener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
+        let world = launchable(front, &name)?;
         #[cfg(feature = "fixture")]
         {
-            let world = worlds::World::named(&name)?;
             let folder = worlds::Folder::shared().map_err(failed)?;
             let launched = worlds::make(world, folder, front).map_err(failed)?;
             Ok(launched.model(listener, local_time))
         }
         #[cfg(not(feature = "fixture"))]
         {
-            let _ = (name, front, listener, local_time);
-            Err(unavailable())
+            let _ = (listener, local_time);
+            match world {}
         }
     }
 
@@ -146,9 +147,9 @@ impl PitboardModel {
         notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
+        let world = launchable(front, &name)?;
         #[cfg(feature = "fixture")]
         {
-            let world = worlds::World::named(&name)?;
             let folder = worlds::Folder::within(std::path::Path::new(&temporary_directory))
                 .map_err(failed)?;
             let launched = worlds::make(world, folder, front).map_err(failed)?;
@@ -158,22 +159,56 @@ impl PitboardModel {
         #[cfg(not(feature = "fixture"))]
         {
             let _ = (
-                name,
-                front,
                 temporary_directory,
                 listener,
                 other_apps,
                 notifier,
                 local_time,
             );
-            Err(unavailable())
+            match world {}
         }
+    }
+}
+
+/// Why the fixture called `name` cannot be launched for the app `front` names, asked before
+/// anything is made: a name that is none of `fixture_names`, or a library built without the
+/// `fixture` feature, each refused as `fixture` and `fixture_in` refuse them. `None` for a
+/// fixture they would make. Plain Rust, as the Linux app alone asks it: Swift and C# make the
+/// model at once.
+pub fn fixture_refusal(front: Front, name: &str) -> Option<FixtureError> {
+    launchable(front, name).err()
+}
+
+/// The world called `name`, which `fixture` and `fixture_in` make.
+#[cfg(feature = "fixture")]
+fn launchable(_front: Front, name: &str) -> Result<worlds::World, FixtureError> {
+    worlds::World::named(name)
+}
+
+/// None, in a library built without the `fixture` feature.
+#[cfg(not(feature = "fixture"))]
+fn launchable(front: Front, _name: &str) -> Result<std::convert::Infallible, FixtureError> {
+    Err(unavailable(front))
+}
+
+/// What a build without the `fixture` feature answers the app `front` names: the library the
+/// shipping apps link, or the Linux app, which links the model itself.
+#[cfg(not(feature = "fixture"))]
+fn unavailable(front: Front) -> FixtureError {
+    match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => library_unavailable(),
+        Front::Gnome => FixtureError::Unavailable {
+            reason: "This build of the Linux app was built without the `fixture` feature, so it \
+                     has no fixtures. Build it with `cargo build -p pitboard-linux --features \
+                     fixture`."
+                .into(),
+        },
     }
 }
 
 /// What a library built without the `fixture` feature answers.
 #[cfg(not(feature = "fixture"))]
-fn unavailable() -> FixtureError {
+fn library_unavailable() -> FixtureError {
     FixtureError::Unavailable {
         reason: "This library was built without the `fixture` feature, so it has no fixtures. \
                  Build it with `cargo build -p pitboard-ffi --features fixture`, or the macOS \
@@ -246,7 +281,30 @@ mod without {
         assert!(!directory.exists(), "nothing made where it was asked");
         assert_eq!(
             fixture_page("pitboard-fixture://claude.ai/".into()),
-            Err(unavailable())
+            Err(library_unavailable())
         );
+    }
+
+    /// The Linux app asks before it makes anything, and is told the command that builds its
+    /// own debug build with the fixtures, not the library's.
+    #[test]
+    fn the_linux_app_is_told_how_to_build_itself_with_the_fixtures() {
+        let Some(FixtureError::Unavailable { reason }) = fixture_refusal(Front::Gnome, "twoTools")
+        else {
+            panic!("a build without the feature launches no fixture");
+        };
+        assert!(reason.contains("`fixture` feature"), "{reason}");
+        assert!(
+            reason.contains("`cargo build -p pitboard-linux --features fixture`"),
+            "{reason}"
+        );
+        assert!(!reason.contains("pitboard-ffi"), "{reason}");
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+            assert_eq!(
+                fixture_refusal(front, "twoTools"),
+                Some(library_unavailable()),
+                "{front:?}"
+            );
+        }
     }
 }

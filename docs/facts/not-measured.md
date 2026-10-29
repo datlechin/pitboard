@@ -209,8 +209,14 @@ in a desktop's session. Not measured, each for the Linux session machines:
   without systemd. The app writes `TryExec` either way.
 - The `PATH` and the rest of the environment the app starts with from the launcher, from an
   autostart entry and by D-Bus activation, on GNOME and on Plasma under Wayland (M7), and so
-  whether a debug build started that way would run on the real homes. A debug build has no
-  launcher, D-Bus service or autostart entry, and quits outside a fixture.
+  whether a debug build started from an autostart entry would run on the real homes (M10's
+  autostart half). Its D-Bus half was measured on a private bus: a service's program gets the
+  bus's environment ([The builds and their names](linux-app.md#the-builds-and-their-names)). A
+  debug build has no launcher, D-Bus service or autostart entry, and quits outside a fixture.
+- Whether the window comes to the front, and the startup notification ends, when the app opens
+  it from a snapshot after GApplication's `activate` returned, with the activation token GTK
+  4.18 keeps from it (`gtk_application_after_emit` is empty there) or the one a tray or KRunner
+  gave.
 - Which notification backend GLib picks in a Plasma session, which turns on whether anything
   owns `org.gtk.Notifications` there, and how many buttons Plasma draws. The app posts the
   same notice to either, at most three buttons.

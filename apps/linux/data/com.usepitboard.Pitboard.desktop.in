@@ -15,7 +15,7 @@ MimeType=x-scheme-handler/pitboard;
 Actions=add-account;refresh;
 
 [Desktop Action add-account]
-Name=Add Account
+Name=Add Account…
 Exec=@BINDIR@/pitboard-app --add-account
 
 [Desktop Action refresh]

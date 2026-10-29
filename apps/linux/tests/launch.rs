@@ -1,4 +1,5 @@
-//! The program as a launch starts it, on a bus and in homes of the test's own.
+//! The program as a launch starts it, on a bus and in homes of the test's own: what quits before
+//! it owns a name.
 #![cfg(target_os = "linux")]
 
 use std::cell::RefCell;
@@ -8,9 +9,9 @@ use std::rc::Rc;
 
 use glib::prelude::*;
 use pitboard_linux::config::APP_ID;
-use pitboard_linux::launch::NOTHING_TO_RUN;
+use pitboard_linux::launch::OUTSIDE_A_FIXTURE;
 
-const HOMES: [&str; 9] = [
+const HOMES: [&str; 10] = [
     "HOME",
     "PITBOARD_HOME",
     "CLAUDE_CONFIG_DIR",
@@ -20,6 +21,7 @@ const HOMES: [&str; 9] = [
     "XDG_CACHE_HOME",
     "XDG_STATE_HOME",
     "XDG_RUNTIME_DIR",
+    "TMPDIR",
 ];
 
 const BUS: &str = "org.freedesktop.DBus";
@@ -58,25 +60,25 @@ fn connect(address: &str) -> gio::DBusConnection {
     .unwrap()
 }
 
-// The bus announces each connection's unique name in NameOwnerChanged, as it does the witness's
-// here, so a program announced nowhere before the witness never reached the bus at all.
-#[test]
-fn a_build_with_no_model_quits_before_it_owns_a_name() {
-    let scratch = tempfile::tempdir().unwrap();
-    let homes: Vec<_> = HOMES
-        .iter()
-        .map(|name| (*name, scratch.path().join(name)))
-        .collect();
-    for (_, folder) in &homes {
-        std::fs::create_dir(folder).unwrap();
-    }
+struct Quit {
+    output: std::process::Output,
+    // every connection the bus announced, the witness's last
+    announced: Vec<String>,
+    witness: String,
+    owned: bool,
+}
+
+// The built program, started with `variables` beside fresh homes, on a bus of the test's own.
+// The bus announces each connection's unique name in NameOwnerChanged, as it does the
+// witness's here, so a program announced nowhere before the witness never reached the bus.
+fn launched(homes: &[(&str, std::path::PathBuf)], variables: &[(&str, &str)]) -> Quit {
     let test_bus = gio::TestDBus::new(gio::TestDBusFlags::NONE);
     test_bus.up();
     let address = test_bus
         .bus_address()
         .expect("the test's bus has an address");
     let context = glib::MainContext::new();
-    let (output, announced, witness, owned) = context
+    let quit = context
         .with_thread_default(|| {
             let bus = connect(&address);
             let announced = Rc::new(RefCell::new(Vec::new()));
@@ -102,6 +104,7 @@ fn a_build_with_no_model_quits_before_it_owns_a_name() {
             let output = Command::new(env!("CARGO_BIN_EXE_pitboard-app"))
                 .env_clear()
                 .envs(homes.iter().map(|(name, folder)| (name, folder)))
+                .envs(variables.iter().copied())
                 .env("DBUS_SESSION_BUS_ADDRESS", address.as_str())
                 .output()
                 .unwrap();
@@ -113,25 +116,79 @@ fn a_build_with_no_model_quits_before_it_owns_a_name() {
             while context.iteration(false) {}
             witness.close_sync(gio::Cancellable::NONE).unwrap();
             bus.close_sync(gio::Cancellable::NONE).unwrap();
-            (
+            Quit {
                 output,
-                announced.take(),
-                witness_name,
-                owned.get::<(bool,)>().unwrap().0,
-            )
+                announced: announced.take(),
+                witness: witness_name,
+                owned: owned.get::<(bool,)>().unwrap().0,
+            }
         })
         .unwrap();
     test_bus.down();
+    quit
+}
 
-    assert_eq!(output.status.code(), Some(1));
+fn homes(scratch: &Path) -> Vec<(&'static str, std::path::PathBuf)> {
+    HOMES
+        .iter()
+        .map(|name| {
+            let folder = scratch.join(name);
+            std::fs::create_dir(&folder).unwrap();
+            (*name, folder)
+        })
+        .collect()
+}
+
+fn quit_before_the_bus(quit: &Quit, said: &str) {
+    assert_eq!(quit.output.status.code(), Some(1));
     assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        format!("pitboard-app: {NOTHING_TO_RUN}\n")
+        String::from_utf8_lossy(&quit.output.stderr),
+        format!("pitboard-app: {said}\n")
     );
-    assert!(output.stdout.is_empty());
-    assert_eq!(announced, [witness], "the program reached the bus");
-    assert!(!owned, "{APP_ID} has an owner");
+    assert!(quit.output.stdout.is_empty());
+    assert_eq!(
+        quit.announced,
+        std::slice::from_ref(&quit.witness),
+        "the program reached the bus"
+    );
+    assert!(!quit.owned, "{APP_ID} has an owner");
+}
+
+// As D-Bus activation, autostart or a link would start it: on the session's homes.
+#[test]
+fn a_debug_build_outside_a_fixture_quits_before_it_owns_a_name() {
+    let scratch = tempfile::tempdir().unwrap();
+    let homes = homes(scratch.path());
+
+    let quit = launched(&homes, &[]);
+
+    quit_before_the_bus(&quit, OUTSIDE_A_FIXTURE);
     for (name, folder) in &homes {
+        assert!(is_empty(folder), "{name} holds what the program wrote");
+    }
+}
+
+// Before it owns a name, so the world of a fixture already running stays as it was.
+#[test]
+fn a_fixture_with_a_wrong_name_is_refused_with_every_name() {
+    let scratch = tempfile::tempdir().unwrap();
+    let homes = homes(scratch.path());
+    let tmp = &homes.iter().find(|(name, _)| *name == "TMPDIR").unwrap().1;
+    let left = tmp.join("pitboard-fixture").join("left by a launch");
+    std::fs::create_dir(left.parent().unwrap()).unwrap();
+    std::fs::write(&left, "kept").unwrap();
+
+    let quit = launched(&homes, &[("PITBOARD_FIXTURE", "twoTool")]);
+
+    let refused =
+        pitboard_model::fixture_refusal(pitboard_model::Front::Gnome, "twoTool").expect("refused");
+    quit_before_the_bus(&quit, &refused.to_string());
+    let said = String::from_utf8_lossy(&quit.output.stderr).into_owned();
+    for name in pitboard_model::fixture_names() {
+        assert!(said.contains(&name), "{said}");
+    }
+    assert_eq!(std::fs::read_to_string(&left).unwrap(), "kept");
+    for (name, folder) in homes.iter().filter(|(name, _)| *name != "TMPDIR") {
         assert!(is_empty(folder), "{name} holds what the program wrote");
     }
 }

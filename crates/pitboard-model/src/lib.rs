@@ -75,6 +75,7 @@ pub use present::{
 };
 // What the Linux app alone asks of the model, which it links as Rust: no other app's bindings
 // carry it.
+pub use fixture::fixture_refusal;
 pub use present::{
     GnomeShortcutWords, GnomeWords, Package, PackageCommand, PackageRemoval, gnome_words,
     package_removal, search,
@@ -264,7 +265,8 @@ pub enum Started {
     /// Over the homes its environment names: every launch of a release build.
     Live,
     /// A debug build in the fixture `PITBOARD_FIXTURE` names, whichever it names:
-    /// `PitboardModel::fixture` refuses one that is none of `fixture_names`.
+    /// `PitboardModel::fixture` refuses one that is none of `fixture_names`, and
+    /// `fixture_refusal` says so before anything is made.
     Fixture { name: String },
     /// A debug build with no fixture, as the system starts one for a link, a widget or a
     /// shortcut, with the person's own homes. What it does then is the front's: the macOS app
