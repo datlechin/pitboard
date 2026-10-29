@@ -37,7 +37,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keyring, and in 0600 files only where no Secret Service answers; one that kept them in files
   keeps them there.
 - On Linux, a change stops with `credential_store_locked` while the login keyring is locked,
-  and daily renewal and the watch service never ask to unlock it.
+  and only a command run in your desktop session asks to unlock it, never daily renewal, the
+  watch service or a run over SSH.
 
 ### Fixed
 

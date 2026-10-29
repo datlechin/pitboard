@@ -44,7 +44,7 @@ Where the login keyring that holds parked logins is locked and cannot ask to be 
 error: the credential store could not be read: the login keyring is locked, or nothing answers for it on this session's bus, and it cannot ask to be unlocked from here; run Pitboard in your desktop session, where signing in unlocks it
 ```
 
-Run the command again in your desktop session, where your keyring asks for your password, or unlock it there. Daily renewal and the watch service never ask. Meanwhile `pitboard doctor` marks each parked login `not read: the login keyring is locked, or nothing answers for it on this session's bus`, and none needs a sign-in.
+Run the command again in your desktop session, where your keyring asks for your password, or unlock it there. Daily renewal and the watch service never ask, nor does a command run over SSH or where no display is set. Meanwhile `pitboard doctor` marks each parked login `not read: the login keyring is locked, or nothing answers for it on this session's bus`, and none needs a sign-in.
 
 ## The Claude Code login in Credential Manager cannot be read
 

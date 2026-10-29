@@ -268,6 +268,16 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
   completes the prompt dismissed within 90 milliseconds, which secret-service reads as `Prompt`
   (`a_prompt_nobody_can_answer_is_refused_within_seconds`). A run the schedule or the watch
   service started calls neither `Unlock` nor `Prompt` (`a_run_a_job_started_never_asks_to_unlock`).
+- secret-service 5.2.0 waits for a prompt's `Completed` signal with no bound:
+  `exec_prompt_blocking` (`src/util.rs`) reads the next signal, and zbus's `method_timeout`
+  covers only method calls. The prompter puts its dialog on the display of the session whose bus
+  it serves. Over SSH the bus `XDG_RUNTIME_DIR` names is the desktop's where the same person is
+  signed in there, so a prompt from SSH would wait for an answer at that desktop. So a run a
+  person started asks only in the desktop session: where `WAYLAND_DISPLAY` or `DISPLAY` is set,
+  as every Wayland and X11 client needs, and `SSH_CONNECTION` is not, which sshd sets for each
+  session (ssh(1), ENVIRONMENT), since a forwarded `DISPLAY` is the SSH client's. Anywhere else
+  a locked collection is `Locked` with no `Unlock` called
+  (`a_run_out_of_the_desktop_session_never_asks_to_unlock`).
 - secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
   which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
   application that controls which store it uses not to link it, and whose `Entry` hides the

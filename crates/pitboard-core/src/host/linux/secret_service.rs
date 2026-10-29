@@ -10,8 +10,10 @@
 //! A locked collection, a prompt dismissed and nothing on the bus to answer say nothing of what
 //! the collection holds, so each is `Locked`, never a collection with nothing in it: a keyring
 //! locked since its daemon started answers every search with nothing. A run the schedule or the
-//! watch service started never asks to unlock it, since nobody is there to answer; a run a
-//! person started asks, as `secret-tool` does.
+//! watch service started never asks to unlock it, since nobody is there to answer. A run a person
+//! started asks, as `secret-tool` does, only in the desktop session: secret-service waits for a
+//! prompt's answer with no bound, and the prompter puts its dialog on the desktop's display, which
+//! a run over SSH or with no display is not in front of.
 
 use super::bus;
 use crate::context::Context;
@@ -39,7 +41,8 @@ const LOCKED: [&str; 3] = [
 /// The parks every home of this session keeps in the Secret Service.
 pub(super) struct Vault {
     ctx: Context,
-    // Whether a person started this run, who can answer the provider's unlock prompt.
+    // Whether a person started this run in the desktop session, where they can answer the
+    // provider's unlock prompt.
     asks: bool,
 }
 
@@ -50,7 +53,7 @@ impl Vault {
             .any(|job| crate::schedule::started_this_run(ctx, job));
         Vault {
             ctx: ctx.clone(),
-            asks: !started_by_a_job,
+            asks: !started_by_a_job && ctx.in_the_desktop_session(),
         }
     }
 
@@ -233,8 +236,28 @@ mod tests {
             .with_test_bus(on.address().to_owned())
     }
 
+    // The same, for a run a person started in the desktop session, which may put up a prompt.
+    fn at_the_desktop(scratch: &Path, name: &str, on: &Started) -> Context {
+        let home = scratch.join(name).to_string_lossy().into_owned();
+        let env = crate::context::Environment::on(
+            crate::host::Os::Linux,
+            [("HOME", home.as_str()), ("WAYLAND_DISPLAY", "wayland-0")],
+        );
+        Context::read(&env, "cli")
+            .with_pitboard_home(scratch.join(name).join(".pitboard"))
+            .with_test_bus(on.address().to_owned())
+    }
+
     fn park(at: i64) -> String {
         crate::park::service_name("acc", 1_789_935_600_000 + at)
+    }
+
+    fn unlocks(service: &Started) -> usize {
+        service
+            .asked()
+            .iter()
+            .filter(|member| *member == "Unlock")
+            .count()
     }
 
     #[test]
@@ -356,13 +379,50 @@ mod tests {
         );
     }
 
+    // Over SSH the prompter shows its dialog on the desktop's display, where nobody who started
+    // this run may be, and with no display at all there is nowhere to show it: secret-service
+    // 5.2 waits for an answer with no bound.
+    #[test]
+    fn a_run_out_of_the_desktop_session_never_asks_to_unlock() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let service = started(scratch.path());
+        service.lock();
+        let home = scratch.path().join("home").to_string_lossy().into_owned();
+        let read = |pairs: &[(&str, &str)]| {
+            let env = crate::context::Environment::on(
+                crate::host::Os::Linux,
+                [("HOME", home.as_str())].iter().chain(pairs).copied(),
+            );
+            Context::read(&env, "cli")
+                .with_pitboard_home(scratch.path().join("home/.pitboard"))
+                .with_test_bus(service.address().to_owned())
+        };
+
+        for away in [
+            read(&[]),
+            read(&[
+                ("DISPLAY", "localhost:10.0"),
+                ("SSH_CONNECTION", "10.0.0.2 50022 10.0.0.1 22"),
+            ]),
+            read(&[("WAYLAND_DISPLAY", ""), ("DISPLAY", "")]),
+        ] {
+            refused_every_way(&Vault::of(&away), &park(0));
+        }
+        assert_eq!(unlocks(&service), 0, "{:?}", service.asked());
+
+        let at_the_desktop = read(&[("DISPLAY", ":0")]);
+        let read = Vault::of(&at_the_desktop).read(&park(0));
+        assert!(matches!(read, Err(Error::Locked)), "{read:?}");
+        assert_eq!(unlocks(&service), 1, "{:?}", service.asked());
+    }
+
     // A bus with no prompter on it, as in a container: gnome-keyring 48.0 dismisses the prompt
     // it cannot show at once.
     #[test]
     fn a_prompt_nobody_can_answer_is_refused_within_seconds() {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let service = started(scratch.path());
-        let vault = Vault::of(&home(scratch.path(), "home", &service));
+        let vault = Vault::of(&at_the_desktop(scratch.path(), "home", &service));
         service.lock();
 
         let asking = std::time::Instant::now();

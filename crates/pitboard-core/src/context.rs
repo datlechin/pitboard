@@ -57,6 +57,9 @@ const READ: &[&str] = &[
     "XDG_CACHE_HOME",
     "XDG_RUNTIME_DIR",
     "DBUS_SESSION_BUS_ADDRESS",
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+    "SSH_CONNECTION",
     "WSL_DISTRO_NAME",
     "CODEX_HOME",
     "CODEX_INSTALL_DIR",
@@ -412,6 +415,10 @@ pub struct Context {
     // the session's D-Bus are found.
     pub(crate) runtime_dir: Option<PathBuf>,
     pub(crate) session_bus_address: Option<String>,
+    // On Linux, whether this run is in the desktop session, where the keyring's prompter shows
+    // its dialog: with a display, `WAYLAND_DISPLAY` or `DISPLAY`, and not over SSH, whose
+    // forwarded display is not the one the prompter shows on.
+    pub(crate) desktop_session: bool,
     /// The scheduler's job this process runs as, where a test says. `None` is whatever the
     /// scheduler said when it started this process.
     pub(crate) scheduled_job: Option<String>,
@@ -566,6 +573,16 @@ impl Context {
         }
     }
 
+    /// Whether this run is in the desktop session on Linux, where a dialog the session's
+    /// keyring puts up is in front of whoever started it.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn in_the_desktop_session(&self) -> bool {
+        self.desktop_session
+    }
+
     // The one the schedule renews, whatever `PITBOARD_HOME` says.
     pub(crate) fn default_pitboard_home(&self) -> PathBuf {
         self.os.default_pitboard_home(&self.home)
@@ -627,6 +644,7 @@ impl Context {
             cache_home,
             runtime_dir: None,
             session_bus_address: None,
+            desktop_session: false,
             scheduled_job: None,
             started_by: None,
             sudo: false,
@@ -1074,6 +1092,9 @@ impl Context {
                 .filter(|folder| env.os() == Os::Linux && folder.is_absolute()),
             session_bus_address: owned("DBUS_SESSION_BUS_ADDRESS")
                 .filter(|address| env.os() == Os::Linux && !address.is_empty()),
+            desktop_session: env.os() == Os::Linux
+                && (env.set("WAYLAND_DISPLAY") || env.set("DISPLAY"))
+                && !env.set("SSH_CONNECTION"),
             scheduled_job: None,
             started_by: None,
             sudo: env.set("SUDO_UID"),
@@ -1791,6 +1812,37 @@ mod tests {
         );
         let mac = read(Os::MacOs, &both);
         assert_eq!((mac.runtime_dir(), mac.session_bus()), (None, None));
+    }
+
+    // On Linux alone, with a display, and not over SSH, whose forwarded display is another than
+    // the one the keyring's prompter shows its dialog on.
+    #[test]
+    fn the_desktop_session_has_a_display_not_forwarded_over_ssh() {
+        let (_scratch, _home, named) = full_home();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let home = [("HOME", named.as_str())];
+            Context::read(
+                &Environment::on(os, home.iter().chain(pairs).copied()),
+                "cli",
+            )
+            .in_the_desktop_session()
+        };
+        assert!(read(Os::Linux, &[("WAYLAND_DISPLAY", "wayland-0")]));
+        assert!(read(Os::Linux, &[("DISPLAY", ":0")]));
+        assert!(!read(Os::Linux, &[]));
+        assert!(!read(
+            Os::Linux,
+            &[("WAYLAND_DISPLAY", ""), ("DISPLAY", "")]
+        ));
+        assert!(!read(
+            Os::Linux,
+            &[
+                ("DISPLAY", "localhost:10.0"),
+                ("SSH_CONNECTION", "10.0.0.2 50022 10.0.0.1 22")
+            ]
+        ));
+        assert!(!read(Os::MacOs, &[("DISPLAY", ":0")]));
+        assert!(!Context::for_unit_test().in_the_desktop_session());
     }
 
     // A full path on every system, which nothing makes, in a folder of the test's own.

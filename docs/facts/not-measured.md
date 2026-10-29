@@ -154,8 +154,10 @@ These were not measured. Each says what Pitboard does where it cannot know.
   signed in to the desktop: whether the session's bus is found there and the login keyring is
   unlocked. A home made where none answers keeps files.
 - A real desktop's unlock prompt: whether gcr's prompter, GNOME Shell's or KDE's shows it to a
-  run a person started from a terminal, and how long a run waits where the person is not at the
-  desktop, as over SSH. secret-service waits for the prompt to complete, as `secret-tool` does.
+  run a person started from a terminal in the desktop session. A run over SSH or with no display
+  never asks ([linux.md](linux.md#the-secret-service)), and one with a display it is not in front
+  of, as in a terminal multiplexer started at the desktop and attached over SSH, waits until the
+  prompt is answered or the run is stopped.
 - A unit of a lingering user manager before the first sign-in after boot: whether the login
   keyring is locked when the renewal timer fires, as critique 4 expects. A run the timer
   started never asks, and is refused with `credential_store_locked`, which it keeps in

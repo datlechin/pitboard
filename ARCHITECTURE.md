@@ -340,7 +340,8 @@ keeps it is in the header of the module named.
 - A locked Secret Service collection, a dismissed prompt and a bus with nothing to answer are
   `credential_store_locked`, never a store with nothing in it
   (`a_locked_collection_is_locked_never_absent`). A run a job started never asks to unlock the
-  login keyring (`a_run_a_job_started_never_asks_to_unlock`).
+  login keyring, nor a run out of the desktop session (`a_run_a_job_started_never_asks_to_unlock`,
+  `a_run_out_of_the_desktop_session_never_asks_to_unlock`).
 - `abandon` gives up an interrupted switch first, whatever Claude Desktop's state, and `adopt`
   drops every waiting move and awaited sign-in, which were the other computer's. A change of
   Claude Desktop that fails carries what it did first in its error (`Error::SaidFirst`), which
