@@ -3728,7 +3728,9 @@ impl State {
                 if let Some(read) = read {
                     // A read that asks nobody knows no plan for a login nobody enrolled.
                     let read = match &self.status {
-                        Some(shown) => plans_kept(refusals_kept(read, shown), shown),
+                        Some(shown) => {
+                            answers_kept(plans_kept(refusals_kept(read, shown), shown), shown)
+                        }
                         None => read,
                     };
                     // A read that asks nobody says a switch is stuck wherever that can be
@@ -4754,6 +4756,32 @@ fn refusals_kept(mut read: Status, shown: &Status) -> Status {
                 .stale_explanation
                 .clone_from(&refused.stale_explanation);
             account.standing = refused.standing;
+        }
+    }
+    read
+}
+
+// `read`, where an account in use or parked as `shown` has it keeps how fresh `shown` says its
+// numbers are: the index a read writes as it records a login says nothing of them.
+fn answers_kept(mut read: Status, shown: &Status) -> Status {
+    for account in read
+        .accounts
+        .iter_mut()
+        .filter(|account| account.stale == Some(Stale::NotAsked))
+    {
+        if let Some(asked) = shown.accounts.iter().find(|asked| {
+            asked.id == account.id
+                && asked.signed_in == account.signed_in
+                && asked.parked == account.parked
+                && matches!(asked.stale, None | Some(Stale::AskedRecently))
+        }) {
+            account.stale = asked.stale;
+            account
+                .stale_explanation
+                .clone_from(&asked.stale_explanation);
+            if account.usage.is_none() {
+                account.usage.clone_from(&asked.usage);
+            }
         }
     }
     read

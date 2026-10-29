@@ -10,11 +10,11 @@ use super::testing::machine::{Hand, Stub, any_read, fresh_read, installed_ask, o
 use super::testing::records::{
     account, claude, claude_code, codex, codex_account, percent, refusal, status, warned, warning,
 };
-use super::{Intent, Notice, NoticeButton, NoticeButtonKind, ReadFailure, Sheet};
+use super::{Intent, Notice, NoticeButton, NoticeButtonKind, ReadFailure, Sheet, Snapshot};
 use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
-use crate::present::words;
+use crate::present::{NoteKind, words};
 use crate::{Account, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::{Stale, Standing};
@@ -865,6 +865,103 @@ fn a_change_noticed_keeps_the_plan_shown_for_a_login_nobody_enrolled() {
     let accounts = model.state.status.clone().unwrap().accounts;
     assert_eq!(accounts[0].plan.as_deref(), Some("Pro"));
     assert_eq!(accounts[1].plan, None);
+}
+
+// As a read that asks nobody gives `account`.
+fn not_asked(account: Account) -> Account {
+    Account {
+        stale: Some(Stale::NotAsked),
+        stale_explanation: Some("not asked".into()),
+        ..account
+    }
+}
+
+// Each row by its name, whether it is in use, and whether a note says its numbers are not new.
+fn stale_notes(shown: &Snapshot) -> Vec<(String, bool, bool)> {
+    (shown.sections.iter())
+        .flat_map(|section| &section.accounts)
+        .map(|row| {
+            let stale = row.notes.iter().any(|note| note.kind == NoteKind::Stale);
+            (row.qualified.clone().unwrap_or_default(), row.in_use, stale)
+        })
+        .collect()
+}
+
+fn row(name: &str, in_use: bool, stale: bool) -> (String, bool, bool) {
+    (name.to_owned(), in_use, stale)
+}
+
+/// A read that asks Anthropic records the login each tool has stored, and writes the account
+/// index where that login changed: after a cancelled switch, or once Claude Code has renewed
+/// its own. The look that write wakes read what is known in place of what the read had just
+/// asked, and said every account was read without asking Anthropic.
+#[test]
+fn what_a_read_writes_leaves_what_it_asked_shown() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        claude("work", true, 42.0),
+        claude("personal", false, 10.0),
+    ])));
+    model.refresh(&mut machine);
+    machine.changed += 1;
+    machine.offline = Ok(status(vec![
+        not_asked(claude("work", true, 42.0)),
+        not_asked(claude("personal", false, 10.0)),
+    ]));
+    model.notice(&mut machine);
+
+    assert_eq!(model.count(offline_read), 1);
+    let shown = model.shown();
+    assert_eq!(
+        stale_notes(&shown),
+        [
+            row("claude/work", true, false),
+            row("claude/personal", false, false)
+        ]
+    );
+    assert_eq!(percent(&shown, 0), Some(42.0));
+}
+
+/// A change made elsewhere shows at once on every account it touched: a switch in a terminal,
+/// a parked login replaced and an account added are read without asking anybody. An account
+/// it left where it was keeps what the read before it asked.
+#[test]
+fn a_change_made_elsewhere_shows_on_every_account_it_touched() {
+    let parked = |label: &str, until: i64| Account {
+        parked: Some(crate::Parked {
+            refresh_expires_at: Some(until),
+            session_expires_at: None,
+        }),
+        ..codex_account(label, false)
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        claude("work", true, 42.0),
+        claude("personal", false, 10.0),
+        codex_account("main", true),
+        parked("spare", 100),
+    ])));
+    model.refresh(&mut machine);
+    machine.changed += 1;
+    machine.offline = Ok(status(vec![
+        not_asked(claude("personal", true, 10.0)),
+        not_asked(claude("work", false, 42.0)),
+        not_asked(claude("travel", false, 0.0)),
+        not_asked(codex_account("main", true)),
+        not_asked(parked("spare", 200)),
+    ]));
+    model.notice(&mut machine);
+
+    assert_eq!(
+        stale_notes(&model.shown()),
+        [
+            row("claude/personal", true, true),
+            row("claude/work", false, true),
+            row("claude/travel", false, true),
+            row("codex/main", true, false),
+            row("codex/spare", false, true),
+        ]
+    );
 }
 
 /// Reads overlap: the timer's with one somebody asked for, a menu opening with the read after
