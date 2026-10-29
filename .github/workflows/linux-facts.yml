@@ -2,8 +2,10 @@ name: Linux runner facts
 
 # A measurement, not a check: what an image does can change with no commit, and no pull request
 # can fix that. Run it by hand on a branch when a fact is wanted, such as after an Ubuntu image
-# changes or a pull request changes linux-runner-facts.sh. Each job uploads its redacted report
-# and nothing else.
+# changes or a pull request changes linux-runner-facts.sh. Each measuring job uploads its
+# redacted report and nothing else. With session set, it builds the Linux session bundle
+# instead, which only the owner dispatches: the aarch64 packages a release would ship, for the
+# Linux session machines.
 
 on:
   workflow_dispatch:
@@ -14,6 +16,13 @@ on:
       codex-version:
         description: The Codex installs takes from npm, which nothing runs.
         default: 0.165.0
+      session:
+        description: Build the session bundle for the Linux session machines instead of measuring.
+        type: boolean
+        default: false
+      age-recipient:
+        description: The owner's age public key, which the session bundle is encrypted to.
+        default: ""
 
 permissions:
   contents: read
@@ -22,6 +31,7 @@ jobs:
   # On the runner itself, as linux-runner-facts.sh says of each part: user-manager and inotify
   # with pitboard built as a release builds it, installs with the tests' stand-in.
   runner:
+    if: ${{ !inputs.session }}
     name: ${{ matrix.part }} (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -86,6 +96,7 @@ jobs:
   # Headless mutter as the Linux app's tests run it, in the image and the snapshot its CI takes
   # Ubuntu 26.04 from: packages as root, then everything else as the user the setup made.
   display:
+    if: ${{ !inputs.session }}
     name: display (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -113,3 +124,83 @@ jobs:
           name: linux-facts-display-${{ matrix.arch }}
           path: linux-facts/display.json
           if-no-files-found: warn
+
+  # The repository is public, so the bundle leaves the runner only encrypted to the owner's age key.
+  # aarch64 alone, as the session machines are.
+  session:
+    if: inputs.session
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The key comes from the event, not env:, whose values the log prints: a secret key pasted in
+      # its place must never reach the log. The gate's MSI numbers are Windows' alone.
+      - name: A branch at 1.0.0-beta.1 or later, no cfg, and the owner's age key
+        id: gate
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          key=$(jq -r '.inputs["age-recipient"]' "$GITHUB_EVENT_PATH")
+          sh .github/scripts/session-gate.sh "$REF" "$version" "$key" >> "$GITHUB_OUTPUT"
+      # age 1.3.2's tarball, and its SHA-256 as the release lists it, checked against the tarball
+      # itself on 2026-10-29.
+      - name: age, from its release, checked against the SHA-256 pinned here
+        id: age
+        env:
+          AGE_TARBALL: age-v1.3.2-linux-arm64.tar.gz
+          AGE_SHA256: 6b8dc4333c53a5a57c9e5834e3a48f92605d7154014cd07269ff3327db5d37f4
+        run: |
+          tarball="$RUNNER_TEMP/$AGE_TARBALL"
+          curl -fsSL --retry 5 --retry-delay 10 -o "$tarball" \
+            "https://github.com/FiloSottile/age/releases/download/v1.3.2/$AGE_TARBALL"
+          echo "$AGE_SHA256  $tarball" | sha256sum -c -
+          tar -xzf "$tarball" -C "$RUNNER_TEMP"
+          echo "path=$RUNNER_TEMP/age/age" >> "$GITHUB_OUTPUT"
+      # in-container.sh fills the Cargo registry here with `cargo metadata`.
+      - uses: ./.github/actions/rust
+        with:
+          cache: "false"
+      # In a container, as CI's linux-packaging job builds it: pack-command-line.sh runs the
+      # pitboard it packs, and a branch's build runs only with homes of its own.
+      - name: The command line, built for musl and packed as a release builds and packs it
+        run: apps/linux/scripts/in-container.sh debian-13 command-line "$RUNNER_TEMP/command-line"
+      - name: The Debian packages, built and checked as a release's
+        env:
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: >
+          git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb
+          "$RUNNER_TEMP/command-line/pitboard-v$VERSION-aarch64-unknown-linux-musl.tar.gz"
+          "$RUNNER_TEMP/session"
+      - name: The RPM packages, built and checked as a release's
+        env:
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: >
+          git archive HEAD | apps/linux/scripts/in-container.sh fedora-43 rpm
+          "$RUNNER_TEMP/command-line/pitboard-v$VERSION-aarch64-unknown-linux-musl.tar.gz"
+          "$RUNNER_TEMP/session"
+      - name: The Debian packages, installed and removed on Debian 13 and Ubuntu 26.04
+        run: sh .github/scripts/test-linux-packages.sh deb "$RUNNER_TEMP/session"
+      - name: The RPM packages, installed and removed on Fedora 43, Fedora 44 and Tumbleweed
+        run: sh .github/scripts/test-linux-packages.sh rpm "$RUNNER_TEMP/session"
+      # Unsigned: the signing key is in linux-packages alone, which only a v* tag reaches.
+      - name: The bundle, summed, packed and encrypted to the owner's key
+        env:
+          AGE: ${{ steps.age.outputs.path }}
+          KEY: ${{ steps.gate.outputs.recipient }}
+        run: >
+          sh .github/scripts/pack-linux-session-bundle.sh "$RUNNER_TEMP/session"
+          session-build-aarch64-linux "$RUNNER_TEMP/sealed" "$AGE" "$KEY"
+      # Overwritten, so the job run again can upload its bundle again.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: session-build-aarch64-linux
+          path: ${{ runner.temp }}/sealed/session-build-aarch64-linux.tar.age
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true

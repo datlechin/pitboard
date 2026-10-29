@@ -1,0 +1,38 @@
+.TH PITBOARD-APP 1 "" "Pitboard" "User Commands"
+.SH NAME
+pitboard-app \- switch AI coding tools between your accounts
+.SH SYNOPSIS
+.B pitboard-app
+.RI [ option ]
+.RI [ link ]
+.SH DESCRIPTION
+.B pitboard-app
+is Pitboard's desktop app.
+It switches Claude Code and OpenAI's Codex CLI between your own accounts without signing you
+out, and shows what each account has left of its limits.
+.PP
+One copy runs in a session: starting it again, from the launcher, a link or a desktop action,
+hands the request to that copy.
+.SH OPTIONS
+.TP
+.I link
+Opens a
+.B pitboard://
+link, as the launcher does for a link the desktop hands it.
+.TP
+.B \-\-add\-account
+Opens Add Account.
+.TP
+.B \-\-refresh
+Reads every account's limits again.
+.TP
+.B \-\-sign\-in
+Starts the app without a window, as the start at sign-in does.
+.TP
+.B \-\-gapplication\-service
+Waits on the session bus for a request, as D-Bus activation starts the app.
+.TP
+.BR \-h ", " \-\-help
+Lists the options.
+.SH SEE ALSO
+.BR pitboard (1)

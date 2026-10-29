@@ -178,6 +178,7 @@ SERVICE = f"usr/share/dbus-1/services/{APP_ID}.service"
 METAINFO = f"usr/share/metainfo/{APP_ID}.metainfo.xml"
 SEARCH = f"usr/share/gnome-shell/search-providers/{APP_ID}.search-provider.ini"
 RUNNER = f"usr/share/krunner/dbusplugins/{APP_ID}.desktop"
+MANUAL = "usr/share/man/man1/pitboard-app.1"
 WIDGET = f"usr/share/plasma/plasmoids/{APP_ID}"
 PLASMOID = REPO / "apps" / "linux" / "plasmoid" / APP_ID
 
@@ -200,6 +201,7 @@ def release_tree(root, widget=True):
     put(METAINFO, made.stdout)
     put(SEARCH, (DATA / f"{APP_ID}.search-provider.ini").read_text(encoding="utf-8"))
     put(RUNNER, (DATA / "krunner" / f"{APP_ID}.desktop").read_text(encoding="utf-8"))
+    put(MANUAL, (DATA / "pitboard-app.1").read_text(encoding="utf-8"))
     # The development build's icon is in the GResource alone.
     for icon in sorted((DATA / "icons").rglob("*.svg")):
         if ".Devel." not in icon.name:

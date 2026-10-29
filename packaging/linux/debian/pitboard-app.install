@@ -1,0 +1,10 @@
+usr/bin/pitboard-app
+usr/share/applications/com.usepitboard.Pitboard.desktop
+usr/share/dbus-1/services/com.usepitboard.Pitboard.service
+usr/share/gnome-shell/search-providers/com.usepitboard.Pitboard.search-provider.ini
+usr/share/icons/hicolor/scalable/apps/com.usepitboard.Pitboard.svg
+usr/share/icons/hicolor/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg
+usr/share/icons/hicolor/symbolic/status/com.usepitboard.Pitboard-*-symbolic.svg
+usr/share/krunner/dbusplugins/com.usepitboard.Pitboard.desktop
+usr/share/man/man1/pitboard-app.1
+usr/share/metainfo/com.usepitboard.Pitboard.metainfo.xml

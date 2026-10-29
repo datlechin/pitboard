@@ -63,7 +63,7 @@ pub use machine::{
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown, WatchServiceShown,
 };
 pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
-pub use removal::{Package, PackageRemoval, RemovalShown, package_removal};
+pub use removal::{OsRelease, Package, PackageRemoval, RemovalShown, package_removal};
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
 pub use welcome::{WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool};
@@ -1030,7 +1030,7 @@ mod tests {
         use crate::model::Sheet;
         use crate::model::testing::records::warning;
         use crate::present::testing::{account, claude_code, codex, read, status, strings_of};
-        use crate::{Package, Surfaces, gnome_words, notice_buttons, package_removal};
+        use crate::{OsRelease, Package, Surfaces, gnome_words, notice_buttons, package_removal};
         use pitboard_core::status::Standing;
         const PLACES: [&str; 8] = [
             "settings >",
@@ -1069,8 +1069,14 @@ mod tests {
         said.extend(strings_of(&gnome_words()));
         said.extend(strings_of(&notice_buttons(gnome)));
         said.extend(strings_of(&downloads_quit_question(gnome, 2)));
-        for package in [Package::Deb, Package::Rpm, Package::Unknown] {
-            said.extend(strings_of(&package_removal(package, &[])));
+        let tumbleweed = OsRelease {
+            id: Some("opensuse-tumbleweed".into()),
+            id_like: Some("opensuse suse".into()),
+        };
+        for system in [OsRelease::default(), tumbleweed] {
+            for package in [Package::Deb, Package::Rpm, Package::Unknown] {
+                said.extend(strings_of(&package_removal(package, &system, &[])));
+            }
         }
         said.extend([
             words::cannot_schedule(gnome, true),

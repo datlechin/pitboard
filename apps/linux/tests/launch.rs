@@ -3,6 +3,8 @@
 #![cfg(target_os = "linux")]
 
 use std::cell::RefCell;
+#[cfg(feature = "fixture")]
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -68,10 +70,15 @@ struct Quit {
     owned: bool,
 }
 
-// The built program, started with `variables` beside fresh homes, on a bus of the test's own.
-// The bus announces each connection's unique name in NameOwnerChanged, as it does the
-// witness's here, so a program announced nowhere before the witness never reached the bus.
-fn launched(homes: &[(&str, std::path::PathBuf)], variables: &[(&str, &str)]) -> Quit {
+// The built program, started with `variables` beside fresh homes and given `arguments`, on a bus
+// of the test's own. The bus announces each connection's unique name in NameOwnerChanged, as it
+// does the witness's here, so a program announced nowhere before the witness never reached the
+// bus.
+fn launched(
+    homes: &[(&str, std::path::PathBuf)],
+    variables: &[(&str, &str)],
+    arguments: &[&str],
+) -> Quit {
     let test_bus = gio::TestDBus::new(gio::TestDBusFlags::NONE);
     test_bus.up();
     let address = test_bus
@@ -102,6 +109,7 @@ fn launched(homes: &[(&str, std::path::PathBuf)], variables: &[(&str, &str)]) ->
             bus_call(&bus, "GetId", None);
 
             let output = Command::new(env!("CARGO_BIN_EXE_pitboard-app"))
+                .args(arguments)
                 .env_clear()
                 .envs(homes.iter().map(|(name, folder)| (name, folder)))
                 .envs(variables.iter().copied())
@@ -160,7 +168,7 @@ fn a_debug_build_outside_a_fixture_quits_before_it_owns_a_name() {
     let scratch = tempfile::tempdir().unwrap();
     let homes = homes(scratch.path());
 
-    let quit = launched(&homes, &[]);
+    let quit = launched(&homes, &[], &[]);
 
     quit_before_the_bus(&quit, OUTSIDE_A_FIXTURE);
     for (name, folder) in &homes {
@@ -178,7 +186,7 @@ fn a_fixture_with_a_wrong_name_is_refused_with_every_name() {
     std::fs::create_dir(left.parent().unwrap()).unwrap();
     std::fs::write(&left, "kept").unwrap();
 
-    let quit = launched(&homes, &[("PITBOARD_FIXTURE", "twoTool")]);
+    let quit = launched(&homes, &[("PITBOARD_FIXTURE", "twoTool")], &[]);
 
     let refused =
         pitboard_model::fixture_refusal(pitboard_model::Front::Gnome, "twoTool").expect("refused");
@@ -191,4 +199,83 @@ fn a_fixture_with_a_wrong_name_is_refused_with_every_name() {
     for (name, folder) in homes.iter().filter(|(name, _)| *name != "TMPDIR") {
         assert!(is_empty(folder), "{name} holds what the program wrote");
     }
+}
+
+// The long options GLib's help lists, of each line that begins with options, `--` and
+// `=ARGUMENT` left out.
+#[cfg(feature = "fixture")]
+fn listed<'a>(help: impl Iterator<Item = &'a str>) -> BTreeSet<String> {
+    help.flat_map(|line| {
+        line.split_whitespace()
+            .map(|word| word.trim_end_matches(','))
+            .take_while(|word| word.starts_with('-'))
+            .filter_map(|word| word.strip_prefix("--"))
+            .map(|name| name.split('=').next().unwrap_or(name).to_owned())
+            .collect::<Vec<_>>()
+    })
+    .collect()
+}
+
+// Debian Policy 12.1 asks each program of a package for a manual page. GLib's own help, which
+// quits before the program owns its name, lists what the program takes: the options the app adds,
+// under Application Options, and GApplication's and GOption's own. A launch outside a fixture
+// quits before GLib reads any.
+#[cfg(feature = "fixture")]
+#[test]
+fn the_manual_page_names_every_option_the_app_adds_and_only_options_the_program_takes() {
+    let scratch = tempfile::tempdir().unwrap();
+    let homes = homes(scratch.path());
+    let fixture = pitboard_model::fixture_names().remove(0);
+
+    let quit = launched(&homes, &[("PITBOARD_FIXTURE", &fixture)], &["--help-all"]);
+
+    let help = String::from_utf8(quit.output.stdout.clone()).unwrap();
+    assert_eq!(quit.output.status.code(), Some(0), "{help}");
+    // The bus announces a name taken as it does a connection.
+    assert!(
+        !quit.announced.iter().any(|name| name == APP_ID),
+        "the program took {APP_ID}"
+    );
+    let takes = listed(help.lines());
+    let mut section = "";
+    let adds = listed(help.lines().filter(|line| {
+        if !line.starts_with(' ') {
+            section = line;
+        }
+        section == "Application Options:"
+    }));
+    assert!(
+        !adds.is_empty(),
+        "GLib's help lists no Application Options: {help}"
+    );
+    let manual = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join("pitboard-app.1"),
+    )
+    .unwrap();
+    // Each `.B` or `.BR` line of the OPTIONS section, its `\-` a hyphen.
+    let named: BTreeSet<String> = manual
+        .split_once(".SH OPTIONS\n")
+        .and_then(|(_, rest)| rest.split("\n.SH ").next())
+        .expect("the manual page has an OPTIONS section")
+        .lines()
+        .filter(|line| line.starts_with(".B"))
+        .flat_map(|line| {
+            line.replace("\\-", "-")
+                .split_whitespace()
+                .filter_map(|word| word.strip_prefix("--"))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    assert!(
+        adds.is_subset(&named),
+        "the manual page names {named:?}, not each of {adds:?}"
+    );
+    assert!(
+        named.is_subset(&takes),
+        "the program takes {takes:?}, not each of {named:?}"
+    );
 }

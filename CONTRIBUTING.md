@@ -158,16 +158,28 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
-`windows-update-key.sh`, `windows-update-sign.sh` and `session-gate.sh` in `.github/scripts`,
-`apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
-`crates/pitboard/Cargo.toml`, or a workflow's call of a PowerShell script in `.github/scripts`:
+`windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh`, `linux-versions.sh`,
+`linux-repository-key.sh`, `pack-command-line.sh` and `pack-linux-session-bundle.sh` in
+`.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
+`crates/pitboard/Cargo.toml`, the Linux repository's key in `packaging/linux`, or a workflow's
+call of a PowerShell script in `.github/scripts`:
 
 ```sh
 shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.sh \
   .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh \
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
+  .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh \
+  .github/scripts/pack-command-line.sh .github/scripts/pack-linux-session-bundle.sh \
   apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
+```
+
+The cases that need `dpkg`, `rpm` or `gpg` skip where it is not on `PATH`.
+`TEST_RELEASE_TOOLS` names the ones that must be found, as CI sets it on Linux, where it also
+checks that the repository's signing subkey has 180 days left:
+
+```sh
+sh .github/scripts/linux-repository-key.sh packaging/linux/pitboard-archive-keyring.asc "$(date -u +%s)"
 ```
 
 For a change to the Linux app's scripts, `apps/linux/scripts`,
@@ -183,6 +195,16 @@ python3 .github/scripts/test-linux-app.py
 `test-linux-app.py` leaves `check-linux-app.sh`'s cases out where `desktop-file-validate` and
 `appstreamcli` are not on `PATH`, as on a Mac. `apps/linux/scripts/in-container.sh debian-13
 scripts` runs every case, as [The Linux app](#the-linux-app) says.
+
+For a change to the Linux packages, `packaging/linux/debian`, `packaging/linux/pitboard.spec`,
+`pitboard.rpmlintrc`, the `install-test-*.Containerfile` images there, or
+`build-linux-packages.sh`, `check-linux-packages.sh` and `test-linux-packages.sh` in
+`.github/scripts`, run the steps [Linux packages](#linux-packages) lists, and:
+
+```sh
+shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh \
+  .github/scripts/test-linux-packages.sh
+```
 
 The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
 their own, in their sections. CI's `all-green` check fails when any other job failed or was
@@ -715,7 +737,9 @@ docker run --rm --user 1000:1000 --network none -v "$PWD":/src -w /src \
 built as a release builds it, inotify on four file systems, the process names of npm's `claude`
 and `codex` with the stand-in in their place, and headless mutter in Ubuntu 26.04's image. No pull request runs it on its own: one that
 changes the script dispatches it on its branch and names the run. What a run measured goes in
-`docs/facts/linux-runners.md` once it is read.
+`docs/facts/linux-runners.md` once it is read. With `-f session=true -f age-recipient=<age
+public key>`, it builds the Linux session bundle instead, which only the owner dispatches, as
+[The Linux session bundle](#the-linux-session-bundle) says.
 
 The display parts also run in Docker, packages while the image builds and the rest as the user
 they made, with no network:
@@ -763,11 +787,13 @@ container:
 
 With no step it runs the steps of the distribution's job on CI: `lint`, `test`, `ui` and
 `release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint`, `test` and
-`widget` on `fedora-44`. A container runs as uid 1000, sees the repository and this machine's Cargo
-registry read only, and keeps Cargo's and Meson's folders in the volume
-`pitboard-linux-app-target`. Only a `cargo fetch` before the steps has the network, for
-Cargo's git checkouts. The release's link, at more than one job, takes most of 8 GiB: where
-the machine or Docker's VM has less, set `CARGO_BUILD_JOBS=1`.
+`widget` on `fedora-44`. `fedora-43` builds the RPM packages, and runs only the steps
+[Linux packages](#linux-packages) names. A container runs as uid 1000, sees the repository and
+this machine's Cargo registry read only, and keeps Cargo's and Meson's folders in the volume
+`pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Only a `cargo fetch`
+before the steps has the network, for Cargo's git checkouts. The release's link, at more than
+one job, takes most of 8 GiB: where the machine or Docker's VM has less, set
+`CARGO_BUILD_JOBS=1`.
 
 `apps/linux/scripts/headless.sh <command>` runs a command as the app's tests run: as a user,
 never root, in a headless mutter with one virtual monitor, on a private session bus, with
@@ -847,6 +873,88 @@ names the command above. A debug build keeps apart from a release:
 
 The fixture's folder is `pitboard-fixture` in the temporary directory, which each launch in a
 fixture empties first.
+
+### Linux packages
+
+Each format's packages are built on the oldest system of the floor that uses it, over the Meson
+install: the Debian packages on Debian 13 by debhelper from `packaging/linux/debian`, the RPM
+packages on Fedora 43 by rpmbuild from `packaging/linux/pitboard.spec`. Both build `pitboard`,
+the release tarball's command line byte for byte with its man page and completions, and
+`pitboard-app`, which depends on the `pitboard` of its own version. Debian's add
+`pitboard-archive-keyring`, the repository's key. Build, check and install them in containers,
+into a folder `out` of your choosing:
+
+```sh
+apps/linux/scripts/in-container.sh debian-13 command-line out
+git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb out/pitboard-v*.tar.gz out
+apps/linux/scripts/in-container.sh debian-13 packages-test
+.github/scripts/test-linux-packages.sh deb out
+git archive HEAD | apps/linux/scripts/in-container.sh fedora-43 rpm out/pitboard-v*.tar.gz out
+apps/linux/scripts/in-container.sh fedora-43 packages-test
+.github/scripts/test-linux-packages.sh rpm out
+```
+
+- `command-line` builds the command line for musl and packs it with `pack-command-line.sh`, as a
+  release does.
+- `deb` and `rpm` build the packages with `build-linux-packages.sh` from the commit
+  `git archive` writes, not the working tree, and from the tarball named, then check them with
+  `check-linux-packages.sh`. Each goes to `out` as
+  `<package>-v<version>-<architecture>.<deb|rpm>`, since GitHub renames a release file whose name
+  holds the `~` of a package version.
+- `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
+  the check, with the tools of the system's format.
+- `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
+  images, or the RPM packages on fresh Fedora 43, Fedora 44 and openSUSE Tumbleweed images,
+  checks them there and removes them.
+
+The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
+more. A failed step's files are copied out too.
+
+`check-linux-packages.sh` fails a release's packages:
+
+- that are not the release's at `linux-versions.sh`'s version for the machine's architecture,
+  or that hold a file outside their layout;
+- whose `/usr/bin/pitboard`, man page or completions are not the command line tarball's;
+- whose app does not depend on the `pitboard` of its own version and on the floor's libadwaita,
+  GTK and GLib, at 1.7, 4.18 and 2.84, or whose tree, as Meson installed it, `check-linux-app.sh`
+  fails;
+- whose keyring is not `packaging/linux/pitboard-archive-keyring.asc`, unarmored;
+- that are not in RPM's format 4, which Tumbleweed's RPM reads;
+- that lintian or rpmlint warns about. rpmlint takes the filters in
+  `packaging/linux/pitboard.rpmlintrc`, and fails where one of them matches nothing.
+
+A package manager runs as root only while an image builds. Pitboard's programs run in the
+images only as uid 1000, with fresh homes and no network. After the removal, the test fails on
+any file or folder the packages listed, or a folder above one, that the system did not hold
+before and no package holds.
+
+CI's `linux-packaging` job runs the four of each format on `ubuntu-26.04` and
+`ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<format>-<arch>` for 7 days.
+
+### The Linux session bundle
+
+`.github/workflows/linux-facts.yml`'s `session` job builds the bundle for
+[the Linux session machines](AGENTS.md#the-linux-session-machines): the aarch64 packages a
+release would ship, built, checked and installed by the steps above, on `ubuntu-26.04-arm`. Only
+the owner dispatches it, as
+[Before the first release with the Linux app](RELEASING.md#before-the-first-release-with-the-linux-app)
+says. `session-gate.sh` refuses anything but a branch at 1.0.0-beta.1 or later and a key that
+is not an age public key, as it does for Windows. The packages are unsigned: the signing key is in
+the `linux-packages` environment alone. `pack-linux-session-bundle.sh` lists every file in
+`SHA256SUMS`, packs the folder in one tar and encrypts it with age to that key. GitHub keeps the
+artifact a day. Download, decrypt and unpack it on the Mac, then delete it from GitHub:
+
+```sh
+name=session-build-aarch64-linux
+gh run download <run id> -n "$name" -D "$name"
+age -d -i <age identity file> -o "$name.tar" "$name/$name.tar.age" && rm -r "$name" &&
+  tar -xf "$name.tar" && rm "$name.tar"
+gh api repos/datlechin/pitboard/actions/runs/<run id>/artifacts --jq '.artifacts[].id' |
+  xargs -I{} gh api -X DELETE repos/datlechin/pitboard/actions/artifacts/{}
+```
+
+Copy the folder, with its `SHA256SUMS` at the root, to a machine, and delete it from the Mac
+after the session.
 
 ## Tool registers
 

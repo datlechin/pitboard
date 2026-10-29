@@ -122,6 +122,30 @@ Tag the first release with Windows files only once each of these holds:
   `WINDOWS_UPDATE_PRIVATE_KEY` are set, as [the Windows update key](#the-windows-update-key)
   says, and `WINDOWS_SIGNER` is unset.
 
+## Before the first release with the Linux app
+
+The first release with the Linux packages is a `1.0.0-beta.N`, tagged only once a session on
+[the Linux session machines](AGENTS.md#the-linux-session-machines) has measured them:
+
+1. Build the session bundle from the branch that holds `Release <version>`, its draft pull
+   request's branch once one is open ([Prepare a release](#prepare-a-release)):
+
+   ```sh
+   gh workflow run linux-facts.yml --ref <branch> -f session=true -f age-recipient=<age public key>
+   ```
+
+   [The Linux session bundle](CONTRIBUTING.md#the-linux-session-bundle) says what it holds and
+   how to open it.
+2. On each machine, install the bundle's packages and measure what
+   [Not measured](docs/facts/not-measured.md) leaves to the Linux session.
+3. Commit what the session measured as `docs/facts/linux-session.md`. Its first paragraph names
+   the bundle in this form, as [the Windows session's page](docs/facts/windows-session.md) does:
+
+   ```text
+   The bundle was `linux-facts.yml` session run <run id> at <commit>, the commit that holds
+   `Release <version>`.
+   ```
+
 ## What a release publishes
 
 Each release has a tarball of the command line for each target of the `build` job, the app
@@ -505,3 +529,42 @@ variable to its version.
 The release workflow cannot make rung one: `windows-update-sign` checks each signature with the
 key the release carries, and `windows-feed` with the key in the published MSIs, which rung one
 has moved on from.
+
+## The Linux repository key
+
+Pitboard's apt and dnf repository at `packages.usepitboard.com` and its rpm packages are signed
+with one OpenPGP key, made for them alone. Its public key is
+`packaging/linux/pitboard-archive-keyring.asc`.
+
+| Part | Fingerprint | Expires | Its secret |
+| --- | --- | --- | --- |
+| Primary, RSA 4096, certifies only | `22DCF748069770D807A1804F47C507760C9A97E3` | 2036-10-25 | In the owner's offline copy alone |
+| Signing subkey, RSA 4096 | `C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` | 2028-10-27 | In the offline copy, and in the `linux-packages` environment |
+
+`PACKAGES_SIGNING_KEY` holds the signing subkey alone, as `gpg --armor --export-secret-subkeys
+C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8!` writes it, with the primary's secret left out, and
+`PACKAGES_SIGNING_PASSPHRASE` its passphrase. Both are secrets of `linux-packages`, which has a
+deployment rule for `v*` tags. Keep the offline copy apart from the Sparkle key, the Windows
+update key, the Developer ID certificate and the signer's account.
+
+`.github/scripts/linux-repository-key.sh` refuses the committed key unless it has one primary
+that does not sign, one signing subkey that is neither revoked nor expired, no signature under
+SHA-256, and 180 days or more before the subkey or its primary expires. CI's `install-script`
+runs it at the time it runs, so from 2028-04-30 11:00 UTC every pull request fails until the
+subkey is extended. GitHub CLI extended its repository key just before it expired on
+2024-09-06, and `apt update` failed wherever the old copy stayed (cli/cli#9569).
+
+### Extend the signing subkey
+
+On the offline machine, with the offline copy:
+
+1. `gpg --quick-set-expire 22DCF748069770D807A1804F47C507760C9A97E3 2y
+   C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` binds the subkey again, to two years from that day.
+2. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
+   `packaging/linux/pitboard-archive-keyring.asc`. The same pull request gives
+   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry
+   and RELEASING.md the new dates.
+3. Export the subkey again, as above, into `PACKAGES_SIGNING_KEY`. The copy there carries the
+   old binding, and gpg signs nothing with a subkey whose binding has expired.
+
+The primary is extended the same way, without the subkey's fingerprint.

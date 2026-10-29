@@ -26,6 +26,7 @@ service=usr/share/dbus-1/services/$id.service
 metainfo=usr/share/metainfo/$id.metainfo.xml
 search=usr/share/gnome-shell/search-providers/$id.search-provider.ini
 runner=usr/share/krunner/dbusplugins/$id.desktop
+manual=usr/share/man/man1/pitboard-app.1
 icons=usr/share/icons/hicolor
 widget=usr/share/plasma/plasmoids/$id
 
@@ -45,7 +46,7 @@ value() {
 }
 
 layout() {
-  for path in "$program" "$launcher" "$service" "$metainfo" "$search" "$runner" \
+  for path in "$program" "$launcher" "$service" "$metainfo" "$search" "$runner" "$manual" \
     "$icons/scalable/apps/$id.svg" "$icons/symbolic/apps/$id-symbolic.svg"; do
     echo "$path"
   done

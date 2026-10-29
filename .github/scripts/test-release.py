@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import tomllib
 import unittest
 from pathlib import Path
@@ -24,6 +25,11 @@ WINDOWS_VERSIONS = REPO / ".github" / "scripts" / "windows-versions.sh"
 WINDOWS_UPDATE_KEY = REPO / ".github" / "scripts" / "windows-update-key.sh"
 WINDOWS_UPDATE_SIGN = REPO / ".github" / "scripts" / "windows-update-sign.sh"
 SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
+LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
+LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
+PACK_COMMAND_LINE = REPO / ".github" / "scripts" / "pack-command-line.sh"
+PACK_LINUX_SESSION_BUNDLE = REPO / ".github" / "scripts" / "pack-linux-session-bundle.sh"
+REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
 SCRIPTS = REPO / ".github" / "scripts"
@@ -66,10 +72,25 @@ ONLY_FROM_A_BETA = (
     "the session bundle is built only from a branch whose Pitboard version is 1.0.0-beta.1 or "
     "later"
 )
+NO_PACKAGE_VERSION = (
+    "has no package version: it takes X.Y.Z, X.Y.Z-rcN or, from 1.0.0, X.Y.Z-beta.N with N from "
+    "1 to 98"
+)
 
 
 def run(*args):
     return subprocess.run(["sh", *map(str, args)], capture_output=True, text=True)
+
+
+# A case that needs a tool skips where it is missing, and fails where TEST_RELEASE_TOOLS names it,
+# as CI's Linux leg does.
+def needs(test, *tools):
+    named = os.environ.get("TEST_RELEASE_TOOLS", "").split()
+    for tool in tools:
+        if shutil.which(tool) is None:
+            if tool in named:
+                test.fail(f"TEST_RELEASE_TOOLS names {tool}, which is not on PATH")
+            test.skipTest(f"{tool} is not on PATH")
 
 
 # Ed25519 as RFC 8032's section 6 writes it, Sparkle's and WinSparkle's signatures, so a test
@@ -1068,6 +1089,564 @@ class WindowsUpdateSign(unittest.TestCase):
         done = run(WINDOWS_UPDATE_SIGN, "v1.0.0", "true", self.public, self.work)
         self.assertEqual(done.returncode, 2)
         self.assertIn("usage:", done.stderr)
+
+
+class LinuxVersions(unittest.TestCase):
+    # A tag's version and its packages', in release order.
+    VERSIONS = {
+        "1.0.0-beta.6": "1.0.0~beta.6",
+        "1.0.0-beta.7": "1.0.0~beta.7",
+        "1.0.0-beta.10": "1.0.0~beta.10",
+        "1.0.0-rc1": "1.0.0~rc1",
+        "1.0.0-rc2": "1.0.0~rc2",
+        "1.0.0-rc10": "1.0.0~rc10",
+        "1.0.0": "1.0.0",
+        "1.0.1-beta.1": "1.0.1~beta.1",
+        "1.0.1": "1.0.1",
+        "1.10.0": "1.10.0",
+    }
+
+    def versions(self, version):
+        done = run(LINUX_VERSIONS, version)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        pairs = [line.split("=", 1) for line in done.stdout.splitlines()]
+        self.assertEqual([key for key, _ in pairs], ["deb", "rpm-version", "rpm-release"])
+        return tuple(value for _, value in pairs)
+
+    def test_each_kind_has_its_package_versions(self):
+        for version, package in {
+            **self.VERSIONS,
+            "0.15.2": "0.15.2",
+            "0.16.0-rc1": "0.16.0~rc1",
+            "2.0.0-beta.98": "2.0.0~beta.98",
+        }.items():
+            with self.subTest(version=version):
+                self.assertEqual(self.versions(version), (package, package, "1"))
+
+    def test_package_versions_rise_with_the_release(self):
+        needs(self, "dpkg", "rpm")
+        rows = [self.versions(version) for version in self.VERSIONS]
+        for before, after in zip(rows, rows[1:]):
+            with self.subTest(before=before[0], after=after[0]):
+                dpkg = subprocess.run(["dpkg", "--compare-versions", before[0], "lt", after[0]])
+                self.assertEqual(dpkg.returncode, 0)
+                # The comparison dnf and zypper make, which answers -1 where the first is older.
+                vercmp = f"%{{lua:print(rpm.vercmp('{before[1]}', '{after[1]}'))}}"
+                rpm = subprocess.run(["rpm", "--eval", vercmp], capture_output=True, text=True)
+                self.assertEqual(rpm.returncode, 0, rpm.stderr)
+                self.assertEqual(rpm.stdout.strip(), "-1")
+
+    def test_a_version_it_cannot_number_is_refused(self):
+        for version in (
+            "1.0",
+            "1.0.0.1",
+            "01.0.0",
+            "1.0.0-rc0",
+            "1.0.0-rc01",
+            "1.0.0-rc.1",
+            "1.0.0-beta.0",
+            "1.0.0-beta.99",
+            "1.0.0-beta1",
+            "1.0.0-alpha.1",
+            "0.15.0-beta.1",
+            "1.0.0~rc1",
+            "1.0.0+1",
+            "v1.0.0",
+            "",
+            "1.0.0\n2.0.0",
+        ):
+            with self.subTest(version=version):
+                done = run(LINUX_VERSIONS, version)
+                self.assertEqual(done.returncode, 1)
+                self.assertEqual(done.stdout, "")
+                self.assertIn(NO_PACKAGE_VERSION, done.stderr)
+
+    def test_it_takes_one_argument(self):
+        for args in ((), ("1.0.0", "1.0.1")):
+            with self.subTest(args=args):
+                done = run(LINUX_VERSIONS, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+
+
+class RepositoryKey(unittest.TestCase):
+    PRIMARY = "22DCF748069770D807A1804F47C507760C9A97E3"
+    SIGNING = "C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8"
+    DAY = 86400
+    # Every key here is made at the start of the day the tests run, in UTC, so each lasts to the
+    # same second whatever the hour, and gpg, which judges a subkey expired by its own clock,
+    # finds it as the case made it.
+    MADE_AT = int(time.time()) // DAY * DAY
+
+    def setUp(self):
+        needs(self, "gpg")
+        self.work = Path(tempfile.mkdtemp())
+        home = self.work / "gnupg"
+        home.mkdir(mode=0o700)
+        self.tmp = self.work / "tmp"
+        self.tmp.mkdir()
+        self.env = {**os.environ, "GNUPGHOME": str(home)}
+        self.made = 0
+
+    def tearDown(self):
+        subprocess.run(["gpgconf", "--kill", "all"], env=self.env, capture_output=True)
+        shutil.rmtree(self.work)
+
+    def gpg(self, *args, made=None, given=None):
+        done = subprocess.run(
+            ["gpg", "--batch", "--quiet", "--passphrase", "", "--faked-system-time",
+             f"{self.MADE_AT if made is None else made}!", *args],
+            input=given,
+            capture_output=True,
+            text=True,
+            env=self.env,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def key(self, usage="cert", lasts=10 * 365, subkeys=(("sign", 2 * 365),), sha1=(), made=0):
+        # Each key lasts that many days from when it is made, or for ever where None, and the
+        # primary is made that many days before MADE_AT. A subkey made earlier than MADE_AT names
+        # the days before it third. sha1 names what is signed with SHA-1: the user ID's
+        # self-signature, or each subkey's binding and back signature.
+        def expiry(days):
+            return "never" if days is None else f"seconds={days * self.DAY}"
+
+        weak = ["--cert-digest-algo", "SHA1", "--allow-weak-key-signatures"]
+        algo = "rsa2048" if sha1 else "ed25519"
+        self.made += 1
+        made = self.gpg(
+            *(weak if "user ID" in sha1 else []),
+            "--status-fd", "1",
+            "--quick-gen-key", f"Test {self.made}", algo, usage, expiry(lasts),
+            made=self.MADE_AT - made * self.DAY,
+        )
+        fingerprint = re.search(r"KEY_CREATED [PB] ([0-9A-F]{40})", made).group(1)
+        for subkey_usage, subkey_lasts, *before in subkeys:
+            self.gpg(
+                *(weak if "binding" in sha1 else []),
+                "--quick-add-key", fingerprint,
+                "cv25519" if subkey_usage == "encr" and not sha1 else algo,
+                subkey_usage, expiry(subkey_lasts),
+                made=self.MADE_AT - (before[0] if before else 0) * self.DAY,
+            )
+        return fingerprint
+
+    def exported(self, fingerprint):
+        path = self.work / f"{fingerprint}.asc"
+        self.gpg("--armor", "--output", str(path), "--yes", "--export", fingerprint)
+        return path
+
+    def subkeys(self, fingerprint):
+        listed = self.gpg("--with-colons", "--with-subkey-fingerprints", "--list-keys", fingerprint)
+        return re.findall(r"^fpr:+([0-9A-F]{40}):", listed, re.M)[1:]
+
+    # Revokes the primary's nth subkey, from 1, as an owner revokes a lost one with gpg's
+    # --edit-key: no reason given beside that one.
+    def revoke(self, fingerprint, nth):
+        self.gpg(
+            "--command-fd", "0", "--edit-key", fingerprint,
+            given=f"key {nth}\nrevkey\ny\n0\n\ny\nsave\n",
+        )
+
+    def at(self, days):
+        return str(self.MADE_AT + days * self.DAY)
+
+    def checked(self, key, now):
+        done = subprocess.run(
+            ["sh", LINUX_REPOSITORY_KEY, key, now],
+            capture_output=True,
+            text=True,
+            env={**self.env, "TMPDIR": str(self.tmp)},
+        )
+        self.assertEqual(os.listdir(self.tmp), [], "it left its GNUPGHOME behind")
+        return done
+
+    def assertPasses(self, done):
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        return dict(line.split("=", 1) for line in done.stdout.splitlines())
+
+    def assertRefused(self, done, said):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertEqual(done.stdout, "")
+        self.assertIn(said, done.stderr)
+
+    def test_the_committed_key_is_the_owners(self):
+        # 2026-10-28, when the owner made it.
+        done = self.checked(REPOSITORY_KEY, "1793145600")
+        self.assertPasses(done)
+        # The signing subkey expires at 2028-10-27 11:00:12 UTC.
+        self.assertEqual(
+            done.stdout,
+            f"primary={self.PRIMARY}\nsigning={self.SIGNING}\nexpires=1856257212\n",
+        )
+        listed = subprocess.run(
+            ["gpg", "--batch", "--quiet", "--with-colons", "--with-subkey-fingerprints",
+             "--show-keys", REPOSITORY_KEY],
+            capture_output=True,
+            text=True,
+            env=self.env,
+        )
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        records = [line.split(":") for line in listed.stdout.splitlines()]
+        # RSA 4096 each: the primary certifies to 2036-10-25, and the subkey signs.
+        self.assertEqual(
+            [(r[0], r[2], r[3], r[6], r[11]) for r in records if r[0] in ("pub", "sub")],
+            [("pub", "4096", "1", "2108545210", "cSC"), ("sub", "4096", "1", "1856257212", "s")],
+        )
+        self.assertEqual([r[9] for r in records if r[0] == "fpr"], [self.PRIMARY, self.SIGNING])
+        # RELEASING.md's last second before CI fails, 2028-04-30 11:00:12 UTC.
+        self.assertPasses(self.checked(REPOSITORY_KEY, "1840705212"))
+        self.assertRefused(self.checked(REPOSITORY_KEY, "1840705213"), "has 179 days left")
+
+    def test_a_signing_subkey_with_fewer_than_180_days_left_is_refused(self):
+        key = self.exported(self.key(subkeys=(("sign", 400),)))
+        found = self.assertPasses(self.checked(key, self.at(400 - 180)))
+        self.assertEqual(found["primary"], key.stem)
+        self.assertEqual(found["expires"], self.at(400))
+        for now, left in (
+            (str(self.MADE_AT + (400 - 180) * self.DAY + 1), "179 days"),
+            (self.at(399), "1 day"),
+            (self.at(400), "no day"),
+            (self.at(2000), "no day"),
+        ):
+            with self.subTest(now=now):
+                done = self.checked(key, now)
+                self.assertRefused(
+                    done, f"{found['signing']} has {left} left: extend the key 180 days ahead"
+                )
+
+    def test_a_primary_that_expires_first_shortens_its_subkey(self):
+        primary = self.key(lasts=300, subkeys=(("sign", 2 * 365),))
+        key = self.exported(primary)
+        self.assertPasses(self.checked(key, self.at(300 - 180)))
+        self.assertRefused(
+            self.checked(key, self.at(300 - 179)),
+            f"has 179 days left, until its primary {primary} expires",
+        )
+
+    def test_a_key_with_no_signing_subkey_or_two_is_refused(self):
+        none = "has no signing subkey that is neither revoked nor expired"
+        for subkeys, said in (
+            ((), none),
+            ((("encr", 400),), none),
+            ((("sign", 400), ("sign", 800)), "has 2 signing subkeys"),
+            ((("sign", 400), ("encr", 400), ("sign", 800)), "has 2 signing subkeys"),
+            # Made 100 days ago for 30, so expired by gpg's clock.
+            ((("sign", 30, 100),), none),
+        ):
+            with self.subTest(subkeys=subkeys):
+                key = self.exported(self.key(subkeys=subkeys, made=100))
+                self.assertRefused(self.checked(key, self.at(0)), said)
+
+    def test_a_subkey_revoked_or_expired_beside_a_new_one_is_left_out(self):
+        rotated = self.key(subkeys=(("sign", 2 * 365), ("sign", 2 * 365)), made=100)
+        old, new = self.subkeys(rotated)
+        self.revoke(rotated, 1)
+        expired = self.key(subkeys=(("sign", 30, 100), ("sign", 2 * 365)), made=100)
+        for primary, kept in ((rotated, new), (expired, self.subkeys(expired)[1])):
+            with self.subTest(primary=primary):
+                found = self.assertPasses(self.checked(self.exported(primary), self.at(0)))
+                self.assertEqual((found["primary"], found["signing"]), (primary, kept))
+                self.assertEqual(found["expires"], self.at(2 * 365))
+        listed = self.gpg("--with-colons", "--list-keys", rotated)
+        self.assertEqual([r.split(":")[1] for r in listed.splitlines() if r.startswith("sub:")],
+                         ["r", "u"])
+        self.assertNotEqual(old, new)
+
+    def test_a_signing_subkey_that_never_expires_is_refused(self):
+        key = self.exported(self.key(subkeys=(("sign", None),)))
+        self.assertRefused(self.checked(key, self.at(0)), "never expires")
+
+    def test_a_primary_that_signs_is_refused(self):
+        primary = self.key(usage="sign")
+        self.assertRefused(
+            self.checked(self.exported(primary), self.at(0)), f"the primary key {primary} signs"
+        )
+
+    def test_a_signature_under_sha_256_is_refused(self):
+        for sha1, refused in (
+            (("user ID",), ["class 0x13: SHA-1"]),
+            (("binding",), ["class 0x18: SHA-1", "class 0x19: SHA-1"]),
+        ):
+            with self.subTest(sha1=sha1):
+                done = self.checked(self.exported(self.key(sha1=sha1)), self.at(0))
+                self.assertRefused(done, "holds signatures under SHA-256, which apt's sqv refuses")
+                self.assertEqual([line.strip() for line in done.stderr.splitlines()[1:]], refused)
+
+    def test_a_file_that_holds_no_key_or_two_is_refused(self):
+        two = self.work / "two.asc"
+        two.write_text(
+            self.exported(self.key()).read_text() + self.exported(self.key()).read_text()
+        )
+        not_a_key = self.work / "not-a-key.asc"
+        not_a_key.write_text("Pitboard\n")
+        for path, said in (
+            (two, "holds 2 primary keys"),
+            (not_a_key, "gpg read no key from"),
+            (self.work / "missing.asc", "gpg read no key from"),
+        ):
+            with self.subTest(path=path.name):
+                self.assertRefused(self.checked(path, self.at(0)), said)
+
+    def test_it_takes_a_key_and_seconds_since_the_epoch(self):
+        for args in (
+            (REPOSITORY_KEY,),
+            (REPOSITORY_KEY, "1793145600", "1793145601"),
+            (REPOSITORY_KEY, "2026-10-28"),
+            (REPOSITORY_KEY, ""),
+            (REPOSITORY_KEY, "-1"),
+            (REPOSITORY_KEY, "1793145600\n1856257212"),
+        ):
+            with self.subTest(args=args[1:]):
+                done = run(LINUX_REPOSITORY_KEY, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage: linux-repository-key.sh <public key> <seconds", done.stderr)
+
+
+class PackCommandLine(unittest.TestCase):
+    NAME = "pitboard-v1.0.0-beta.7-aarch64-unknown-linux-musl"
+    # A stand-in for the command line, which writes its man page and completions as pitboard does.
+    STAND_IN = """#!/bin/sh
+case $1 in
+  manpage) echo '.TH pitboard 1 "pitboard 1.0.0-beta.7"' ;;
+  completions) echo "# pitboard's $2 completions" ;;
+  *) exit 64 ;;
+esac
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        self.binary = self.work / "release" / "pitboard"
+        self.binary.parent.mkdir()
+        self.binary.write_text(self.STAND_IN)
+        self.binary.chmod(0o755)
+        self.out = self.work / "dist"
+
+    def test_the_tarball_holds_the_command_line_its_man_page_and_completions(self):
+        done = run(PACK_COMMAND_LINE, self.binary, self.NAME, self.out)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(os.listdir(self.out), [f"{self.NAME}.tar.gz"])
+        with tarfile.open(self.out / f"{self.NAME}.tar.gz") as tar:
+            files = {
+                member.name.removeprefix(f"{self.NAME}/"): member
+                for member in tar.getmembers()
+                if member.isfile()
+            }
+            read = {name: tar.extractfile(member).read() for name, member in files.items()}
+            self.assertEqual(
+                {member.name for member in tar.getmembers() if member.isdir()},
+                {self.NAME, f"{self.NAME}/completions"},
+            )
+        self.assertEqual(
+            set(read),
+            {
+                "pitboard",
+                "pitboard.1",
+                "completions/pitboard.bash",
+                "completions/pitboard.zsh",
+                "completions/pitboard.fish",
+                "LICENSE",
+                "NOTICE",
+                "README.md",
+            },
+        )
+        self.assertEqual(read["pitboard"], self.binary.read_bytes())
+        self.assertEqual(files["pitboard"].mode & 0o111, 0o111)
+        self.assertEqual(read["pitboard.1"], b'.TH pitboard 1 "pitboard 1.0.0-beta.7"\n')
+        for shell in ("bash", "zsh", "fish"):
+            self.assertEqual(
+                read[f"completions/pitboard.{shell}"], f"# pitboard's {shell} completions\n".encode()
+            )
+        for file in ("LICENSE", "NOTICE", "README.md"):
+            self.assertEqual(read[file], (REPO / file).read_bytes())
+
+    def test_a_command_line_that_writes_no_man_page_packs_nothing(self):
+        self.binary.write_text(self.STAND_IN.replace("manpage)", "never)"))
+        done = run(PACK_COMMAND_LINE, self.binary, self.NAME, self.out)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertFalse(self.out.exists() and os.listdir(self.out))
+
+    def test_it_takes_three_arguments(self):
+        for args in ((self.binary, self.NAME), (self.binary, self.NAME, self.out, self.out)):
+            with self.subTest(args=len(args)):
+                done = run(PACK_COMMAND_LINE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+
+
+class LinuxSessionBundle(unittest.TestCase):
+    NAME = "session-build-aarch64-linux"
+    FILES = (
+        "pitboard-v1.0.0-beta.7-aarch64.rpm",
+        "pitboard-app-v1.0.0-beta.7-aarch64.deb",
+        "pitboard-v1.0.0-beta.7-aarch64.deb",
+        "pitboard-archive-keyring-v1.0.0-beta.7-all.deb",
+        "pitboard-app-v1.0.0-beta.7-aarch64.rpm",
+    )
+    HEADER = b"age-encryption.org/v1\n-> X25519 stand-in\n"
+    # A stand-in for age on PATH that keeps what it was asked and writes age's header for an X25519
+    # key before the tar, or with STAND_IN_AGE=plain the tar alone, or with STAND_IN_AGE=fails part
+    # of it before failing.
+    STAND_IN = r"""#!/bin/sh
+printf '%s\n' "$*" >"$STAND_IN_AGE_ASKED"
+case ${STAND_IN_AGE-} in
+  plain) cat "$6" >"$5" ;;
+  fails)
+    head -c 64 "$6" >"$5"
+    exit 1
+    ;;
+  *) { printf 'age-encryption.org/v1\n-> X25519 stand-in\n'; cat "$6"; } >"$5" ;;
+esac
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        tools = self.work / "bin"
+        tools.mkdir()
+        (tools / "age").write_text(self.STAND_IN)
+        (tools / "age").chmod(0o755)
+        self.asked = self.work / "asked"
+        self.env = {
+            **{name: value for name, value in os.environ.items() if name != "STAND_IN_AGE"},
+            "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+            "STAND_IN_AGE_ASKED": str(self.asked),
+        }
+        self.out = self.work / "sealed"
+        self.sealed = self.out / f"{self.NAME}.tar.age"
+
+    def folder(self, under, files):
+        folder = self.work / under
+        folder.mkdir()
+        for name in files:
+            path = folder / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"{name}\n")
+        return folder
+
+    def pack(self, folder, name=NAME, **env):
+        return subprocess.run(
+            ["sh", PACK_LINUX_SESSION_BUNDLE, folder, name, self.out, "age", SessionGate.KEY],
+            capture_output=True,
+            text=True,
+            env={**self.env, **env},
+        )
+
+    def assertRefused(self, done, said, folder):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(said, done.stderr)
+        self.assertFalse(self.asked.exists())
+        self.assertFalse((folder / "SHA256SUMS").exists())
+
+    def test_the_bundle_is_the_folder_summed_and_sealed_to_the_key(self):
+        folder = self.folder("session", self.FILES)
+        done = self.pack(folder)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, f"{self.sealed}\n")
+        self.assertEqual(os.listdir(self.out), [self.sealed.name])
+        asked = self.asked.read_text().split()
+        self.assertEqual(
+            asked[:5], ["--encrypt", "--recipient", SessionGate.KEY, "--output", str(self.sealed)]
+        )
+        self.assertEqual(len(asked), 6)
+        self.assertEqual(Path(asked[5]).name, f"{self.NAME}.tar")
+        self.assertFalse(Path(asked[5]).exists())
+        listed = sorted(self.FILES)
+        sums = "".join(
+            f"{hashlib.sha256((folder / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in listed
+        )
+        self.assertEqual((folder / "SHA256SUMS").read_text(), sums)
+        sealed = self.sealed.read_bytes()
+        self.assertEqual(sealed[: len(self.HEADER)], self.HEADER)
+        with tarfile.open(fileobj=io.BytesIO(sealed[len(self.HEADER) :])) as tar:
+            members = tar.getmembers()
+            packed = {m.name: tar.extractfile(m).read() for m in members if m.isfile()}
+        self.assertEqual(
+            packed,
+            {
+                f"{self.NAME}/{name}": (folder / name).read_bytes()
+                for name in [*listed, "SHA256SUMS"]
+            },
+        )
+        self.assertEqual([m.name for m in members if m.isdir()], [self.NAME])
+
+    def test_a_folder_with_nothing_to_ship_is_refused(self):
+        for under, files in (("empty", ()), ("hollow", ("deb/",))):
+            with self.subTest(folder=under):
+                folder = self.folder(under, ())
+                for name in files:
+                    (folder / name).mkdir()
+                done = self.pack(folder)
+                self.assertRefused(done, f"{folder} holds nothing to pack", folder)
+                self.assertFalse(self.out.exists())
+
+    def test_what_was_packed_already_is_refused(self):
+        summed = self.folder("summed", (*self.FILES, "SHA256SUMS"))
+        done = self.pack(summed)
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(f"{summed} holds a SHA256SUMS already", done.stderr)
+        self.assertEqual((summed / "SHA256SUMS").read_text(), "SHA256SUMS\n")
+        self.assertFalse(self.asked.exists())
+        self.out.mkdir()
+        self.sealed.write_bytes(b"an earlier bundle")
+        folder = self.folder("session", self.FILES)
+        self.assertRefused(self.pack(folder), f"{self.sealed} is there already", folder)
+        self.assertEqual(self.sealed.read_bytes(), b"an earlier bundle")
+
+    def test_a_name_with_a_space_is_refused(self):
+        for under, name in (
+            ("space", "pitboard a.deb"),
+            ("newline", "pitboard\na.deb"),
+            ("tab", "deb\tfolder/pitboard.deb"),
+        ):
+            with self.subTest(name=name):
+                folder = self.folder(under, (*self.FILES, name))
+                done = self.pack(folder)
+                self.assertRefused(done, "has a space in its name, which SHA256SUMS cannot name", folder)
+
+    def test_a_name_that_is_not_a_session_bundles_is_refused(self):
+        folder = self.folder("session", self.FILES)
+        for name in (
+            "session-build-",
+            "session-build-Aarch64-linux",
+            "build-aarch64-linux",
+            "session-build-../aarch64-linux",
+            "session-build-aarch64 linux",
+        ):
+            with self.subTest(name=name):
+                done = self.pack(folder, name)
+                self.assertRefused(done, f"{name} is not a session bundle's name", folder)
+
+    def test_nothing_is_left_of_a_bundle_age_did_not_encrypt(self):
+        for under, age, said in (
+            ("plain", "plain", "does not read as encrypted to an X25519 key"),
+            ("fails", "fails", "age exited 1"),
+        ):
+            with self.subTest(age=age):
+                folder = self.folder(under, self.FILES)
+                done = self.pack(folder, STAND_IN_AGE=age)
+                self.assertEqual(done.returncode, 1, done.stdout)
+                self.assertIn(said, done.stderr)
+                self.assertEqual(done.stdout, "")
+                self.assertEqual(os.listdir(self.out), [])
+                self.assertFalse((folder / "SHA256SUMS").exists())
+                self.assertFalse(Path(self.asked.read_text().split()[5]).exists())
+                self.asked.unlink()
+
+    def test_it_takes_five_arguments(self):
+        folder = self.folder("session", self.FILES)
+        given = (folder, self.NAME, self.out, "age", SessionGate.KEY)
+        for args in (given[:4], (*given, "more")):
+            with self.subTest(args=len(args)):
+                done = run(PACK_LINUX_SESSION_BUNDLE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+                self.assertFalse((folder / "SHA256SUMS").exists())
 
 
 class ScriptCalls(unittest.TestCase):

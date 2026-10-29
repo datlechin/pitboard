@@ -146,7 +146,8 @@ jobs:
           name: junit-${{ matrix.triple }}
           path: target/nextest/ci/junit.xml
 
-  # The install script under each shell named here, with no network, and the release's scripts.
+  # The install script under each shell named here, with no network, the release's scripts, and
+  # the Linux repository's key.
   install-script:
     strategy:
       fail-fast: false
@@ -154,6 +155,7 @@ jobs:
         include:
           - os: ubuntu-latest
             shells: sh dash bash zsh busybox
+            tools: dpkg rpm gpg
           - os: macos-latest
             shells: sh dash bash zsh
     runs-on: ${{ matrix.os }}
@@ -163,11 +165,12 @@ jobs:
         with:
           persist-credentials: false
       # The Ubuntu image has neither zsh nor BusyBox, and the script has to run under both, nor
-      # the validators check-linux-app.sh runs.
+      # the validators check-linux-app.sh runs. rpm compares the Linux packages' versions as dnf
+      # and zypper do.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh busybox desktop-file-utils appstream
+          sudo apt-get install -y zsh busybox desktop-file-utils appstream rpm
       # 0.11.0 takes test's -ef from POSIX.1-2024; the Ubuntu image has 0.9.0.
       - if: runner.os == 'Linux'
         uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
@@ -180,19 +183,29 @@ jobs:
           .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
           .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
-          apps/macos/scripts/build-number.sh
+          .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh
+          .github/scripts/pack-command-line.sh apps/macos/scripts/build-number.sh
           .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
           apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
           apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
           apps/linux/plasmoid/tests/run-tests.sh
+          .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
+          .github/scripts/test-linux-packages.sh .github/scripts/pack-linux-session-bundle.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
-      - run: python3 .github/scripts/test-release.py
+      - env:
+          TEST_RELEASE_TOOLS: ${{ matrix.tools }}
+        run: python3 .github/scripts/test-release.py
       # check-linux-app.sh's cases need Linux's validators, which macOS lacks.
       - env:
           TEST_LINUX_APP_TOOLS: ${{ runner.os == 'Linux' && 'desktop-file-validate appstreamcli' || '' }}
         run: python3 .github/scripts/test-linux-app.py
+      - name: The repository key has 180 days left
+        if: runner.os == 'Linux'
+        run: >
+          sh .github/scripts/linux-repository-key.sh packaging/linux/pitboard-archive-keyring.asc
+          "$(date -u +%s)"
 
   # Every test Windows leaves out, by an ignore, a cfg or an early return, gives a reason
   # .github/scripts/windows-pending.py accepts.
@@ -1210,6 +1223,60 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # The Debian and RPM packages on both machines they are for, with in-container.sh's steps, as a
+  # contributor runs them: the command line packed as a release packs it, the packages built on
+  # Debian 13 or Fedora 43 from the commit and checked, the check's own tests, and the packages
+  # installed on fresh Debian 13 and Ubuntu 26.04, or Fedora 43, Fedora 44 and Tumbleweed, images
+  # and removed again.
+  linux-packaging:
+    name: linux-packaging (${{ matrix.format }}, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+            format: deb
+            distro: debian-13
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            format: deb
+            distro: debian-13
+          - os: ubuntu-26.04
+            arch: x86_64
+            format: rpm
+            distro: fedora-43
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            format: rpm
+            distro: fedora-43
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      FORMAT: ${{ matrix.format }}
+      DISTRO: ${{ matrix.distro }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # in-container.sh fills the Cargo registry here with `cargo metadata`.
+      - uses: ./.github/actions/rust
+        with:
+          cache: "false"
+      - run: apps/linux/scripts/in-container.sh debian-13 command-line "$RUNNER_TEMP/command-line"
+      - run: >
+          git archive HEAD | apps/linux/scripts/in-container.sh "$DISTRO" "$FORMAT"
+          "$RUNNER_TEMP"/command-line/pitboard-v*.tar.gz "$RUNNER_TEMP/packages"
+      - run: apps/linux/scripts/in-container.sh "$DISTRO" packages-test
+      - run: sh .github/scripts/test-linux-packages.sh "$FORMAT" "$RUNNER_TEMP/packages"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-packages-${{ matrix.format }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/packages/*.${{ matrix.format }}
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
   msrv:
     runs-on: ubuntu-latest
@@ -1280,10 +1347,10 @@ jobs:
       # The update key rehearsal ships bundles that really do update themselves, so it must
       # never be able to reach the real key, the real certificate or the real feed.
       # windows-facts.yml and linux-facts.yml run on whatever branch they are dispatched on, and
-      # windows-facts.yml's session job ships a bundle off the runner. A workflow that never names
-      # secrets cannot be handed one, and that is worth knowing on the pull request that changes
-      # it rather than the month after.
-      - name: The update key rehearsal, the runner facts and the session bundle name no repository secret
+      # their session jobs ship a bundle off the runner. A workflow that never names secrets
+      # cannot be handed one, and that is worth knowing on the pull request that changes it
+      # rather than the month after.
+      - name: The update key rehearsal, the runner facts and the session bundles name no repository secret
         run: |
           for workflow in rotation.yml windows-facts.yml linux-facts.yml; do
             if grep -qw secrets ".github/workflows/$workflow"; then
@@ -1424,6 +1491,7 @@ jobs:
       - linux-app
       - linux-app-floor
       - linux-app-fedora
+      - linux-packaging
       - msrv
       - semver
       - deny

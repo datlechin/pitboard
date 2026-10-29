@@ -290,7 +290,7 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   as root and make the user it runs headless mutter as. It undoes each in a trap. Never copy
   one of those changes into a script meant for a person's machine.
 - `linux-facts.yml` stays `workflow_dispatch` only, names no secret, and uploads only its
-  redacted reports.
+  redacted reports and the session bundle encrypted to the owner's age key.
 - Never write to or delete from the `pitboard-packages` bucket, or anything served at
   `packages.usepitboard.com`, by hand. `release.yml` writes them on a `v*` tag, from the
   `linux-packages` environment.
@@ -345,7 +345,7 @@ app read and write the accounts' own homes and Secret Service items.
   runner only encrypted with age to the owner's key, and is deleted from GitHub once
   downloaded, a day at most. It reaches a machine from the owner's Mac, never by a download
   there with a GitHub sign-in, and is deleted from both after the session. Never install it
-  anywhere else. Until a later pull request adds that job, nothing builds one.
+  anywhere else.
 - Never run a session on a machine or an account that has ever held a real login, or over SSH
   or a remote desktop. Only the owner signs in, by hand, at the console. A session ends with
   the revert the owner chose, and its machine stopped: only one runs at a time.

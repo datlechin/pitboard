@@ -8,8 +8,8 @@ use pitboard_linux::dialogs::question::CANCEL;
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::stand_in;
 use pitboard_linux::preferences::Preferences;
-use pitboard_linux::preferences::advanced::{QUIT, removal_alert};
-use pitboard_model::{Intent, Package, PackageRemoval, RemovalShown};
+use pitboard_linux::preferences::advanced::{QUIT, os_release, removal_alert};
+use pitboard_model::{Intent, OsRelease, Package, PackageRemoval, RemovalShown};
 
 use super::views::{Viewed, button, every};
 
@@ -60,7 +60,7 @@ fn uninstall_removes_the_apps_leftovers_and_names_the_package_command() {
         .dialog()
         .downcast::<adw::AlertDialog>()
         .expect("what the package manager removes");
-    let removal = pitboard_model::package_removal(config::PACKAGE, &[]);
+    let removal = pitboard_model::package_removal(config::PACKAGE, &os_release(), &[]);
     assert_eq!(said.heading().as_deref(), Some(removal.title.as_str()));
     assert_eq!(said.body(), removal.message);
     assert_eq!(
@@ -80,7 +80,11 @@ fn uninstall_removes_the_apps_leftovers_and_names_the_package_command() {
 #[gtk::test]
 fn the_package_command_is_shown_beside_its_copy_button() {
     adw::init().unwrap();
-    let removal: PackageRemoval = pitboard_model::package_removal(Package::Rpm, &[]);
+    let fedora = OsRelease {
+        id: Some("fedora".into()),
+        id_like: None,
+    };
+    let removal: PackageRemoval = pitboard_model::package_removal(Package::Rpm, &fedora, &[]);
 
     let alert = removal_alert(&removal);
 

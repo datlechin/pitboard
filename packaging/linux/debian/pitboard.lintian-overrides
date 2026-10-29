@@ -1,0 +1,6 @@
+# Built static against musl, so that one binary runs on every Linux whatever its C library: the
+# release tarball's, which install.sh installs too.
+pitboard: statically-linked-binary [usr/bin/pitboard]
+# On x86_64 Rust links it static-pie: an ELF of type DYN that needs no library, which lintian takes
+# for a shared library.
+pitboard: shared-library-lacks-prerequisites [usr/bin/pitboard]

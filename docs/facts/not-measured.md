@@ -1,8 +1,8 @@
 # Not measured
 
 What nobody has measured about Claude Code, Codex, Claude Desktop, watching Pitboard's
-directory, the Linux app and its checks, and what Pitboard does where it cannot know. What was
-read or measured is in each tool's register,
+directory, the Linux app, its checks and its packages, and what Pitboard does where it cannot
+know. What was read or measured is in each tool's register,
 `crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
 [The app model](app-model.md#watching-pitboards-directory).
 
@@ -43,7 +43,9 @@ not measured, and the register cannot hold them, since every fact in it is read 
   as Claude Code does, and asks for a sign-in within 3 days of it.
 - The 33 seconds on a build after 2.1.278, and on Linux at all. `credential_cache` is read on
   both systems and was measured on macOS with 2.1.278 alone: no Linux session with real
-  logins has been run. Pitboard gives 33 seconds on every system.
+  logins has been run, on the packages of the bundle `linux-facts.yml` builds
+  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)). Pitboard gives
+  33 seconds on every system.
 
 ## Codex
 
@@ -168,12 +170,15 @@ These were not measured. Each says what Pitboard does where it cannot know.
   `plasma-kwallet-pam.service`, which nothing orders before the target
   ([linux.md](linux.md#the-graphical-sessions-target)). Renewal runs then as any scheduled run
   does: refused, it keeps the refusal, and the next run tries again. The Linux session machines
-  measure it, under a lingering user manager too, before and after the first sign-in.
+  measure it on the packages of the bundle `linux-facts.yml`'s `session` job builds
+  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)), under a lingering
+  user manager too, before and after the first sign-in.
 - How `/proc` names npm's `claude` and `codex` on x86_64 and on GitHub's runners:
   `linux-facts.yml`'s `installs` job starts the stand-in in the place of each program, as Docker
   on the Mac did on arm64 ([linux.md](linux.md#the-tools-processes)). What either tool
-  does to its own name once it runs is measured only on the Linux session machines, since
-  nothing else runs them. Pitboard finds a tool's process by its `comm` alone.
+  does to its own name once it runs is measured only on the Linux session machines, with the
+  session bundle's packages, since nothing else runs them. Pitboard finds a tool's process by its
+  `comm` alone.
 - The process names of the programs Homebrew's Linux casks install, which no script installs
   ([linux.md](linux.md#homebrew-on-linux)). Each cask links its program into
   `$HOMEBREW_PREFIX/bin` under the tool's own name.
@@ -250,9 +255,24 @@ in a desktop's session. Not measured, each for the Linux session machines:
 - Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
   by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
   one, then ends where none came.
-- Whether the rpm installs and runs on openSUSE Tumbleweed, as on Fedora. Until a package is
-  built and installed there, Uninstall names `sudo dnf remove` alone for the rpm.
+- Whether the app runs on openSUSE Tumbleweed, which no session machine is. Its rpm installs
+  there, zypper removes it ([The RPM packages](linux-packages.md#the-rpm-packages)), and
+  Uninstall names zypper there ([GNOME's words](linux-app.md#gnomes-words)).
 - What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
   `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
   ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
   nothing sets it, the app says 24 hour times, the schema's default, whatever Plasma shows.
+
+## The Linux packages
+
+Every build and install in [the packages' facts](linux-packages.md) is arm64, in Docker on a
+Mac. Not measured:
+
+- An x86_64 build or install of either format. rpmlint's verdict on the x86_64 command line was
+  read from an rpm `rpmbuild --target x86_64` made of the released binary.
+- The packages on a desktop with a real session: installed, started and removed on Fedora with
+  GNOME and with KDE Plasma, Ubuntu 26.04 and Debian 13. The Linux session machines measure it on
+  the bundle `linux-facts.yml`'s `session` job builds
+  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)).
+- That job on `ubuntu-26.04-arm`: it has not run, so neither has its age download or its `jq`
+  there. Its steps ran on the Mac ([the session bundle](linux-packages.md#the-session-bundle)).

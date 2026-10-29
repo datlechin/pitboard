@@ -221,14 +221,17 @@ The apps:
 
 The rest:
 
-- `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills.
+- `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills, and in
+  `linux/` the Linux repository's public key, the Debian packages' `debian/` recipe, which
+  `build-linux-packages.sh` copies into the source it builds, the RPM packages' spec and
+  rpmlint's filters, and the images the packages' install test builds, one per package manager.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
   `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
-  session bundle, `linux-facts.yml` for the Linux runners, `rotation.yml` for the update key's
-  rehearsal, and `sparkle.yml` and `winsparkle.yml` for new releases of the updaters and the
-  Windows App SDK.
+  session bundle, `linux-facts.yml` for the Linux runners and the Linux session bundle,
+  `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and `winsparkle.yml` for new
+  releases of the updaters and the Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
 - `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
   `test-windows-app.ps1` and `test-windows-release.ps1`.
@@ -290,6 +293,19 @@ keeps it is in the header of the module named.
   Authenticode signature. `check-windows-app.ps1` fails a Release build without the key, and
   `windows-update-key.sh` a key that changed since the last MSI unless a rotation names the
   release.
+- The Linux repository's signing subkey has 180 days left whenever CI passes:
+  `linux-repository-key.sh` in `install-script` fails otherwise (`RepositoryKey`).
+- A Linux package's command line is the release tarball's file, byte for byte
+  (`a_command_line_that_is_not_the_tarballs_is_refused`), and the app's package depends on the
+  command line of its own version
+  (`an_app_that_does_not_depend_on_its_own_command_line_is_refused`), in a deb and in an rpm.
+- The app's package needs the floor's libadwaita, GTK and GLib by version, in a deb and in an
+  rpm, where the libraries' own sonames name no floor
+  (`an_app_without_the_floors_libraries_is_refused`).
+- An RPM package is in RPM's format 4, which every RPM of the floor reads, whatever format the
+  RPM that built it writes by default (`a_package_in_rpm_format_6_is_refused`).
+- A test installs a deb or an rpm only while it builds a container image, and runs Pitboard's
+  programs there only as uid 1000 with no network (`test-linux-packages.sh`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`
