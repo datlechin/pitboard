@@ -109,7 +109,9 @@ binutils 2.44 and rustup's stable, Rust 1.99.1.
   warns "diversions involved - output may be incorrect" over libc6's diversion of
   `/lib/ld-linux-aarch64.so.1`.
 - lintian, `--pedantic --display-info`: an error `statically-linked-binary` on
-  `/usr/bin/pitboard`, which `pitboard.lintian-overrides` overrides; information tags
+  `/usr/bin/pitboard`, which `pitboard.lintian-overrides` overrides, and on x86_64, where the
+  command line is "static-pie linked", a warning `shared-library-lacks-prerequisites` on it,
+  overridden too (CI run 40960061292); information tags
   `binary-has-unneeded-section .comment` on the command line and `hardening-no-fortify-functions`
   on the app; nothing else. On a test's package, `non-standard-file-perm` is a warning, and a file
   that begins as an ELF file does but is not one is `binary-from-other-architecture`, an error.
