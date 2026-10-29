@@ -419,6 +419,9 @@ pub struct Context {
     // its dialog: with a display, `WAYLAND_DISPLAY` or `DISPLAY`, and not over SSH, whose
     // forwarded display is not the one the prompter shows on.
     pub(crate) desktop_session: bool,
+    // Whether a person dismissed the keyring's unlock prompt in this run, shared by every copy
+    // of the context, so it is not put up again for each question.
+    pub(crate) prompt_dismissed: Arc<std::sync::atomic::AtomicBool>,
     /// The scheduler's job this process runs as, where a test says. `None` is whatever the
     /// scheduler said when it started this process.
     pub(crate) scheduled_job: Option<String>,
@@ -583,6 +586,25 @@ impl Context {
         self.desktop_session
     }
 
+    /// Whether a person dismissed the keyring's unlock prompt in this run.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn unlock_was_dismissed(&self) -> bool {
+        self.prompt_dismissed
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn unlock_dismissed(&self) {
+        self.prompt_dismissed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
     // The one the schedule renews, whatever `PITBOARD_HOME` says.
     pub(crate) fn default_pitboard_home(&self) -> PathBuf {
         self.os.default_pitboard_home(&self.home)
@@ -645,6 +667,7 @@ impl Context {
             runtime_dir: None,
             session_bus_address: None,
             desktop_session: false,
+            prompt_dismissed: Arc::default(),
             scheduled_job: None,
             started_by: None,
             sudo: false,
@@ -1095,6 +1118,7 @@ impl Context {
             desktop_session: env.os() == Os::Linux
                 && (env.set("WAYLAND_DISPLAY") || env.set("DISPLAY"))
                 && !env.set("SSH_CONNECTION"),
+            prompt_dismissed: Arc::default(),
             scheduled_job: None,
             started_by: None,
             sudo: env.set("SUDO_UID"),

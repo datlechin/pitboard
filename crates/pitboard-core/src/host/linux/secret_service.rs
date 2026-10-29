@@ -58,7 +58,8 @@ impl Vault {
     }
 
     // What `then` makes of the default collection, unlocked first, a failure said as `otherwise`
-    // says one. Asked again after, since one locked meanwhile answers a search with nothing.
+    // says one. Asked again after, since one locked meanwhile answers a search with nothing. A
+    // person who dismissed the prompt has answered for the run, so it is not put up again.
     fn open<T>(
         &self,
         otherwise: fn(String) -> Error,
@@ -67,10 +68,16 @@ impl Vault {
         let service = connected(&self.ctx, otherwise)?;
         let collection = service.get_default_collection().map_err(said(otherwise))?;
         if collection.is_locked().map_err(said(otherwise))? {
-            if !self.asks {
+            if !self.asks || self.ctx.unlock_was_dismissed() {
                 return Err(Error::Locked);
             }
-            collection.unlock().map_err(said(otherwise))?;
+            match collection.unlock() {
+                Err(::secret_service::Error::Prompt) => {
+                    self.ctx.unlock_dismissed();
+                    return Err(Error::Locked);
+                }
+                unlocked => unlocked.map_err(said(otherwise))?,
+            }
         }
         let answer = then(&collection)?;
         if collection.is_locked().map_err(said(otherwise))? {
@@ -414,6 +421,25 @@ mod tests {
         let read = Vault::of(&at_the_desktop).read(&park(0));
         assert!(matches!(read, Err(Error::Locked)), "{read:?}");
         assert_eq!(unlocks(&service), 1, "{:?}", service.asked());
+    }
+
+    // A person who dismisses the prompt has answered for the run: each park doctor reads, and
+    // each step of a switch, would put it up again.
+    #[test]
+    fn a_prompt_dismissed_is_not_put_up_again_in_the_same_run() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let service = started(scratch.path());
+        let ctx = at_the_desktop(scratch.path(), "home", &service);
+        service.lock();
+
+        refused_every_way(&Vault::of(&ctx), &park(0));
+        refused_every_way(&Vault::of(&ctx.clone()), &park(1));
+        assert_eq!(unlocks(&service), 1, "{:?}", service.asked());
+
+        let another_run = at_the_desktop(scratch.path(), "home", &service);
+        let read = Vault::of(&another_run).read(&park(0));
+        assert!(matches!(read, Err(Error::Locked)), "{read:?}");
+        assert_eq!(unlocks(&service), 2, "{:?}", service.asked());
     }
 
     // A bus with no prompter on it, as in a container: gnome-keyring 48.0 dismisses the prompt

@@ -278,6 +278,11 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
   session (ssh(1), ENVIRONMENT), since a forwarded `DISPLAY` is the SSH client's. Anywhere else
   a locked collection is `Locked` with no `Unlock` called
   (`a_run_out_of_the_desktop_session_never_asks_to_unlock`).
+- secret-service opens a connection for each question, and each one asks `Unlock` again while
+  the collection is locked. A prompt the person dismissed, which secret-service reads as
+  `Prompt`, is the run's answer: every copy of its context remembers it, and each later question
+  is `Locked` with no `Unlock` called. Another run asks again
+  (`a_prompt_dismissed_is_not_put_up_again_in_the_same_run`).
 - secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
   which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
   application that controls which store it uses not to link it, and whose `Entry` hides the
