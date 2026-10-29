@@ -10,7 +10,8 @@
 #                             target folder
 #   archive <file>            the tests built into a nextest archive, for another user to run
 #   test|ui <archive> <folder>
-#                             the same with that archive's tests, unpacked in the folder
+#                             the same with that archive's tests, unpacked in the folder over
+#                             what an earlier step unpacked there
 #   release                   Meson's release build, its tests, its install tree, and
 #                             check-linux-app.sh on that tree
 #   floor                     the app on the Rust its manifest names
@@ -56,7 +57,7 @@ case $step in
       0) set -- cargo nextest run --locked -p pitboard-linux --features fixture ;;
       2)
         set -- cargo-nextest nextest run --archive-file "$1" --workspace-remap "$repo" \
-          --extract-to "$2"
+          --extract-to "$2" --extract-overwrite
         ;;
       *) usage ;;
     esac
