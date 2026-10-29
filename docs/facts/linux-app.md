@@ -672,6 +672,26 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
 - No fixture world's sign-in fails to start, so `linux-signIn-failed` is a sign-in that fails as
   a person's can: Claude Code refusing a code typed back without its state.
 
+## Preferences
+
+Read at libadwaita 1.7.6 and GTK 4.18.6, and measured in Ubuntu 26.04's image by the tests named:
+
+- `AdwPreferencesGroup` puts a row in its boxed list and any other widget in the box after it
+  (`adw_preferences_group_add`, `src/adw-preferences-group.c:399-414`). So the line that says
+  how a setting stands, its note or why its last change failed, is a label under the group's
+  rows, and a warm-up account's switch, added later, still goes in the list above it.
+- libadwaita 1.7 has no time picker, so each of the warm-up's hours is an `AdwSpinRow` over the
+  minutes of the day whose `output` says the time as the person's clock does. A spin button's
+  update reads its text back through `input`, and with no handler parses it as a number and,
+  under its default policy `GTK_UPDATE_ALWAYS`, keeps what it parsed even where the text did
+  not read as one (`gtk_spin_button_update`, `gtk/gtkspinbutton.c:2550-2588`): "6:00 AM" would
+  come back as 6 minutes. So the hours are not editable and answer `input` with their own
+  value, and the share, which takes typing, is `GTK_UPDATE_IF_VALID` with an `input` that reads
+  "95%" as 95. Midnight is 00:00 there, which the core reads as a span's end
+  (`duty::warm::Range::new`).
+- A control set to the value it shows sends nothing, and the model's values drawn into the
+  controls send nothing (`a_setting_sends_only_a_value_that_differs`).
+
 ## The icons
 
 - GNOME's app icon guidelines (developer.gnome.org/hig, App Icons) draw on a 128 px canvas

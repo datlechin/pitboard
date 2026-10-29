@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Preferences: General, start at sign-in and the version; Limits, what happens as a limit runs
+     out and the warm-up's hours and accounts, a switch each, which preferences/limits.rs adds;
+     Advanced, keeping saved sign-ins fresh, the watch service where the model offers it, the
+     command line and Uninstall. A line under a group's rows says how its setting stands. Every
+     word is the model's, set by preferences/. -->
+<interface>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="PitboardPreferences" parent="AdwPreferencesDialog">
+    <child>
+      <object class="AdwPreferencesPage" id="general">
+        <property name="name">general</property>
+        <property name="icon-name">preferences-system-symbolic</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="start_group">
+            <child>
+              <object class="AdwSwitchRow" id="start_at_sign_in">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="start_failed">
+                <property name="visible">False</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+                <property name="margin-top">12</property>
+                <style>
+                  <class name="caption"/>
+                  <class name="error"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup">
+            <child>
+              <object class="AdwActionRow" id="version">
+                <property name="use-markup">False</property>
+                <child type="suffix">
+                  <object class="GtkLabel" id="version_number">
+                    <property name="selectable">True</property>
+                    <style>
+                      <class name="dim-label"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesPage" id="limits">
+        <property name="name">limits</property>
+        <property name="icon-name">battery-level-50-symbolic</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="at_limit_group">
+            <child>
+              <object class="AdwComboRow" id="at_limit">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="share">
+                <property name="use-markup">False</property>
+                <property name="update-policy">if-valid</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="step-increment">1</property>
+                    <property name="page-increment">5</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwActionRow" id="terms">
+                <property name="use-markup">False</property>
+                <property name="activatable">True</property>
+                <child type="suffix">
+                  <object class="GtkImage">
+                    <property name="icon-name">adw-external-link-symbolic</property>
+                    <property name="accessible-role">presentation</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="warm_group">
+            <child>
+              <object class="AdwSpinRow" id="warm_from">
+                <property name="use-markup">False</property>
+                <property name="editable">False</property>
+                <property name="wrap">True</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="upper">1439</property>
+                    <property name="step-increment">15</property>
+                    <property name="page-increment">60</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="warm_to">
+                <property name="use-markup">False</property>
+                <property name="editable">False</property>
+                <property name="wrap">True</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="upper">1439</property>
+                    <property name="step-increment">15</property>
+                    <property name="page-increment">60</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwActionRow" id="none_to_warm">
+                <property name="use-markup">False</property>
+                <property name="visible">False</property>
+                <style>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="warm_standing">
+                <property name="visible">False</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+                <property name="margin-top">12</property>
+                <style>
+                  <class name="caption"/>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesPage" id="advanced">
+        <property name="name">advanced</property>
+        <property name="icon-name">preferences-other-symbolic</property>
+        <child>
+          <object class="AdwPreferencesGroup">
+            <child>
+              <object class="AdwSwitchRow" id="renew">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="renew_standing">
+                <property name="visible">False</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+                <property name="margin-top">12</property>
+                <style>
+                  <class name="caption"/>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="watch_group">
+            <property name="visible">False</property>
+            <child>
+              <object class="AdwSwitchRow" id="watch">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="watch_standing">
+                <property name="visible">False</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+                <property name="margin-top">12</property>
+                <style>
+                  <class name="caption"/>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="command_line_group">
+            <child>
+              <object class="AdwActionRow" id="path">
+                <property name="use-markup">False</property>
+                <property name="subtitle-selectable">True</property>
+                <child type="suffix">
+                  <object class="AdwSpinner" id="looking"/>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="command_line_standing">
+                <property name="visible">False</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+                <property name="margin-top">12</property>
+                <style>
+                  <class name="caption"/>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="uninstall_group">
+            <child>
+              <object class="AdwButtonRow" id="uninstall"/>
+            </child>
+            <child>
+              <object class="AdwActionRow" id="removal">
+                <property name="use-markup">False</property>
+                <property name="visible">False</property>
+                <child type="suffix">
+                  <object class="AdwSpinner" id="removing"/>
+                </child>
+                <child type="suffix">
+                  <object class="GtkButton" id="uninstall_again">
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

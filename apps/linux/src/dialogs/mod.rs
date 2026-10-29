@@ -7,6 +7,10 @@
 //! login, and a failure the model says, are alerts in front of everything ([`question`],
 //! [`failure`]), each shown once and taken down when the model drops it. Open Link
 //! ([`open_link`]) comes up as a link arrives, and as the window's menu asks for it.
+//!
+//! Preferences ([`crate::preferences`]) comes up as the model or the window's menu asks for it
+//! and follows what the model shows while it is up; once the model has removed Pitboard, what
+//! Uninstall takes back of the app is said in an alert that quits it.
 
 pub mod failure;
 pub mod name;
@@ -19,8 +23,11 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::glib;
-use pitboard_model::{AlertText, Part, Sheet, Snapshot, WindowQuestion};
+use pitboard_model::{
+    AlertText, Part, RemovalShown, SettingsSection, Sheet, Snapshot, WindowQuestion,
+};
 
+use crate::preferences::{self, Preferences};
 use crate::shown::Shown;
 use crate::window::Host;
 use name::SheetAlert;
@@ -98,6 +105,9 @@ pub struct Dialogs {
     open_link: RefCell<Option<OpenLink>>,
     // the link Open Link was closed on, which stays put away until the model has heard
     put_away: Cell<Option<u64>>,
+    preferences: RefCell<Option<Preferences>>,
+    // what Uninstall takes back, once the model has removed Pitboard
+    taken_back: Cell<bool>,
 }
 
 impl Dialogs {
@@ -112,6 +122,8 @@ impl Dialogs {
             alert: RefCell::default(),
             open_link: RefCell::default(),
             put_away: Cell::default(),
+            preferences: RefCell::default(),
+            taken_back: Cell::default(),
         });
         let on = |parts: &[Part], act: fn(&Rc<Dialogs>, &Snapshot)| {
             for part in parts {
@@ -144,10 +156,21 @@ impl Dialogs {
             Dialogs::follow_alert,
         );
         on(&[Part::AccountWindows], Dialogs::follow_link);
+        on(
+            &[
+                Part::Machine,
+                Part::Uninstall,
+                Part::Removal,
+                Part::StatusItem,
+            ],
+            Dialogs::follow_preferences,
+        );
+        on(&[Part::Removal], Dialogs::follow_removal);
         let snapshot = shown.snapshot().clone();
         dialogs.follow_sheet(&snapshot);
         dialogs.follow_alert(&snapshot);
         dialogs.follow_link(&snapshot);
+        dialogs.follow_removal(&snapshot);
         dialogs
     }
 
@@ -276,5 +299,45 @@ impl Dialogs {
         });
         dialog.present(Some(&over));
         self.open_link.replace(Some(dialog));
+    }
+
+    /// Opens Preferences on the page `section` is on, or on the page it shows where it is up.
+    pub fn show_preferences(self: &Rc<Self>, section: Option<SettingsSection>) {
+        let Some(over) = self.over.upgrade() else {
+            return;
+        };
+        let up = self.preferences.borrow().clone();
+        let preferences = up.unwrap_or_else(|| {
+            let preferences = Preferences::new(self.host.clone(), &self.shown.snapshot());
+            let weak = Rc::downgrade(self);
+            preferences.connect_closed(move |_| {
+                if let Some(dialogs) = weak.upgrade() {
+                    dialogs.preferences.take();
+                }
+            });
+            preferences.present(Some(&over));
+            self.preferences.replace(Some(preferences.clone()));
+            preferences
+        });
+        if let Some(section) = section {
+            preferences.open_at(section);
+        }
+    }
+
+    fn follow_preferences(self: &Rc<Self>, snapshot: &Snapshot) {
+        if let Some(preferences) = self.preferences.borrow().as_ref() {
+            preferences.show(snapshot);
+        }
+    }
+
+    // Once, as the model has removed Pitboard: the app takes back its own and says how its
+    // package is removed, over whatever is up.
+    fn follow_removal(self: &Rc<Self>, snapshot: &Snapshot) {
+        if !matches!(snapshot.removal, Some(RemovalShown::Done)) || self.taken_back.replace(true) {
+            return;
+        }
+        if let Some(over) = self.over.upgrade() {
+            preferences::advanced::take_back(self.host.clone()).present(Some(&over));
+        }
     }
 }

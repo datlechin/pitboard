@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 use adw::prelude::*;
 use gtk::glib;
 use pitboard_linux::data_folder::DataFolder;
+use pitboard_linux::platform::autostart::StartAtSignIn;
+use pitboard_linux::platform::stand_in;
+use pitboard_linux::preferences::Preferences;
 use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{AccountGroup, Host, Window};
 use pitboard_model::{
@@ -73,8 +76,12 @@ impl LocalTime for Fixed {
     }
 }
 
-// The window asks nothing of an app while it is drawn.
-struct Drawn(DataFolder);
+// The window asks nothing of an app while it is drawn, and its start at sign-in is a
+// fixture's stand-in, off.
+struct Drawn {
+    data: DataFolder,
+    start_at_sign_in: stand_in::Autostart,
+}
 
 impl Host for Drawn {
     fn send(&self, _: Intent) {}
@@ -84,7 +91,19 @@ impl Host for Drawn {
     }
     fn quit(&self) {}
     fn data(&self) -> &DataFolder {
-        &self.0
+        &self.data
+    }
+    fn token(&self) -> Option<String> {
+        None
+    }
+    fn local_time(&self) -> Arc<dyn LocalTime> {
+        Arc::new(Fixed)
+    }
+    fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn> {
+        Some(&self.start_at_sign_in)
+    }
+    fn own_folders(&self) -> Vec<PathBuf> {
+        Vec::new()
     }
 }
 
@@ -230,8 +249,11 @@ fn picture(
         }
     }
     let store = Shown::new(shown);
-    let data = DataFolder::at(&scratch.join("data"));
-    let window = Window::new(None, &store, Rc::new(Drawn(data)));
+    let drawn = Drawn {
+        data: DataFolder::at(&scratch.join("data")),
+        start_at_sign_in: stand_in::Autostart::new(&scratch),
+    };
+    let window = Window::new(None, &store, Rc::new(drawn));
     window.present();
     iterate_until("the window drawn", || window.is_mapped());
     then(&window);
@@ -500,6 +522,52 @@ fn open_link_in_browser() {
         |_| {},
         true,
     );
+}
+
+fn listed() -> Step {
+    (None, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
+    })
+}
+
+// Preferences over the accounts, on its page `page`, with what `steps` read.
+fn preferences(name: &str, page: &'static str, steps: &[Step]) {
+    picture(
+        name,
+        "oneTool",
+        true,
+        steps,
+        move |window| {
+            window
+                .activate_action("pitboard.preferences", None)
+                .expect("the main menu's Preferences");
+            let preferences = window
+                .visible_dialog()
+                .and_downcast::<Preferences>()
+                .expect("Preferences");
+            preferences.set_visible_page_name(page);
+        },
+        true,
+    );
+}
+
+#[gtk::test]
+fn preferences_general() {
+    preferences("preferences-general", "general", &[listed()]);
+}
+
+#[gtk::test]
+fn preferences_limits() {
+    preferences("preferences-limits", "limits", &[listed()]);
+}
+
+#[gtk::test]
+fn preferences_advanced() {
+    let read: Step = (Some(Intent::ReadSchedule), |_| true);
+    let found: Step = (Some(Intent::LookForCommandLine), |shown| {
+        shown.machine.command_line.in_terminal.is_some()
+    });
+    preferences("preferences-advanced", "advanced", &[listed(), read, found]);
 }
 
 // The window's account groups, in the order drawn.

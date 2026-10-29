@@ -30,13 +30,14 @@ pub fn folders_of_this_user() -> [PathBuf; 2] {
     ]
 }
 
-/// Turns start at sign-in off and removes each folder, saying what went and what could not.
-pub fn remove(start_at_sign_in: &dyn StartAtSignIn, folders: &[PathBuf]) -> Removed {
+/// Turns start at sign-in off, where the build has one, and removes each folder, saying what
+/// went and what could not.
+pub fn remove(start_at_sign_in: Option<&dyn StartAtSignIn>, folders: &[PathBuf]) -> Removed {
     let mut removed = Removed::default();
-    match start_at_sign_in.turn_off() {
-        Ok(true) => removed.went.push(Leftover::StartAtSignIn),
-        Ok(false) => {}
-        Err(failed) => removed.stayed.push((Leftover::StartAtSignIn, failed)),
+    match start_at_sign_in.map(StartAtSignIn::turn_off) {
+        Some(Ok(true)) => removed.went.push(Leftover::StartAtSignIn),
+        Some(Ok(false)) | None => {}
+        Some(Err(failed)) => removed.stayed.push((Leftover::StartAtSignIn, failed)),
     }
     // A link in a folder goes, and what it names stays: remove_dir_all follows none.
     for folder in folders {
@@ -99,7 +100,7 @@ mod tests {
         let named = holding_a_file(&scratch.path().join("elsewhere"));
         std::os::unix::fs::symlink(named.parent().unwrap(), ours[0].join("link")).unwrap();
 
-        let removed = remove(&autostart, &ours);
+        let removed = remove(Some(&autostart), &ours);
 
         assert_eq!(
             removed,
@@ -120,7 +121,7 @@ mod tests {
             assert!(file.exists(), "{}", file.display());
         }
         assert_eq!(
-            remove(&autostart, &ours),
+            remove(Some(&autostart), &ours),
             Removed::default(),
             "nothing is left to go"
         );

@@ -1070,7 +1070,7 @@ mod tests {
         said.extend(strings_of(&notice_buttons(gnome)));
         said.extend(strings_of(&downloads_quit_question(gnome, 2)));
         for package in [Package::Deb, Package::Rpm, Package::Unknown] {
-            said.extend(strings_of(&package_removal(package)));
+            said.extend(strings_of(&package_removal(package, &[])));
         }
         said.extend([
             words::cannot_schedule(gnome, true),

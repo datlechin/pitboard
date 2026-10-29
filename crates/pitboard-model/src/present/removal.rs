@@ -93,8 +93,9 @@ pub struct PackageCommand {
     pub run: String,
 }
 
-// One rpm serves Fedora and openSUSE, so it names both package managers.
-pub fn package_removal(package: Package) -> PackageRemoval {
+// One rpm serves Fedora and openSUSE, so it names both package managers. `stayed` is what the
+// app could not take back of its own, each as its system said why.
+pub fn package_removal(package: Package, stayed: &[String]) -> PackageRemoval {
     let command = |on: Option<&str>, manager: &str| PackageCommand {
         on: on.map(str::to_owned),
         run: format!("sudo {manager} remove {PACKAGES}"),
@@ -113,9 +114,15 @@ pub fn package_removal(package: Package) -> PackageRemoval {
         ),
         Package::Unknown => ("Remove the app the way you installed it.", Vec::new()),
     };
+    let stayed = stayed.iter().map(|failed| words::could_not_remove(failed));
+    let message = std::iter::once(words::DATA_DELETED.to_owned())
+        .chain(stayed)
+        .chain(std::iter::once(then.to_owned()))
+        .collect::<Vec<_>>()
+        .join(" ");
     PackageRemoval {
         title: words::REMOVE_THE_APP.into(),
-        message: format!("{} {then}", words::DATA_DELETED),
+        message,
         commands,
     }
 }
@@ -129,7 +136,7 @@ mod tests {
 
     #[test]
     fn the_package_manager_removes_what_the_app_cannot() {
-        let deb = package_removal(Package::Deb);
+        let deb = package_removal(Package::Deb, &[]);
         assert_eq!(deb.title, "Remove the App");
         assert_eq!(
             deb.message,
@@ -143,7 +150,7 @@ mod tests {
                 run: "sudo apt remove pitboard-app pitboard".into(),
             }]
         );
-        let rpm = package_removal(Package::Rpm);
+        let rpm = package_removal(Package::Rpm, &[]);
         assert_eq!(
             rpm.commands,
             [
@@ -157,12 +164,32 @@ mod tests {
                 },
             ]
         );
-        let unknown = package_removal(Package::Unknown);
+        let unknown = package_removal(Package::Unknown, &[]);
         assert_eq!(
             unknown.message,
             "Pitboard’s saved sign-ins and settings are deleted. Remove the app the way you \
              installed it."
         );
         assert_eq!(unknown.commands, []);
+    }
+
+    // The app takes back its own files in the person's home before it names the command, and
+    // says which it could not, as its system said why.
+    #[test]
+    fn what_the_app_could_not_take_back_is_said_before_the_command() {
+        let stayed = [
+            "/home/dana/.cache/com.usepitboard.Pitboard: Permission denied (os error 13)"
+                .to_owned(),
+        ];
+
+        let deb = package_removal(Package::Deb, &stayed);
+
+        assert_eq!(
+            deb.message,
+            "Pitboard’s saved sign-ins and settings are deleted. Pitboard couldn’t remove \
+             /home/dana/.cache/com.usepitboard.Pitboard: Permission denied (os error 13). Remove \
+             the app and its command line with this command in a terminal."
+        );
+        assert_eq!(deb.commands, package_removal(Package::Deb, &[]).commands);
     }
 }

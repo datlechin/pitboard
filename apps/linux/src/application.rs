@@ -5,18 +5,23 @@
 //!
 //! What it asks of the desktop is the desktop's own services in a live launch, and a fixture's
 //! stand-ins in a fixture, which write in the fixture's folder alone. The model's snapshots go
-//! to the store the window and the presence follow; the window opens as the model asks for it.
+//! to the store the window and the presence follow; the window is made as the model first asks
+//! for it, and answers each request itself. The model is told at the start whether the app
+//! starts at sign-in, as the desktop has it.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::ops::ControlFlow;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
-use pitboard_model::{AppLaunch, Front, Intent, Part, PitboardModel, Snapshot, Surfaces};
+use pitboard_model::{
+    AppLaunch, Front, Intent, LocalTime, Part, PitboardModel, Snapshot, Surfaces,
+};
 
 use crate::config;
 use crate::data_folder::DataFolder;
@@ -24,6 +29,8 @@ use crate::listener;
 use crate::local_time::DesktopClock;
 use crate::notices::Notices;
 use crate::outside::Outside;
+use crate::platform::autostart::{Autostart, StartAtSignIn};
+use crate::platform::leftovers;
 use crate::platform::links::{self, Opener};
 use crate::platform::notifications::{self, Notifier};
 use crate::platform::search::Asked;
@@ -277,12 +284,6 @@ impl Application {
         }))
     }
 
-    fn present_window(&self, token: Option<&str>) {
-        if let Some(window) = self.window() {
-            window.present_with(token);
-        }
-    }
-
     fn searched(&self, asked: Asked, token: Option<String>) {
         let Some(running) = self.running() else {
             return;
@@ -314,11 +315,14 @@ pub struct Running {
     presence: Presence,
     opener: Box<dyn Opener>,
     data: DataFolder,
+    start_at_sign_in: Option<Box<dyn StartAtSignIn>>,
+    own_folders: Vec<PathBuf>,
     tray: Cell<bool>,
     // the activation token what asked for the window came with, for the next it shows
     token: RefCell<Option<String>>,
-    // the window request the window last answered
-    answered: Cell<u64>,
+    // the last window request, the first of which makes the window
+    asked: Cell<u64>,
+    local_time: Arc<dyn LocalTime>,
     _clock: DesktopClock,
     _listening: glib::JoinHandle<()>,
     _hearing: Hearing,
@@ -331,6 +335,9 @@ struct Services {
     opener: Box<dyn Opener>,
     item: Box<dyn StatusItem>,
     data: DataFolder,
+    // none where the build is installed nowhere an autostart entry could start it
+    start_at_sign_in: Option<Box<dyn StartAtSignIn>>,
+    own_folders: Vec<PathBuf>,
     // what it hears through, for as long as the app runs
     hearing: Hearing,
 }
@@ -365,6 +372,10 @@ impl Services {
             opener: Box::new(links::Browser),
             item: Box::new(item),
             data: DataFolder::of_this_user(),
+            start_at_sign_in: config::installed_program().map(|program| {
+                Box::new(Autostart::of_this_user(&program)) as Box<dyn StartAtSignIn>
+            }),
+            own_folders: leftovers::folders_of_this_user().to_vec(),
             hearing,
         }
     }
@@ -378,11 +389,14 @@ impl Services {
         let hearing = Hearing::default();
         let watcher = stand_in::Tray::hear(connection, told(app));
         hearing.borrow_mut().push(Box::new(watcher));
+        let data = DataFolder::in_fixture(&fixture);
         Services {
             notifier: Arc::new(stand_in::Notifications::new(&fixture)),
             opener: Box::new(stand_in::Browser::new(&fixture)),
             item: Box::new(stand_in::Tray::new(&fixture)),
-            data: DataFolder::in_fixture(&fixture),
+            start_at_sign_in: Some(Box::new(stand_in::Autostart::new(&fixture))),
+            own_folders: vec![data.path().to_path_buf()],
+            data,
             hearing,
         }
     }
@@ -431,28 +445,34 @@ impl Running {
             }
         };
         let shown = Shown::new(model.snapshot());
-        let answered = shown.snapshot().window_request.serial;
+        let asked = shown.snapshot().window_request.serial;
         let outside = Outside::new(Arc::clone(&model), Notices(services.notifier));
         for action in outside.actions() {
             app.add_action(&action);
         }
         let running = Rc::new(Running {
             app: app.downgrade(),
-            answered: Cell::new(answered),
+            asked: Cell::new(asked),
             model,
             shown,
             outside,
             presence: Presence::new(services.item),
             opener: services.opener,
             data: services.data,
+            start_at_sign_in: services.start_at_sign_in,
+            own_folders: services.own_folders,
             tray: Cell::new(false),
             token: RefCell::default(),
+            local_time: clock.local_time(),
             _clock: clock,
             _listening: listening,
             _hearing: services.hearing,
         });
         running.follow();
         running.send(Intent::Start);
+        if let Some(start) = &running.start_at_sign_in {
+            running.send(Intent::OpensAtLogin { on: start.is_on() });
+        }
         Ok(running)
     }
 
@@ -477,10 +497,13 @@ impl Running {
                 }
             });
         };
+        // The window answers each request itself once it is made.
         on(Part::WindowRequest, |running, shown| {
             let serial = shown.snapshot().window_request.serial;
-            if serial > running.answered.replace(serial) {
-                running.present();
+            if serial > running.asked.replace(serial)
+                && let Some(app) = running.app.upgrade()
+            {
+                app.window();
             }
         });
         on(Part::Answers, |running, shown| {
@@ -540,13 +563,6 @@ impl Running {
         }
     }
 
-    fn present(&self) {
-        let token = self.token.take();
-        if let Some(app) = self.app.upgrade() {
-            app.present_window(token.as_deref());
-        }
-    }
-
     fn open_link(&self, link: &str, parent: Option<&gtk::Window>) {
         // As the other apps open one: whether a browser took it is not the model's to hear.
         let _ = self.opener.open(link, parent);
@@ -574,6 +590,22 @@ impl Host for Running {
 
     fn data(&self) -> &DataFolder {
         &self.data
+    }
+
+    fn token(&self) -> Option<String> {
+        self.token.take()
+    }
+
+    fn local_time(&self) -> Arc<dyn LocalTime> {
+        Arc::clone(&self.local_time)
+    }
+
+    fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn> {
+        self.start_at_sign_in.as_deref()
+    }
+
+    fn own_folders(&self) -> Vec<PathBuf> {
+        self.own_folders.clone()
     }
 }
 

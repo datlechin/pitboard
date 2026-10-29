@@ -9,6 +9,10 @@
 //! running, and quits Pitboard where none does. It keeps its size in the app's data folder, and
 //! tells the model it was looked at each time it maps. Its dialogs are [`crate::dialogs`]'s, and
 //! a link dropped on it is handed to the model, which says what Open Link shows of it.
+//!
+//! It answers each window request of the model's once: it comes forward, with the activation
+//! token what asked for it came with, and shows the place asked for, the accounts or
+//! Preferences on its page.
 
 mod account_group;
 mod accounts;
@@ -21,17 +25,20 @@ pub use accounts_page::AccountsPage;
 pub use limit_row::{LimitRow, level_name};
 pub use notices::NoticeRow;
 
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gdk, gio, glib};
-use pitboard_model::{Front, Intent, Part};
+use pitboard_model::{Front, Intent, LocalTime, Part, Place, RemovalShown, WindowRequest};
 use serde::{Deserialize, Serialize};
 
 use crate::data_folder::DataFolder;
 use crate::dialogs::Dialogs;
+use crate::platform::autostart::StartAtSignIn;
 use crate::platform::links;
 use crate::presence::HELP;
 use crate::shown::Shown;
@@ -45,9 +52,21 @@ pub trait Host {
     fn keeps_running(&self) -> bool;
     fn quit(&self);
     fn data(&self) -> &DataFolder;
+    /// The activation token what last asked for the window came with, once.
+    fn token(&self) -> Option<String>;
+    /// The person's clock, which Preferences says the warm-up's hours by.
+    fn local_time(&self) -> Arc<dyn LocalTime>;
+    /// Start at sign-in, where the build is installed where an entry can start it: none for one
+    /// Cargo built alone.
+    fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn>;
+    /// The app's own folders in the person's home, which Uninstall takes back.
+    fn own_folders(&self) -> Vec<PathBuf>;
 }
 
 const SIZE: &str = "window.json";
+
+// The tags of the window's pages, as window.ui names them.
+const ACCOUNTS: &str = "accounts";
 
 // What the window remembers of itself, as the Windows app keeps `placement.json`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +83,8 @@ mod imp {
     #[template(resource = "/com/usepitboard/Pitboard/ui/window.ui")]
     pub struct Window {
         #[template_child]
+        pub(super) navigation: TemplateChild<adw::NavigationView>,
+        #[template_child]
         pub(super) accounts: TemplateChild<adw::NavigationPage>,
         #[template_child]
         pub(super) window_title: TemplateChild<adw::WindowTitle>,
@@ -78,6 +99,8 @@ mod imp {
         pub(super) host: OnceCell<Rc<dyn Host>>,
         pub(super) shown: OnceCell<Shown>,
         pub(super) dialogs: OnceCell<Rc<Dialogs>>,
+        // the window request it last answered
+        pub(super) answered: Cell<u64>,
     }
 
     #[glib::object_subclass]
@@ -100,6 +123,11 @@ mod imp {
                     dialogs.show_open_link();
                 }
             });
+            class.install_action("pitboard.preferences", None, |window, _, _| {
+                if let Some(dialogs) = window.imp().dialogs.get() {
+                    dialogs.show_preferences(None);
+                }
+            });
             class.install_action("pitboard.help", None, |window, _, _| {
                 window.host().open(HELP, window.upcast_ref());
             });
@@ -107,6 +135,7 @@ mod imp {
             let control = gdk::ModifierType::CONTROL_MASK;
             class.add_binding_action(gdk::Key::n, control, "pitboard.add-account");
             class.add_binding_action(gdk::Key::r, control, "pitboard.refresh");
+            class.add_binding_action(gdk::Key::comma, control, "pitboard.preferences");
             class.add_binding_action(gdk::Key::q, control, "pitboard.quit");
             class.add_binding_action(gdk::Key::w, control, "window.close");
         }
@@ -171,6 +200,9 @@ impl Window {
             host.send(Intent::LinkArrived { text });
         }));
         window.follow(shown);
+        // Made for a request, it answers it.
+        let request = shown.snapshot().window_request;
+        window.answer(request);
         window
     }
 
@@ -194,9 +226,15 @@ impl Window {
         imp.refresh
             .update_property(&[gtk::accessible::Property::Label(&words.window.refresh)]);
         imp.main_menu.set_tooltip_text(Some(&gnome.main_menu));
+        // GNOME's primary menu: the app's own items, then Preferences and Help in one section at
+        // its end, and no Quit (docs/facts/linux-app.md, GNOME's words).
+        let (own, standard) = (gio::Menu::new(), gio::Menu::new());
+        own.append(Some(&gnome.open_link), Some("pitboard.open-link"));
+        standard.append(Some(&words.menu.settings), Some("pitboard.preferences"));
+        standard.append(Some(&words.menu.help), Some("pitboard.help"));
         let menu = gio::Menu::new();
-        menu.append(Some(&gnome.open_link), Some("pitboard.open-link"));
-        menu.append(Some(&words.menu.help), Some("pitboard.help"));
+        menu.append_section(None, &own);
+        menu.append_section(None, &standard);
         imp.main_menu.set_menu_model(Some(&menu));
     }
 
@@ -224,6 +262,39 @@ impl Window {
                 reading(&window, shown);
             }
         });
+        let window = self.downgrade();
+        shown.connect_changed(Part::WindowRequest, move |shown| {
+            if let Some(window) = window.upgrade() {
+                let request = shown.snapshot().window_request;
+                window.answer(request);
+            }
+        });
+    }
+
+    // A request answered once, as each app opens its window once for each serial.
+    fn answer(&self, request: WindowRequest) {
+        let answered = &self.imp().answered;
+        if request.serial <= answered.get() {
+            return;
+        }
+        answered.set(request.serial);
+        self.present_with(self.host().token().as_deref());
+        self.show_place(request.place);
+    }
+
+    fn show_place(&self, place: Option<Place>) {
+        let dialogs = self.imp().dialogs.get();
+        match place {
+            None | Some(Place::Checks | Place::Activity | Place::Welcome) => {}
+            Some(Place::Accounts) => {
+                self.imp().navigation.pop_to_tag(ACCOUNTS);
+            }
+            Some(Place::Settings { section }) => {
+                if let Some(dialogs) = dialogs {
+                    dialogs.show_preferences(Some(section));
+                }
+            }
+        }
     }
 
     fn kept_size(&self) -> Option<Size> {
@@ -231,8 +302,14 @@ impl Window {
         serde_json::from_slice(&std::fs::read(file).ok()?).ok()
     }
 
-    /// Keeps the window's size for its next launch: the size it has unless maximized.
+    /// Keeps the window's size for its next launch: the size it has unless maximized. Not once
+    /// Pitboard is removed, whose app took its folder back.
     pub fn keep_size(&self) {
+        let removed = (self.imp().shown.get())
+            .is_some_and(|shown| shown.snapshot().removal == Some(RemovalShown::Done));
+        if removed {
+            return;
+        }
         let (width, height) = self.default_size();
         let size = Size {
             width,
@@ -270,6 +347,18 @@ mod tests {
         fn data(&self) -> &DataFolder {
             &self.0
         }
+        fn token(&self) -> Option<String> {
+            None
+        }
+        fn local_time(&self) -> Arc<dyn LocalTime> {
+            crate::local_time::DesktopClock::following(None).local_time()
+        }
+        fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn> {
+            None
+        }
+        fn own_folders(&self) -> Vec<PathBuf> {
+            Vec::new()
+        }
     }
 
     // gtk4-builder-tool cannot read a template whose parent is libadwaita's, so each view is
@@ -304,7 +393,8 @@ mod tests {
         let _ = NoticeRow::new(host.clone());
         let add = pitboard_model::Sheet::Add { tool: None };
         let _ = crate::dialogs::sign_in::SignIn::new(add, host.clone());
-        let _ = crate::dialogs::open_link::OpenLink::new(host);
+        let _ = crate::dialogs::open_link::OpenLink::new(host.clone());
+        let _ = crate::preferences::Preferences::new(host, &shown.snapshot());
         window.destroy();
     }
 }

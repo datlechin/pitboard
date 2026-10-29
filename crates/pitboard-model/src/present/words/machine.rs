@@ -366,6 +366,12 @@ pub(crate) const REMOVE_THE_APP: &str = "Remove the App";
 
 pub(crate) const DATA_DELETED: &str = "Pitboard’s saved sign-ins and settings are deleted.";
 
+// What the Linux app could not take back of its own once Pitboard's data was deleted, as its
+// system said why: "/home/dana/.cache/com.usepitboard.Pitboard: Permission denied".
+pub(crate) fn could_not_remove(failed: &str) -> String {
+    format!("Pitboard couldn’t remove {failed}.")
+}
+
 pub(crate) const KEPT_ITS_FOLDER: &str = "Pitboard couldn’t remove everything";
 
 pub(crate) const UNINSTALL_NOT_KNOWN: &str =

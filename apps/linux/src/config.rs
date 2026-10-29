@@ -5,6 +5,8 @@
 //! link scheme and an object path of its own, so no launcher, link, notification or search a
 //! person's installed Pitboard owns ever reaches it.
 
+use pitboard_model::Package;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Build {
     Debug,
@@ -45,21 +47,13 @@ impl Build {
     }
 }
 
-// The package manager that installed this build, which Uninstall names the command of.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Package {
-    Deb,
-    Rpm,
-}
-
-impl Package {
-    // `PITBOARD_PACKAGE`, Meson's `package` option, where it names a package manager.
-    pub const fn from_setting(setting: Option<&str>) -> Option<Package> {
-        match setting {
-            Some(setting) if matches!(setting.as_bytes(), b"deb") => Some(Package::Deb),
-            Some(setting) if matches!(setting.as_bytes(), b"rpm") => Some(Package::Rpm),
-            _ => None,
-        }
+// The package manager that installed this build, which Uninstall names the command of:
+// `PITBOARD_PACKAGE`, Meson's `package` option.
+pub const fn package(setting: Option<&str>) -> Package {
+    match setting {
+        Some(setting) if matches!(setting.as_bytes(), b"deb") => Package::Deb,
+        Some(setting) if matches!(setting.as_bytes(), b"rpm") => Package::Rpm,
+        _ => Package::Unknown,
     }
 }
 
@@ -69,7 +63,7 @@ pub const LINK_SCHEME: &str = BUILD.link_scheme();
 pub const OBJECT_PATH: &str = BUILD.object_path();
 // Where Meson installs the program. A build Cargo made alone is installed nowhere.
 pub const BINDIR: Option<&str> = option_env!("PITBOARD_BINDIR");
-pub const PACKAGE: Option<Package> = Package::from_setting(option_env!("PITBOARD_PACKAGE"));
+pub const PACKAGE: Package = package(option_env!("PITBOARD_PACKAGE"));
 
 /// The program as Meson installs it, which the core finds the command line beside. None for a
 /// build Cargo made alone, wherever it runs from.
@@ -125,11 +119,11 @@ mod tests {
 
     #[test]
     fn a_package_is_named_only_where_meson_says_so() {
-        assert_eq!(Package::from_setting(Some("deb")), Some(Package::Deb));
-        assert_eq!(Package::from_setting(Some("rpm")), Some(Package::Rpm));
+        assert_eq!(package(Some("deb")), Package::Deb);
+        assert_eq!(package(Some("rpm")), Package::Rpm);
         for setting in [None, Some("none"), Some(""), Some("Deb")] {
-            assert_eq!(Package::from_setting(setting), None, "{setting:?}");
+            assert_eq!(package(setting), Package::Unknown, "{setting:?}");
         }
-        assert_eq!(PACKAGE, None);
+        assert_eq!(PACKAGE, Package::Unknown);
     }
 }

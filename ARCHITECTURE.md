@@ -196,7 +196,8 @@ The apps:
     launch starts anything (`launch.rs`), the one held GApplication the primary instance runs
     over the model (`application.rs`), the snapshots on the main loop and kept by part
     (`listener.rs`, `shown.rs`), the window and its accounts page (`window/`), its dialogs
-    (`dialogs/`), the status item's face and menu and the searches' results (`presence.rs`),
+    (`dialogs/`) and Preferences (`preferences/`), the status item's face and menu and the
+    searches' results (`presence.rs`),
     the app's only actions on the bus (`outside.rs`), the model's notices, clock and the app's
     own folder (`notices.rs`, `local_time.rs`, `data_folder.rs`), what the program carries in
     its GResource (`resources.rs`), and the desktop's services the app speaks for the model, the
@@ -706,7 +707,16 @@ keeps it is in the header of the module named.
 - The Linux app starts at sign-in by one autostart entry that names its program and tries it
   first. Turning it off removes that entry alone, and Uninstall that entry and the app's own
   data and cache folders (`turning_it_off_removes_only_its_own_entry`,
-  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
+  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`). Preferences turns it on
+  and off and then tells the model what the desktop has
+  (`start_at_sign_in_writes_the_entry_and_tells_the_model`). Once the model has removed
+  Pitboard, the app takes those back and names its package manager's command, the build's
+  package's (`uninstall_removes_the_apps_leftovers_and_names_the_package_command`).
+- The Linux app's Preferences send what the person set only where it differs from what the
+  model shows, so drawing a snapshot sends nothing, and read the schedule, the watch service and
+  the command line again each time Advanced is shown
+  (`a_setting_sends_only_a_value_that_differs`,
+  `the_schedule_command_line_and_watch_service_are_read_on_each_visit`).
 - The Linux app makes the files of its own link scheme, so a link reaches the model as written,
   where GVfs would write it again (`a_link_opened_is_handed_on_as_written`).
 - In a fixture, the Linux app's stand-ins for the autostart entry, the notifications, the tray

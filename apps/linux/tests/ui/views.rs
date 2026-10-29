@@ -1,11 +1,12 @@
 //! The window made in the test's own process over a fixture's model, as the app makes it: the
 //! model's snapshots taken on the main loop into the store the window follows, and what the
-//! window sends handed to the model. What it sends and opens is kept for the test, and opening
-//! reaches no browser. For a test of what a view shows and sends, which drives the widgets as
-//! GTK's own tests do, by their signals.
+//! window sends handed to the model. What it sends and opens, and whether it quit, is kept for
+//! the test, and opening reaches no browser. Start at sign-in is a fixture's stand-in, and the
+//! app's own folders are the test's. For a test of what a view shows and sends, which drives
+//! the widgets as GTK's own tests do, by their signals.
 
-use std::cell::{OnceCell, RefCell};
-use std::path::Path;
+use std::cell::{Cell, OnceCell, RefCell};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,6 +16,8 @@ use gtk::glib;
 use pitboard_linux::data_folder::DataFolder;
 use pitboard_linux::listener;
 use pitboard_linux::local_time::DesktopClock;
+use pitboard_linux::platform::autostart::StartAtSignIn;
+use pitboard_linux::platform::stand_in;
 use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{Host, Window};
 use pitboard_model::{
@@ -36,12 +39,16 @@ impl Notifier for Unposted {
 pub(crate) struct Asked {
     pub(crate) sent: RefCell<Vec<Intent>>,
     pub(crate) opened: RefCell<Vec<String>>,
+    pub(crate) quit: Cell<bool>,
 }
 
 struct Hands {
     model: OnceCell<Arc<PitboardModel>>,
     asked: Rc<Asked>,
     data: DataFolder,
+    start_at_sign_in: stand_in::Autostart,
+    own_folders: Vec<PathBuf>,
+    local_time: Arc<dyn LocalTime>,
 }
 
 impl Host for Hands {
@@ -57,9 +64,23 @@ impl Host for Hands {
     fn keeps_running(&self) -> bool {
         true
     }
-    fn quit(&self) {}
+    fn quit(&self) {
+        self.asked.quit.set(true);
+    }
     fn data(&self) -> &DataFolder {
         &self.data
+    }
+    fn token(&self) -> Option<String> {
+        None
+    }
+    fn local_time(&self) -> Arc<dyn LocalTime> {
+        Arc::clone(&self.local_time)
+    }
+    fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn> {
+        Some(&self.start_at_sign_in)
+    }
+    fn own_folders(&self) -> Vec<PathBuf> {
+        self.own_folders.clone()
     }
 }
 
@@ -68,23 +89,37 @@ pub(crate) struct Viewed {
     pub(crate) window: Window,
     pub(crate) shown: Shown,
     pub(crate) asked: Rc<Asked>,
+    /// The folder the fixture's world is made in, whose `linux` folder holds what the stand-in
+    /// for start at sign-in wrote, and whose `data` and `cache` are the app's own folders.
+    pub(crate) folder: PathBuf,
     model: Arc<PitboardModel>,
     _listening: glib::JoinHandle<()>,
     _scratch: Option<tempfile::TempDir>,
 }
 
 impl Viewed {
-    /// In a folder of the test's own, telling the time by the desktop's clock.
+    /// In a folder of the test's own, telling the time by the desktop's clock, once it lists
+    /// the accounts it read.
     pub(crate) fn of(world: &str) -> Viewed {
+        Viewed::once(world, |shown| !shown.sections.is_empty())
+    }
+
+    /// As `of`, once a read shows what `read` holds of.
+    pub(crate) fn once(world: &str, read: impl Fn(&Snapshot) -> bool) -> Viewed {
         let scratch = tempfile::tempdir().unwrap();
         let clock = DesktopClock::following(None);
-        let mut viewed = Viewed::over(world, scratch.path(), clock.local_time());
+        let mut viewed = Viewed::reading(world, scratch.path(), clock.local_time(), read);
         viewed._scratch = Some(scratch);
         viewed
     }
 
-    /// The fixture made in `folder`, telling the time by `local_time`.
-    pub(crate) fn over(world: &str, folder: &Path, local_time: Arc<dyn LocalTime>) -> Viewed {
+    // The fixture made in `folder`, telling the time by `local_time`.
+    fn reading(
+        world: &str,
+        folder: &Path,
+        local_time: Arc<dyn LocalTime>,
+        read: impl Fn(&Snapshot) -> bool,
+    ) -> Viewed {
         adw::init().unwrap();
         pitboard_linux::resources::register();
         gtk::Settings::default()
@@ -104,7 +139,7 @@ impl Viewed {
             told,
             None,
             Arc::new(Unposted),
-            local_time,
+            Arc::clone(&local_time),
         )
         .unwrap();
         let shown = Shown::new(model.snapshot());
@@ -114,6 +149,9 @@ impl Viewed {
             model: OnceCell::from(Arc::clone(&model)),
             asked: asked.clone(),
             data: DataFolder::at(&folder.join("data")),
+            start_at_sign_in: stand_in::Autostart::new(folder),
+            own_folders: vec![folder.join("data"), folder.join("cache")],
+            local_time,
         });
         let window = Window::new(None, &shown, hands);
         window.present();
@@ -121,15 +159,14 @@ impl Viewed {
             window,
             shown,
             asked,
+            folder: folder.to_path_buf(),
             model,
             _listening: listening,
             _scratch: None,
         };
         viewed.until("the window shown", |_| viewed.window.is_mapped());
         viewed.model.send(Intent::Start);
-        viewed.until("the accounts read", |shown| {
-            !shown.reading && !shown.sections.is_empty()
-        });
+        viewed.until("the accounts read", |shown| !shown.reading && read(shown));
         viewed.asked.sent.borrow_mut().clear();
         viewed
     }
@@ -160,6 +197,25 @@ impl Viewed {
 
     pub(crate) fn sent(&self) -> Vec<Intent> {
         self.asked.sent.borrow().clone()
+    }
+
+    /// What it sent since the last time this was asked.
+    pub(crate) fn sent_since(&self) -> Vec<Intent> {
+        self.asked.sent.take()
+    }
+
+    /// Sends `intent` to the model as something other than the window would, which the window
+    /// is not said to have sent.
+    pub(crate) fn tell(&self, intent: Intent) {
+        self.model.send(intent);
+    }
+
+    /// What the stand-in for start at sign-in wrote, a JSON value a line.
+    pub(crate) fn started_at_sign_in(&self) -> Vec<serde_json::Value> {
+        let written = self.folder.join("linux/autostart.jsonl");
+        (std::fs::read_to_string(written).unwrap_or_default().lines())
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
     }
 
     /// The dialog the window shows on top, once it and its default button are on the screen:
@@ -273,6 +329,19 @@ pub(crate) fn button(root: &impl IsA<gtk::Widget>, label: &str) -> gtk::Button {
                 .map(|button| button.label())
                 .collect();
             panic!("no button {label:?}: {labels:?}")
+        })
+}
+
+/// The row under `root` of type `T` whose title is `title`.
+pub(crate) fn row<T: IsA<adw::PreferencesRow> + IsA<gtk::Widget>>(
+    root: &impl IsA<gtk::Widget>,
+    title: &str,
+) -> T {
+    (every::<T>(root).into_iter())
+        .find(|row| row.title() == title)
+        .unwrap_or_else(|| {
+            let titles: Vec<_> = (every::<T>(root).iter()).map(|row| row.title()).collect();
+            panic!("no row {title:?}: {titles:?}")
         })
 }
 
