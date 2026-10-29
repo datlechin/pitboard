@@ -460,4 +460,80 @@ mod tests {
         let _ = crate::dialogs::about::about();
         window.destroy();
     }
+
+    fn descendants<T: IsA<gtk::Widget>>(widget: &gtk::Widget) -> Vec<T> {
+        let mut found = Vec::new();
+        let mut child = widget.first_child();
+        while let Some(widget) = child {
+            found.extend(widget.clone().downcast::<T>());
+            found.extend(descendants(&widget));
+            child = widget.next_sibling();
+        }
+        found
+    }
+
+    // A status page's description is markup (Adw-1.gir, AdwStatusPage:description), and what
+    // the model says there can name a path or a pasted link's host, either of which may hold
+    // `&` or `<`.
+    #[gtk::test]
+    fn a_status_pages_description_shows_the_models_text_as_written() {
+        adw::init().unwrap();
+        crate::resources::register();
+        let fatal = glib::LogLevels::LEVEL_WARNING | glib::LogLevels::LEVEL_CRITICAL;
+        for domain in ["Gtk", "Adwaita", "GLib-GObject"] {
+            glib::log_set_fatal_mask(Some(domain), fatal);
+        }
+        let said = "/home/a&b/<c>: Permission denied (os error 13)";
+        let mut snapshot = crate::testing::snapshot(1);
+        snapshot.accounts_shown = pitboard_model::AccountsShown::ReadFailed {
+            title: "Can’t read accounts".into(),
+            detail: said.into(),
+            retry: pitboard_model::Choice {
+                title: "Try Again".into(),
+                intent: Intent::Refresh { asked: true },
+                enabled: true,
+            },
+        };
+        snapshot.machine.activity.empty = Some(pitboard_model::EmptyList {
+            title: "No activity".into(),
+            detail: said.into(),
+        });
+        snapshot.welcome.lines = vec![said.into()];
+        snapshot.account_windows.picker = Some(pitboard_model::LinkPicker {
+            arrival: 1,
+            armed: true,
+            shown: pitboard_model::PickerShown::Refused {
+                title: "Can’t open this link".into(),
+                reason: said.into(),
+            },
+        });
+        let scratch = tempfile::tempdir().unwrap();
+        let host: Rc<dyn Host> = Rc::new(Shows(DataFolder::at(scratch.path())));
+
+        let window = Window::new(None, &Shown::new(snapshot.clone()), host.clone());
+        let open_link = crate::dialogs::open_link::OpenLink::new(host.clone());
+        open_link.show(&snapshot.account_windows);
+        let welcome = crate::dialogs::welcome::Welcome::new(host);
+        welcome.show(&snapshot.welcome);
+        // A dialog holds what it shows only once it is presented (`adw_dialog_present`).
+        window.present();
+        open_link.present(Some(&window));
+        welcome.present(Some(&window));
+
+        let views: [(&str, gtk::Widget); 3] = [
+            ("the window", window.clone().upcast()),
+            ("Open Link", open_link.upcast()),
+            ("the welcome", welcome.upcast()),
+        ];
+        for (view, widget) in views {
+            let pages = descendants::<adw::StatusPage>(&widget);
+            let shows = |page: &adw::StatusPage| {
+                descendants::<gtk::Label>(page.upcast_ref())
+                    .iter()
+                    .any(|label| label.text() == said)
+            };
+            assert!(pages.iter().any(shows), "{view}");
+        }
+        window.destroy();
+    }
 }

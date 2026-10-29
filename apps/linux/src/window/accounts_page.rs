@@ -152,7 +152,11 @@ impl AccountsPage {
             ),
         };
         status.set_title(title);
-        status.set_description(detail.map(String::as_str));
+        status.set_description(
+            detail
+                .map(|detail| glib::markup_escape_text(detail))
+                .as_deref(),
+        );
         match icon {
             Some(icon) => {
                 status.set_paintable(None::<&gtk::gdk::Paintable>);

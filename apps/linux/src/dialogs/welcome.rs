@@ -119,8 +119,11 @@ impl Welcome {
         imp.drawing.set(true);
         self.set_title(&welcome.title);
         imp.status.set_title(&welcome.title);
-        imp.status
-            .set_description(welcome.lines.first().map(String::as_str));
+        let says = welcome
+            .lines
+            .first()
+            .map(|line| glib::markup_escape_text(line));
+        imp.status.set_description(says.as_deref());
         let lives = welcome.lines.get(1);
         imp.lives
             .set_label(lives.map(String::as_str).unwrap_or_default());

@@ -125,7 +125,8 @@ impl ActivityPage {
         let imp = self.imp();
         if let Some(empty) = &activity.empty {
             imp.empty.set_title(&empty.title);
-            imp.empty.set_description(Some(&empty.detail));
+            imp.empty
+                .set_description(Some(&glib::markup_escape_text(&empty.detail)));
             imp.stack.set_visible_child_name("empty");
         } else {
             imp.stack.set_visible_child_name("lines");

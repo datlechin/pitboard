@@ -153,7 +153,7 @@ impl OpenLink {
                 }
             }
             status.set_title(title);
-            status.set_description(detail);
+            status.set_description(detail.map(glib::markup_escape_text).as_deref());
         };
         let mut link = None;
         let mut does = None;
