@@ -178,36 +178,33 @@ pub fn take_back(host: Rc<dyn Host>) -> adw::AlertDialog {
     alert
 }
 
-/// The alert saying `removal`, each of its commands in a row beside a button that copies it.
+/// The alert saying `removal`, its command in a row beside a button that copies it.
 pub fn removal_alert(removal: &PackageRemoval) -> adw::AlertDialog {
     let alert = adw::AlertDialog::new(Some(&removal.title), Some(&removal.message));
     let words = pitboard_model::app_words(Front::Gnome);
     let copy = pitboard_model::gnome_words().copy_command;
-    if !removal.commands.is_empty() {
+    if let Some(command) = &removal.command {
+        let row = adw::ActionRow::builder()
+            .title(command)
+            .use_markup(false)
+            .title_selectable(true)
+            .css_classes(["monospace"])
+            .build();
+        let button = gtk::Button::builder()
+            .icon_name("edit-copy-symbolic")
+            .tooltip_text(&copy)
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        button.update_property(&[gtk::accessible::Property::Label(&copy)]);
+        let run = command.clone();
+        button.connect_clicked(move |button| button.clipboard().set_text(&run));
+        row.add_suffix(&button);
         let commands = gtk::ListBox::builder()
             .selection_mode(gtk::SelectionMode::None)
             .css_classes(["boxed-list"])
             .build();
-        for command in &removal.commands {
-            let row = adw::ActionRow::builder()
-                .title(&command.run)
-                .subtitle(command.on.as_deref().unwrap_or_default())
-                .use_markup(false)
-                .title_selectable(true)
-                .css_classes(["monospace"])
-                .build();
-            let button = gtk::Button::builder()
-                .icon_name("edit-copy-symbolic")
-                .tooltip_text(&copy)
-                .valign(gtk::Align::Center)
-                .css_classes(["flat"])
-                .build();
-            button.update_property(&[gtk::accessible::Property::Label(&copy)]);
-            let run = command.run.clone();
-            button.connect_clicked(move |button| button.clipboard().set_text(&run));
-            row.add_suffix(&button);
-            commands.append(&row);
-        }
+        commands.append(&row);
         alert.set_extra_child(Some(&commands));
     }
     alert.add_response(QUIT, &words.menu.quit);

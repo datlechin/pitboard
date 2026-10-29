@@ -9,8 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A native Linux app for GNOME and KDE Plasma shows your accounts and their limits, switches,
-  signs in, warms up and posts notifications, on Debian 13, Ubuntu 26.04, Fedora 43 and later.
+- A native Linux app, built for GNOME and KDE Plasma and so far tested headless, shows your
+  accounts and their limits, switches, signs in, warms up and posts notifications.
 - On Linux, GNOME's search and KRunner switch to an account by its name while Pitboard runs, and
   the app's launcher offers Add Account and Refresh.
 - Where the desktop shows a tray, the Linux app keeps an icon there with its menu, and elsewhere

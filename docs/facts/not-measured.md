@@ -250,6 +250,8 @@ in a desktop's session. Not measured, each for the Linux session machines:
 - Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
   by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
   one, then ends where none came.
+- Whether the rpm installs and runs on openSUSE Tumbleweed, as on Fedora. Until a package is
+  built and installed there, Uninstall names `sudo dnf remove` alone for the rpm.
 - What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
   `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
   ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where

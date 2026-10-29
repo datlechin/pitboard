@@ -63,7 +63,7 @@ pub use machine::{
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown, WatchServiceShown,
 };
 pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
-pub use removal::{Package, PackageCommand, PackageRemoval, RemovalShown, package_removal};
+pub use removal::{Package, PackageRemoval, RemovalShown, package_removal};
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
 pub use welcome::{WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool};

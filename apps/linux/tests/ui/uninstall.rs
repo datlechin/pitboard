@@ -76,38 +76,28 @@ fn uninstall_removes_the_apps_leftovers_and_names_the_package_command() {
     viewed.until("its one button quits the app", |_| viewed.asked.quit.get());
 }
 
-// A Cargo build names no package, so each package's alert is drawn from its own removal.
+// A Cargo build names no package, so a package's alert is drawn from its own removal.
 #[gtk::test]
-fn each_package_command_is_shown_beside_its_copy_button() {
+fn the_package_command_is_shown_beside_its_copy_button() {
     adw::init().unwrap();
     let removal: PackageRemoval = pitboard_model::package_removal(Package::Rpm, &[]);
 
     let alert = removal_alert(&removal);
 
-    let commands = alert
-        .extra_child()
-        .expect("the commands, under the message");
+    let commands = alert.extra_child().expect("the command, under the message");
     let rows = every::<adw::ActionRow>(&commands);
-    assert_eq!(
-        (rows.iter())
-            .map(|row| (row.title().to_string(), row.subtitle().map(String::from)))
-            .collect::<Vec<_>>(),
-        (removal.commands.iter())
-            .map(|command| (command.run.clone(), command.on.clone()))
-            .collect::<Vec<_>>()
-    );
+    let titles: Vec<String> = rows.iter().map(|row| row.title().to_string()).collect();
+    assert_eq!(titles, removal.command.into_iter().collect::<Vec<_>>());
     let copy = pitboard_model::gnome_words().copy_command;
-    for row in &rows {
-        let copies = every::<gtk::Button>(row)
-            .into_iter()
-            .find(|button| button.tooltip_text().as_deref() == Some(copy.as_str()))
-            .expect("its copy button");
-        copies.emit_clicked();
-        let copied = glib::MainContext::default()
-            .block_on(copies.clipboard().read_text_future())
-            .unwrap();
-        assert_eq!(copied.as_deref(), Some(row.title().as_str()));
-    }
+    let copies = every::<gtk::Button>(&rows[0])
+        .into_iter()
+        .find(|button| button.tooltip_text().as_deref() == Some(copy.as_str()))
+        .expect("its copy button");
+    copies.emit_clicked();
+    let copied = glib::MainContext::default()
+        .block_on(copies.clipboard().read_text_future())
+        .unwrap();
+    assert_eq!(copied.as_deref(), Some(rows[0].title().as_str()));
     assert_eq!(alert.default_response().as_deref(), Some(QUIT));
     assert_eq!(alert.close_response(), QUIT);
 }

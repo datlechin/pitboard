@@ -167,9 +167,9 @@ no word names one desktop's settings or another system's place
 - **A status item's menu entry** has a label and no subtitle (DBusMenu, [The status
   item](#the-status-item)), so an account's entry says its figure beside its name, as the
   Windows menu's does (`named_in_menu`).
-- **After Uninstall** the app names its package manager's command: `apt` for the deb, and `dnf`
-  and `zypper` for the rpm, which one build serves to Fedora and openSUSE alike
-  (`package_removal`).
+- **After Uninstall** the app names its package manager's command: `apt` for the deb and `dnf`
+  for the rpm (`package_removal`). Whether the rpm also serves openSUSE, whose `zypper` would
+  remove it, is [not measured](not-measured.md#the-linux-app-on-a-desktop).
 
 ## Account windows
 
