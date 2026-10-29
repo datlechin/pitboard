@@ -26,7 +26,7 @@ pub(crate) struct WatchServiceFact {
     pub(crate) location: crate::schedule::Location,
     pub(crate) program: Option<PathBuf>,
     pub(crate) program_found: bool,
-    pub(crate) at: Option<crate::duty::autoswitch::Threshold>,
+    pub(crate) switching: Option<crate::watch_service::Switching>,
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
     pub(crate) outdated: bool,
@@ -59,7 +59,10 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     if !crate::schedule::serves(ctx) {
         return None;
     }
-    let crate::watch_service::Installed::Yes { location, at } = crate::watch_service::status(ctx)
+    let crate::watch_service::Installed::Yes {
+        location,
+        switching,
+    } = crate::watch_service::status(ctx)
     else {
         return None;
     };
@@ -68,7 +71,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
         program_found: program.as_deref().is_some_and(std::path::Path::is_file),
         program,
         location,
-        at,
+        switching,
         task: crate::watch_service::task(ctx),
         outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Watch),
         refused: crate::schedule::refused(ctx, crate::schedule::Job::Watch),
@@ -178,7 +181,7 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
             again,
         ));
     }
-    let runs = words::runs_from_sign_in(service.at.map(|at| at.percent()), program.display());
+    let runs = words::runs_from_sign_in(service.switching, program.display());
     if service.outdated {
         return Some(warn(
             "watch_service",

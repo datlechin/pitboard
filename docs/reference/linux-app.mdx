@@ -13,7 +13,7 @@ Closing the window depends on whether the desktop shows Pitboard's [tray icon](#
 | The desktop | Closing the window |
 | --- | --- |
 | Shows the tray icon | Hides the window. Pitboard keeps running until **Quit** in the icon's menu, or Ctrl+Q. If the tray icon goes away, Pitboard quits. |
-| Shows no tray icon, as GNOME does without an extension | Quits Pitboard. Turned on, [Watch in the Background](#watch-in-the-background) keeps switching and warming up. |
+| Shows no tray icon, as GNOME does without an extension | Quits Pitboard. Turned on, [Watch in the Background](#watch-in-the-background) keeps warming up, and switching where **Limits** says to. |
 
 ## Window
 
@@ -59,11 +59,19 @@ The icon shows how much of a limit is used, as [the icon on Windows](/reference/
 
 Pitboard starts at login through an autostart entry, `~/.config/autostart/com.usepitboard.Pitboard.desktop`. The entry starts Pitboard only while the app is installed. If Pitboard cannot write or remove it, the reason shows under the setting.
 
-Started at login, Pitboard opens no window and keeps running only while the desktop shows its tray icon. Where none shows within 10 seconds, it quits, and [Watch in the Background](#watch-in-the-background) is what keeps switching and warming up.
+Started at login, Pitboard opens no window and keeps running only while the desktop shows its tray icon. Where none shows within 10 seconds, it quits, and only [Watch in the Background](#watch-in-the-background) goes on.
 
 ### Watch in the background
 
-While the desktop shows no tray icon, nothing of Pitboard runs once its window is closed. **Watch in the Background** has your system's service manager run [the watch service](/reference/account-commands#the-watch-service) from each login. It switches Claude Code at the share **Limits** has, which the setting says, and Pitboard installs it again when you change that share. It warms up the accounts **Warm-Up** turns on. It switches even where **When a limit reaches** is **Notify Me** or **Do Nothing**, as **Limits** then says.
+While the desktop shows no tray icon, nothing of Pitboard runs once its window is closed. **Watch in the Background** has your system's service manager run [the watch service](/reference/account-commands#the-watch-service) from each login. It warms up the accounts **Warm-Up** turns on, and at a limit does what **When a limit reaches** in **Limits** says:
+
+| When a limit reaches | The watch service |
+| --- | --- |
+| **Switch Automatically** | Switches Claude Code at the share **Limits** has. |
+| **Notify Me** | Never switches. Nothing notifies you once the window is closed. |
+| **Do Nothing** | Never switches. |
+
+Pitboard installs the service again when you change the choice or the share, and the setting says what the service does.
 
 ### Uninstall
 

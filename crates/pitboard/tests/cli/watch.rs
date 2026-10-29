@@ -18,8 +18,12 @@ struct Watching {
 
 impl Watching {
     fn start(env: &Env) -> Watching {
+        Watching::start_with(env, &[])
+    }
+
+    fn start_with(env: &Env, options: &[&str]) -> Watching {
         let mut running = env
-            .command(&["watch", "--json"])
+            .command(&[&["watch", "--json"][..], options].concat())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -413,4 +417,85 @@ fn watch_warms_up_an_account_turned_on_once_its_period_is_not_running() {
         .expect("beta warmed up");
     assert_eq!(warmed["account"], "beta");
     assert!(warmed["until"].as_i64().is_some(), "{warmed}");
+}
+
+/// With `--no-switch`, `watch` says as it starts that it never switches, warms up the account
+/// turned on, and leaves the account in use at its share where it is.
+#[test]
+fn with_no_switch_watch_warms_up_and_never_switches() {
+    let mut env = two_accounts("watch-no-switch");
+    env.an_hour_on();
+    env.install_fake_claude_print();
+    env.claude_usage(None);
+    let (_, err, code) = env.run(&["status"]);
+    assert_eq!(code, 0, "status: {err}");
+    let (_, err, code) = env.run(&["warm", "on", "beta"]);
+    assert_eq!(code, 0, "warm on: {err}");
+    let (_, err, code) = env.run(&["warm", "range", "00:00", "24:00"]);
+    assert_eq!(code, 0, "warm range: {err}");
+    // Past the share, where `watch` would switch to beta.
+    let alpha = env.account_id("alpha");
+    env.edit_readings(|readings| {
+        let session = &mut readings[&alpha]["windows"][0];
+        session["percent"] = json!(96.0);
+        session["resets_at"] = json!(readings_now() + 3600);
+        session["is_active"] = json!(true);
+    });
+    env.claude_usage(Some(5 * 3600));
+
+    let watching = Watching::start_with(&env, &["--no-switch"]);
+    let started = watching.next();
+    assert_eq!(
+        (
+            &started["event"],
+            &started["threshold"],
+            &started["switches"]
+        ),
+        (&json!("watching"), &Value::Null, &json!(false)),
+        "{started}"
+    );
+    assert_eq!(started["warm"]["accounts"], json!(["beta"]), "{started}");
+    let said: Vec<Value> = (0..4)
+        .map(|_| watching.next())
+        .take_while(|data| data["event"] != "warmed_up")
+        .collect();
+    assert!(
+        said.iter().all(|data| data["event"] != "switched"),
+        "{said:?}"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+    let (out, _, _) = env.run(&["log", "--json"]);
+    let changes = envelope(&out)["data"]["entries"].clone();
+    assert!(
+        (changes.as_array().expect("entries").iter()).all(|change| change["verb"] != "auto-switch"),
+        "{changes}"
+    );
+}
+
+/// `--no-switch` takes the place of a share: never beside `--at`, nor beside `--once`, which
+/// decides only whether to switch.
+#[test]
+fn no_switch_is_refused_beside_a_share_or_once() {
+    let env = Env::new("watch-no-switch-refused");
+    for args in [
+        &["watch", "--no-switch", "--at", "90"][..],
+        &["watch", "--at", "90", "--no-switch"],
+        &["watch", "--once", "--no-switch"],
+        &["watch", "install", "--no-switch", "--at", "90"],
+        &["watch", "--no-switch", "install"],
+    ] {
+        let (_, err, code) = env.run(args);
+        assert_eq!(code, 2, "{args:?}: {err}");
+        assert!(
+            err.contains("cannot be used with") && err.contains("--no-switch"),
+            "{args:?}: {err}"
+        );
+    }
+}
+
+fn readings_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("after 1970")
+        .as_secs() as i64
 }

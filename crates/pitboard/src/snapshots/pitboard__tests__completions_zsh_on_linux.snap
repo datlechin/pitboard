@@ -83,7 +83,8 @@ _arguments "${_arguments_options[@]}" : \
 (watch)
 _arguments "${_arguments_options[@]}" : \
 '--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
-'--once[Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up]' \
+'(--at)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
+'(--no-switch)--once[Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up]' \
 '--json[Print JSON instead of text]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -100,6 +101,7 @@ _arguments "${_arguments_options[@]}" : \
             (install)
 _arguments "${_arguments_options[@]}" : \
 '--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
+'(--at)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
 '--json[Print JSON instead of text]' \
 '-h[Print help]' \
 '--help[Print help]' \

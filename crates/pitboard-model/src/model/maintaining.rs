@@ -26,7 +26,7 @@ use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
-use pitboard_core::watch_service::Installed;
+use pitboard_core::watch_service::{Installed, Switching};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -1076,6 +1076,10 @@ fn service_machine(name: &str) -> World {
     world
 }
 
+fn switch_at(percent: u8) -> Switching {
+    Switching::At(Threshold::new(percent).expect("a share"))
+}
+
 /// What GNOME's app shows of the watch service now.
 fn watch_service(model: &Hand) -> Option<WatchServiceShown> {
     present_on(Front::Gnome, &model.state, model.now.epoch(), &Utc)
@@ -1094,7 +1098,7 @@ fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs
     model.state.preferences.at_limit = Some("switch".into());
     model.send(Intent::ReadSchedule);
     model.run_by(|job| lanes.work(job));
-    let about = words::watch_service_about(Front::Gnome, 95);
+    let about = words::watch_service_about(Front::Gnome, switch_at(95));
     assert_eq!(
         watch_service(&model),
         Some(WatchServiceShown {
@@ -1120,7 +1124,7 @@ fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs
         model.send(Intent::SetWatchService { on: true }),
         [Job::SetWatchService {
             on: true,
-            at: Threshold::DEFAULT,
+            switching: Switching::At(Threshold::DEFAULT),
         }]
     );
     assert_eq!(
@@ -1139,10 +1143,10 @@ fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs
             about,
         })
     );
-    let Installed::Yes { at, .. } = world.elsewhere().watch_service() else {
+    let Installed::Yes { switching, .. } = world.elsewhere().watch_service() else {
         panic!("installed in the scratch machine");
     };
-    assert_eq!(at, Some(Threshold::DEFAULT));
+    assert_eq!(switching, Some(Switching::At(Threshold::DEFAULT)));
     let (at_limit, warm) = notes(&model);
     assert!(
         at_limit.ends_with(&words::switching_once_closed(true)),
@@ -1180,9 +1184,10 @@ fn with_a_status_item_it_is_not_offered() {
     }
 }
 
-/// The watch service switches at the share Limits has: a new share installs it again at that
-/// one, a share set while a change to it is under way once that change has been read back, and
-/// a choice that does not switch says the service still does.
+/// The watch service does at a limit what Limits says. Under Switch a new share installs it
+/// again at that one, and under Notify Me or Do Nothing it is installed again to never switch,
+/// each once a change to it under way has been read back. Limits and the service's line say
+/// what it does once the window is closed.
 #[test]
 fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
     let world = service_machine("watch-service-share");
@@ -1200,47 +1205,24 @@ fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
     });
     model.send(Intent::SetWatchService { on: true });
     model.run_by(|job| lanes.work(job));
-    let installed_at = || match world.elsewhere().watch_service() {
-        Installed::Yes { at, .. } => at.map(Threshold::percent),
+    let installed = || match world.elsewhere().watch_service() {
+        Installed::Yes { switching, .. } => switching,
         Installed::No | Installed::Unsupported => None,
     };
-    assert_eq!(installed_at(), Some(95));
-    let share = |percent| Threshold::new(percent).expect("a share");
+    assert_eq!(installed(), Some(switch_at(95)));
     let reinstalls = |jobs: &[Job]| {
         (jobs.iter())
             .filter(|job| matches!(job, Job::SetWatchService { .. }))
             .cloned()
             .collect::<Vec<_>>()
     };
-
-    let jobs = model.send(Intent::SetAtLimit {
-        choice: AtLimit::Switch,
-        at: 80,
-    });
-    assert_eq!(
-        reinstalls(&jobs),
+    let reinstall = |switching| {
         [Job::SetWatchService {
             on: true,
-            at: share(80),
+            switching,
         }]
-    );
-    let jobs = model.send(Intent::SetAtLimit {
-        choice: AtLimit::Switch,
-        at: 85,
-    });
-    assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
-    model.run_by(|job| lanes.work(job));
-    assert_eq!(installed_at(), Some(85));
-    assert_eq!(
-        watch_service(&model).map(|shown| shown.about),
-        Some(words::watch_service_about(Front::Gnome, 85))
-    );
-
-    let jobs = model.send(Intent::SetAtLimit {
-        choice: AtLimit::Notify,
-        at: 85,
-    });
-    assert_eq!(reinstalls(&jobs), [], "the share is the one installed");
+    };
+    let set = |model: &mut Hand, choice, at| model.send(Intent::SetAtLimit { choice, at });
     let note = |model: &Hand| {
         present_on(Front::Gnome, &model.state, 0, &Utc)
             .machine
@@ -1248,27 +1230,65 @@ fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
             .note
             .unwrap_or_default()
     };
+    let about = |model: &Hand| watch_service(model).map(|shown| shown.about);
+
+    let jobs = set(&mut model, AtLimit::Switch, 80);
+    assert_eq!(reinstalls(&jobs), reinstall(switch_at(80)));
+    let jobs = set(&mut model, AtLimit::Switch, 85);
+    assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(installed(), Some(switch_at(85)));
+    assert_eq!(
+        about(&model),
+        Some(words::watch_service_about(Front::Gnome, switch_at(85)))
+    );
     assert!(
-        note(&model).ends_with(&words::still_switching_once_closed(85)),
+        note(&model).ends_with(&words::switching_once_closed(true)),
         "{}",
         note(&model)
     );
-    model.send(Intent::SetAtLimit {
-        choice: AtLimit::Nothing,
-        at: 70,
-    });
+
+    let jobs = set(&mut model, AtLimit::Notify, 85);
+    assert_eq!(reinstalls(&jobs), reinstall(Switching::Never));
     model.run_by(|job| lanes.work(job));
-    assert_eq!(installed_at(), Some(70));
-    assert_eq!(note(&model), words::still_switching_once_closed(70));
+    assert_eq!(installed(), Some(Switching::Never));
+    assert!(
+        note(&model).ends_with(words::NOTIFYING_ONCE_CLOSED),
+        "{}",
+        note(&model)
+    );
+    assert_eq!(
+        about(&model),
+        Some(words::watch_service_about(Front::Gnome, Switching::Never))
+    );
+    let jobs = set(&mut model, AtLimit::Notify, 70);
+    assert_eq!(reinstalls(&jobs), [], "it switches at no share");
+    let jobs = set(&mut model, AtLimit::Nothing, 70);
+    assert_eq!(reinstalls(&jobs), [], "it never switched");
+    assert_eq!(note(&model), words::ONLY_WARMING_UP);
+
+    let jobs = set(&mut model, AtLimit::Switch, 70);
+    assert_eq!(reinstalls(&jobs), reinstall(switch_at(70)));
+    let jobs = set(&mut model, AtLimit::Nothing, 70);
+    assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(
+        installed(),
+        Some(Switching::Never),
+        "as Limits says once read back"
+    );
 
     model.send(Intent::SetWatchService { on: false });
     model.run_by(|job| lanes.work(job));
-    let jobs = model.send(Intent::SetAtLimit {
-        choice: AtLimit::Switch,
-        at: 90,
-    });
+    let jobs = set(&mut model, AtLimit::Switch, 90);
     assert_eq!(reinstalls(&jobs), [], "nothing is installed to follow it");
     assert_eq!(world.elsewhere().watch_service(), Installed::No);
+    set(&mut model, AtLimit::Notify, 90);
+    assert!(
+        !note(&model).contains(words::NOTIFYING_ONCE_CLOSED),
+        "{}",
+        note(&model)
+    );
 }
 
 /// A terminal can install or take away the watch service while the app runs, so each visit to
@@ -1295,13 +1315,16 @@ fn the_watch_service_is_read_on_each_visit() {
 
     world
         .elsewhere()
-        .watch_service_install(Threshold::new(90).expect("a share"))
+        .watch_service_install(switch_at(90))
         .expect("installed from a terminal");
     model.send(Intent::ReadSchedule);
     model.run_by(|job| lanes.work(job));
     let shown = watch_service(&model).expect("offered");
     assert!(shown.on);
-    assert_eq!(shown.about, words::watch_service_about(Front::Gnome, 90));
+    assert_eq!(
+        shown.about,
+        words::watch_service_about(Front::Gnome, switch_at(90))
+    );
 
     world
         .elsewhere()

@@ -337,8 +337,9 @@ Usage: pitboard watch [OPTIONS]
 | --- | --- |
 | `--at <PERCENT>` | Switch once a limit of the account in use reaches this share: a whole number from 50 to 99, 95 by default |
 | `--once` | Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up |
+| `--no-switch` | Never switch, and only warm up the accounts `pitboard warm on` turned on. Not with `--at` or `--once` |
 
-`watch` switches Claude Code only. [Switch before an account runs out](/guides/automatic-switching) gives the rules it follows. It also warms up the accounts [`warm on`](#warm) turned on, as [Warm up accounts](/guides/warm-up) describes.
+`watch` switches Claude Code only. [Switch before an account runs out](/guides/automatic-switching) gives the rules it follows. It also warms up the accounts [`warm on`](#warm) turned on, as [Warm up accounts](/guides/warm-up) describes. With `--no-switch`, it never switches.
 
 It runs in the foreground until you press Control-C, whatever the app's **When a limit reaches** setting says. [The watch service](#the-watch-service) runs it in the background instead.
 
@@ -352,7 +353,8 @@ On standard output, each line but the first starts with the local time, such as 
 
 | Line | When |
 | --- | --- |
-| `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | It starts. With an account turned on for warm-ups, the first sentence ends `, and warms up personal from 06:00 to 22:00.` |
+| `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | It starts. With an account turned on for warm-ups, the second sentence ends `, and warms up personal from 06:00 to 22:00.` |
+| `Watching Claude Code. Pitboard never switches accounts, and warms up personal from 06:00 to 22:00. Stop with Ctrl-C.` | It starts with `--no-switch`. With no account turned on for warm-ups, the second sentence is ``Pitboard never switches accounts, and no account is turned on for warm-ups: turn one on with `pitboard warm on <account>`.`` |
 | `Watching work: 62% of its 5-hour limit, as of 14:00.` | No limit of the account in use has reached the share. The line names its fullest limit that has not reset. While Anthropic holds Pitboard off asking about the account, it ends `Anthropic holds Pitboard off asking again until 15:28.` |
 | `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. The last sentence is the second line `use` prints. |
 | `work has used 97% of its 5-hour limit. Pitboard is not switching: no other Claude Code account has room below 95% in every limit.` | No other account qualifies: `no_room`. |
@@ -395,11 +397,11 @@ Watching work: 62% of its 5-hour limit, as of 14:00.
 
 | Command | What it does | Output begins |
 | --- | --- | --- |
-| `install` | Hands `pitboard watch` to the system's own service manager and starts it, with its own `--at`, replacing one already there. | `Pitboard watches Claude Code in the background from now on, and at each sign-in.`, then where the job is |
+| `install` | Hands `pitboard watch` to the system's own service manager and starts it, with its own `--at` or `--no-switch`, replacing one already there. | `Pitboard watches Claude Code in the background from now on, and at each sign-in.`, then where the job is |
 | `status` | Checks that the job is there, not whether it runs. | `Pitboard watches Claude Code in the background` or `Nothing watches Claude Code in the background here.` |
 | `uninstall` | Stops the job and deletes what `install` wrote. | `Stopped watching Claude Code in the background.` or `Nothing was watching Claude Code in the background.` |
 
-The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On macOS, its lines go to `~/Library/Logs/Pitboard/watch.log`, and on Linux to your user's journal. On Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
+The service starts at each sign-in and runs `watch` with the `--at` or `--no-switch` that `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On macOS, its lines go to `~/Library/Logs/Pitboard/watch.log`, and on Linux to your user's journal. On Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
 
 On Linux, your user's systemd runs the service from your first sign-in to your last sign-out. To keep it running with nobody signed in, as on a server, run `loginctl enable-linger`, as loginctl(1) says.
 

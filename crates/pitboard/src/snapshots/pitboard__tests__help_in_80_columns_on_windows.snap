@@ -129,6 +129,8 @@ Options:
       --at <PERCENT>  Switch once a limit of the account in use reaches this
                       share, from 50 to 99 [default: 95]
       --json          Print JSON instead of text
+      --no-switch     Never switch, and only warm up the accounts `pitboard warm
+                      on` turned on
       --once          Decide once whether to switch, from the usage Pitboard
                       last measured, asking no service for usage, and stop.
                       Warms nothing up
@@ -146,6 +148,8 @@ Options:
       --at <PERCENT>  Switch once a limit of the account in use reaches this
                       share, from 50 to 99 [default: 95]
       --json          Print JSON instead of text
+      --no-switch     Never switch, and only warm up the accounts `pitboard warm
+                      on` turned on
   -h, --help          Print help
 $ pitboard watch status --help
 Say whether it is installed

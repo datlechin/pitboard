@@ -1259,7 +1259,7 @@ mod tests {
         a_program_at(&scoop);
         a_program_at(&bundled);
         let the_app = home.read(&[]).with_schedule_program(bundled.clone());
-        let at = crate::duty::autoswitch::Threshold::DEFAULT;
+        let at = crate::watch_service::Switching::At(crate::duty::autoswitch::Threshold::DEFAULT);
         let watching = |ctx: &Context| {
             crate::watch_service::status(ctx) != crate::watch_service::Installed::No
         };

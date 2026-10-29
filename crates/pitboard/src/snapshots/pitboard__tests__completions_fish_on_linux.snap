@@ -67,6 +67,7 @@ complete -c pitboard -n "__fish_pitboard_using_subcommand forget" -s y -l yes -d
 complete -c pitboard -n "__fish_pitboard_using_subcommand forget" -l json -d 'Print JSON instead of text'
 complete -c pitboard -n "__fish_pitboard_using_subcommand forget" -s h -l help -d 'Print help'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -l at -d 'Switch once a limit of the account in use reaches this share, from 50 to 99' -r
+complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -l no-switch -d 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -l once -d 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -l json -d 'Print JSON instead of text'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -s h -l help -d 'Print help'
@@ -75,6 +76,7 @@ complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -f -a "uninstall" -d 'Stop it and take it away'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and not __fish_seen_subcommand_from install status uninstall help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and __fish_seen_subcommand_from install" -l at -d 'Switch once a limit of the account in use reaches this share, from 50 to 99' -r
+complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and __fish_seen_subcommand_from install" -l no-switch -d 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and __fish_seen_subcommand_from install" -l json -d 'Print JSON instead of text'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and __fish_seen_subcommand_from install" -s h -l help -d 'Print help'
 complete -c pitboard -n "__fish_pitboard_using_subcommand watch; and __fish_seen_subcommand_from status" -l json -d 'Print JSON instead of text'

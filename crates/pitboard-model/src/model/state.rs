@@ -280,9 +280,12 @@ pub(crate) enum Job {
     /// Read the watch service. `after_change` is the read after a change to it, which ends
     /// that change once it lands.
     ReadWatchService { after_change: bool },
-    /// Have this machine's service manager run `pitboard watch` at `at`, or take it away,
-    /// refused as `SetSchedule` is.
-    SetWatchService { on: bool, at: Threshold },
+    /// Have this machine's service manager run `pitboard watch`, doing at a limit what
+    /// `switching` says, or take it away, refused as `SetSchedule` is.
+    SetWatchService {
+        on: bool,
+        switching: pitboard_core::watch_service::Switching,
+    },
     /// Make every check `pitboard doctor` makes.
     Check,
     /// Read the newest `limit` changes Pitboard made.
@@ -1688,7 +1691,7 @@ impl State {
                 if self.offers_watch_service() && self.machine.watch(on) {
                     jobs.push(Job::SetWatchService {
                         on,
-                        at: self.preferences.threshold(),
+                        switching: self.preferences.watch_switching(),
                     });
                 }
             }
@@ -2615,25 +2618,29 @@ impl State {
             self.advise(&status, jobs);
         }
         self.look_to_switch(jobs);
-        self.watch_at_the_share(jobs);
+        self.watch_as_limits_says(jobs);
     }
 
-    // `pitboard watch` switches at the share it was installed with, so the service is installed
-    // again at the one Limits has: once a change to it under way has been read back, and not
-    // after one that failed, which says so beside its switch until the next is asked for.
-    fn watch_at_the_share(&mut self, jobs: &mut Vec<Job>) {
-        let at = self.preferences.threshold();
-        let elsewhere = matches!(
+    // `pitboard watch` does at a limit what it was installed to, so the service is installed
+    // again as Limits has it, switching at its share under Switch and never otherwise: once a
+    // change to it under way has been read back, and not after one that failed, which says so
+    // beside its switch until the next is asked for.
+    fn watch_as_limits_says(&mut self, jobs: &mut Vec<Job>) {
+        let switching = self.preferences.watch_switching();
+        let otherwise = matches!(
             self.machine.watch_service,
-            Some(WatchService::Installed { at: Some(installed) }) if installed != at.percent()
+            Some(WatchService::Installed { switching: Some(installed) }) if installed != switching
         );
         if self.offers_watch_service()
             && self.preferences_read
-            && elsewhere
+            && otherwise
             && self.machine.watch_failed.is_none()
             && self.machine.watch(true)
         {
-            jobs.push(Job::SetWatchService { on: true, at });
+            jobs.push(Job::SetWatchService {
+                on: true,
+                switching,
+            });
         }
     }
 
@@ -3233,7 +3240,7 @@ impl State {
                 self.machine
                     .watch_service_read(service, Some(own), after_change);
                 if after_change {
-                    self.watch_at_the_share(jobs);
+                    self.watch_as_limits_says(jobs);
                 }
             }
             Answer::WatchServiceSet { own, outcome } => {

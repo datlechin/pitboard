@@ -89,14 +89,27 @@ pub(crate) fn cannot_watch(front: Front, temporary: bool) -> String {
 // Preferences' switch for it, which the Linux app titles so.
 pub(crate) const WATCH_IN_THE_BACKGROUND: &str = "Watch in the Background";
 
-// Under the watch service's switch, `at` the share it switches at.
-pub(crate) fn watch_service_about(front: Front, at: u8) -> String {
-    format!(
-        "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {at}% and warming up the \
-         accounts {} turns on, from each login.",
-        this_machine(front),
-        warm_up(front)
-    )
+// Under the watch service's switch, which switches at its share or never, as Limits says.
+pub(crate) fn watch_service_about(
+    front: Front,
+    switching: pitboard_core::watch_service::Switching,
+) -> String {
+    use pitboard_core::watch_service::Switching;
+    match switching {
+        Switching::At(at) => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}% and warming up \
+             the accounts {} turns on, from each login.",
+            this_machine(front),
+            at.percent(),
+            warm_up(front)
+        ),
+        Switching::Never => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on warming up the accounts {} turns on, from \
+             each login, and never switches Claude Code.",
+            this_machine(front),
+            warm_up(front)
+        ),
+    }
 }
 
 // After the at-limit note on a front whose window's closing quits Pitboard: what switches then.
@@ -110,14 +123,12 @@ pub(crate) fn switching_once_closed(watched: bool) -> String {
     }
 }
 
-// The at-limit note, or alone, where the choice does not switch but the watch service, which
-// always does, is on.
-pub(crate) fn still_switching_once_closed(at: u8) -> String {
-    format!(
-        "Once Pitboard’s window is closed, the watch service still switches Claude Code at {at}% \
-         until {WATCH_IN_THE_BACKGROUND} is off."
-    )
-}
+// After Notify Me's note where the watch service is on, which notifies nobody.
+pub(crate) const NOTIFYING_ONCE_CLOSED: &str =
+    "Once its window is closed, nothing notifies you, and the watch service only warms up.";
+
+// Under Do Nothing, where the watch service is on.
+pub(crate) const ONLY_WARMING_UP: &str = "The watch service only warms up, and never switches.";
 
 pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
     format!("From {lowest}% to {highest}%")
@@ -778,15 +789,20 @@ mod tests {
             "Once its window is closed, nothing switches it unless Watch in the Background is \
              on."
         );
+        let at = |percent| {
+            pitboard_core::watch_service::Switching::At(
+                pitboard_core::duty::autoswitch::Threshold::new(percent).expect("a share"),
+            )
+        };
         assert_eq!(
-            still_switching_once_closed(80),
-            "Once Pitboard’s window is closed, the watch service still switches Claude Code at \
-             80% until Watch in the Background is off."
-        );
-        assert_eq!(
-            watch_service_about(Front::Gnome, 95),
+            watch_service_about(Front::Gnome, at(95)),
             "Pitboard quits once its window is closed. Turned on, this computer goes on switching \
              Claude Code at 95% and warming up the accounts Warm-Up turns on, from each login."
+        );
+        assert_eq!(
+            watch_service_about(Front::Gnome, pitboard_core::watch_service::Switching::Never),
+            "Pitboard quits once its window is closed. Turned on, this computer goes on warming \
+             up the accounts Warm-Up turns on, from each login, and never switches Claude Code."
         );
         assert_eq!(
             warm_up_failed("Claude Code failed."),

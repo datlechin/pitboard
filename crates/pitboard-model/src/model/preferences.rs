@@ -83,6 +83,16 @@ impl Preferences {
             .map_or_else(Threshold::default, Threshold::clamped)
     }
 
+    // What the watch service does at a limit: switch where Limits says Switch, and otherwise
+    // only warm up.
+    pub(crate) fn watch_switching(&self) -> pitboard_core::watch_service::Switching {
+        use pitboard_core::watch_service::Switching;
+        match self.at_limit() {
+            AtLimit::Switch => Switching::At(self.threshold()),
+            AtLimit::Notify | AtLimit::Nothing => Switching::Never,
+        }
+    }
+
     // Before anybody chose, switching by itself on reads as Switch and off as Notify.
     pub(crate) fn at_limit(&self) -> AtLimit {
         match self.at_limit.as_deref() {

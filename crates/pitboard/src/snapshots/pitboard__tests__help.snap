@@ -165,6 +165,9 @@ Options:
       --json
           Print JSON instead of text
 
+      --no-switch
+          Never switch, and only warm up the accounts `pitboard warm on` turned on
+
       --once
           Decide once whether to switch, from the usage Pitboard last measured, asking no service
           for usage, and stop. Warms nothing up
@@ -188,6 +191,9 @@ Options:
 
       --json
           Print JSON instead of text
+
+      --no-switch
+          Never switch, and only warm up the accounts `pitboard warm on` turned on
 
   -h, --help
           Print help

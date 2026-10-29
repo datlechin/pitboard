@@ -1329,17 +1329,18 @@ impl AppCore {
     pub(crate) fn watch_service(&self) -> Option<WatchService> {
         use pitboard_core::watch_service::Installed;
         Some(match self.readable().ok()?.core.watch_service() {
-            Installed::Yes { at, .. } => WatchService::Installed {
-                at: at.map(Threshold::percent),
-            },
+            Installed::Yes { switching, .. } => WatchService::Installed { switching },
             Installed::No => WatchService::Absent,
             Installed::Unsupported => WatchService::Unsupported,
         })
     }
 
-    /// Have this computer's own service manager run `pitboard watch`, switching at `at`, from
-    /// now on and at each sign-in. Refused as `schedule_install` is.
-    pub(crate) fn watch_service_install(&self, at: Threshold) -> Result<String, PitboardError> {
+    /// Have this computer's own service manager run `pitboard watch`, doing at a limit what
+    /// `switching` says, from now on and at each sign-in. Refused as `schedule_install` is.
+    pub(crate) fn watch_service_install(
+        &self,
+        switching: pitboard_core::watch_service::Switching,
+    ) -> Result<String, PitboardError> {
         let made = self.core();
         made.core.permit().said(self.front)?;
         if made.helper.is_none() {
@@ -1350,7 +1351,7 @@ impl AppCore {
         }
         Ok(made
             .core
-            .watch_service_install(at)
+            .watch_service_install(switching)
             .said(self.front)?
             .to_string())
     }

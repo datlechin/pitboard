@@ -1351,7 +1351,7 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__watch)
-            opts="-h --at --once --json --help install status uninstall help"
+            opts="-h --at --no-switch --once --json --help install status uninstall help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1439,7 +1439,7 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__watch__subcmd__install)
-            opts="-h --at --json --help"
+            opts="-h --at --no-switch --json --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

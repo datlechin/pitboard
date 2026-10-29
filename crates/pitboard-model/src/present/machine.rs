@@ -229,7 +229,7 @@ fn watch_service(seen: &Seen) -> Option<WatchServiceShown> {
     let on = once_closed(seen)?;
     let machine = &seen.state.machine;
     let installed = match machine.watch_service {
-        Some(WatchService::Installed { at }) => Some(at),
+        Some(WatchService::Installed { switching }) => Some(switching),
         _ => None,
     };
     let cannot = machine
@@ -251,15 +251,15 @@ fn watch_service(seen: &Seen) -> Option<WatchServiceShown> {
             ScheduleFailure::Refused { message } => message.clone(),
         })
         .filter(|failed| note.as_ref() != Some(failed));
-    let at = installed
+    let switching = installed
         .flatten()
-        .unwrap_or_else(|| seen.state.preferences.threshold().percent());
+        .unwrap_or_else(|| seen.state.preferences.watch_switching());
     Some(WatchServiceShown {
         on,
         enabled: machine.watching.is_none() && (installed.is_some() || cannot.is_none()),
         note,
         failed,
-        about: words::watch_service_about(seen.front, at),
+        about: words::watch_service_about(seen.front, switching),
     })
 }
 
@@ -347,10 +347,11 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .any(|warning| warning.code == "fallback_login"),
         pitboard_core::switch::ADOPTION_CEILING_SECONDS,
     );
-    let closed = once_closed(seen).and_then(|watched| match (switching, watched) {
-        (true, watched) => Some(words::switching_once_closed(watched)),
-        (false, true) => Some(words::still_switching_once_closed(at)),
-        (false, false) => None,
+    let closed = once_closed(seen).and_then(|watched| match (choice, watched) {
+        (AtLimit::Switch, watched) => Some(words::switching_once_closed(watched)),
+        (AtLimit::Notify, true) => Some(words::NOTIFYING_ONCE_CLOSED.into()),
+        (AtLimit::Nothing, true) => Some(words::ONLY_WARMING_UP.into()),
+        (AtLimit::Notify | AtLimit::Nothing, false) => None,
     });
     let said: Vec<String> = note.into_iter().chain(closed).collect();
     let note = (!said.is_empty()).then(|| said.join(" "));

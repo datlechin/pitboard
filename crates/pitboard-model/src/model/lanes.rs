@@ -980,12 +980,12 @@ impl Worker {
                 own: core.own_command_line(),
                 after_change,
             },
-            Job::SetWatchService { on, at } => {
+            Job::SetWatchService { on, switching } => {
                 let own = core.own_command_line();
                 Answer::WatchServiceSet {
                     outcome: set_schedule(on, own, |on| {
                         if on {
-                            core.watch_service_install(at).map(drop)
+                            core.watch_service_install(switching).map(drop)
                         } else {
                             core.watch_service_uninstall().map(drop)
                         }

@@ -173,7 +173,7 @@ enum Command {
         share: watch::Share,
         /// Decide once whether to switch, from the usage Pitboard last measured, asking no
         /// service for usage, and stop. Warms nothing up
-        #[arg(long)]
+        #[arg(long, conflicts_with = "no_switch")]
         once: bool,
         // Given by `--scheduled`, as `renew`'s is.
         #[arg(skip)]
@@ -1311,12 +1311,13 @@ where
     // the global `--json` beside too.
     if let Some(("watch", watch)) = matches.subcommand()
         && let Some((what, _)) = watch.subcommand()
-        && let Some(given) = ["at", "once", "scheduled"]
+        && let Some(given) = ["at", "no_switch", "once", "scheduled"]
             .into_iter()
             .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
     {
         let mut cli = parser();
         cli.build();
+        let given = given.replace('_', "-");
         let message = format!("the subcommand '{what}' cannot be used with '--{given}'");
         let kind = clap::error::ErrorKind::ArgumentConflict;
         return Err(match cli.find_subcommand_mut("watch") {
@@ -1406,7 +1407,7 @@ fn main() -> ExitCode {
             once: false,
             scheduled,
             ..
-        } => return watch::run(&pitboard, share.threshold(), scheduled, cli.json),
+        } => return watch::run(&pitboard, share.switching(), scheduled, cli.json),
         Command::Watch { share, .. } => watch::once(&pitboard, share.threshold()),
         Command::Enroll {
             label,
@@ -1944,6 +1945,19 @@ mod tests {
             command_line(["pitboard", "watch", "--scheduled", "--once"]).is_err(),
             "a run of the service watches until it is stopped"
         );
+        let never = [&pitboard_core::schedule::WATCH_RUN[..], &["--no-switch"]].concat();
+        let Some(Command::Watch {
+            scheduled: true,
+            share,
+            ..
+        }) = run(&never)
+        else {
+            panic!("a run of a service that never switches");
+        };
+        assert_eq!(
+            share.switching(),
+            pitboard_core::watch_service::Switching::Never
+        );
         assert!(command_line(["pitboard", "status", "--scheduled"]).is_err());
     }
 
@@ -1970,10 +1984,26 @@ mod tests {
             panic!("watch install");
         };
         assert_eq!(share.threshold().percent(), 80);
+        let cli = command_line(["pitboard", "watch", "install", "--no-switch"]).expect("parsed");
+        let Some(Command::Watch {
+            what: Some(watch::WatchCommand::Install { share }),
+            ..
+        }) = cli.command
+        else {
+            panic!("watch install --no-switch");
+        };
+        assert_eq!(
+            share.switching(),
+            pitboard_core::watch_service::Switching::Never
+        );
         for args in [
             &["watch", "--at", "80", "install"][..],
+            &["watch", "--no-switch", "install"],
             &["watch", "--once", "status"],
             &["watch", "--scheduled", "uninstall"],
+            &["watch", "--no-switch", "--at", "80"],
+            &["watch", "install", "--at", "80", "--no-switch"],
+            &["watch", "--once", "--no-switch"],
         ] {
             let refused = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
                 .err()

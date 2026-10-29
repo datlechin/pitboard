@@ -1,5 +1,10 @@
 use super::*;
 
+fn at(percent: u8) -> crate::watch_service::Switching {
+    let at = crate::duty::autoswitch::Threshold::new(percent).expect("a share");
+    crate::watch_service::Switching::At(at)
+}
+
 #[test]
 fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
     let mut f = facts();
@@ -108,7 +113,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
         )),
         program: program.map(PathBuf::from),
         program_found: true,
-        at: crate::duty::autoswitch::Threshold::new(90),
+        switching: Some(at(90)),
         task,
         outdated: false,
         refused: None,
@@ -120,7 +125,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
     assert_eq!(found.level, Level::Ok);
     assert_eq!(
         found.detail,
-        words::runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard")
+        words::runs_from_sign_in(Some(at(90)), "/opt/homebrew/bin/pitboard")
     );
     assert_eq!(found.name, "watch service");
     assert_eq!(section("watch_service"), None, "Pitboard's own");
@@ -147,7 +152,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
         (failed.detail.clone(), failed.advice.as_str()),
         (
             words::last_run_ended(
-                &words::runs_from_sign_in(Some(90), r"C:\bin\pitboard.exe"),
+                &words::runs_from_sign_in(Some(at(90)), r"C:\bin\pitboard.exe"),
                 None,
                 1
             ),
@@ -247,7 +252,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
         )),
         program: Some(PathBuf::from(program)),
         program_found: true,
-        at: None,
+        switching: None,
         task: None,
         outdated: true,
         refused: None,
@@ -320,8 +325,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
         assert!(watch_service_fact(&ctx).expect("installed").outdated);
 
         crate::schedule::install(&ctx, Permit::for_a_test()).expect("installed again");
-        let at = crate::duty::autoswitch::Threshold::new(90).expect("a share");
-        crate::watch_service::install(&ctx, Permit::for_a_test(), at).expect("installed again");
+        crate::watch_service::install(&ctx, Permit::for_a_test(), at(90)).expect("installed again");
         assert!(!schedule_fact(&ctx).expect("installed").outdated);
         assert!(!watch_service_fact(&ctx).expect("installed").outdated);
     }
@@ -659,7 +663,7 @@ fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when
         )),
         program: Some(PathBuf::from(program)),
         program_found: true,
-        at: crate::duty::autoswitch::Threshold::new(90),
+        switching: Some(at(90)),
         task: None,
         outdated: false,
         refused: Some(crate::schedule::Refused {
@@ -677,7 +681,7 @@ fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when
             (refused.detail.as_str(), refused.advice.as_str()),
             (
                 words::switch_could_not_open(
-                    &words::runs_from_sign_in(Some(90), program),
+                    &words::runs_from_sign_in(Some(at(90)), program),
                     600,
                     Some(crate::host::Vault::SecretService),
                     true
@@ -693,6 +697,6 @@ fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when
     service.outdated = true;
     assert_eq!(
         check(&evaluate(&f), "watch_service").detail,
-        words::fails_once_its_pitboard_is_gone(&words::runs_from_sign_in(Some(90), program))
+        words::fails_once_its_pitboard_is_gone(&words::runs_from_sign_in(Some(at(90)), program))
     );
 }

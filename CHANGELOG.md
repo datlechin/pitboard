@@ -14,9 +14,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On Linux, GNOME's search and KRunner switch to an account by its name while Pitboard runs, and
   the app's launcher offers Add Account and Refresh.
 - Where the desktop shows a tray, the Linux app keeps an icon there with its menu, and elsewhere
-  closing its window quits it and the watch service keeps switching, if you turn that on.
+  closing its window quits it and the watch service keeps warming up, and switching only under
+  Switch Automatically, if you turn that on.
 - A Plasma widget shows the account in use and its limits, and switches accounts through the
   Linux app.
+- `pitboard watch` and `pitboard watch install` take `--no-switch`, which warms up the accounts
+  `pitboard warm on` turned on and never switches, and `pitboard watch status` says so.
 - `pitboard vault` says where parked logins are kept, and on Linux `pitboard vault move` moves
   them between the login keyring and files.
 - On Linux, `pitboard doctor` says where parked logins are kept, and warns where they are files

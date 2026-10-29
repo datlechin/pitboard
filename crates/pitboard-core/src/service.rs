@@ -542,9 +542,13 @@ impl Pitboard {
         crate::watch_service::status(&self.ctx)
     }
 
-    /// Has the system's service manager run `pitboard watch` at `at` from each sign-in.
-    pub fn watch_service_install(&self, at: Threshold) -> Result<schedule::Location> {
-        crate::watch_service::install(&self.ctx, self.permit()?, at)
+    /// Has the system's service manager run `pitboard watch` from each sign-in, doing at a
+    /// limit what `switching` says.
+    pub fn watch_service_install(
+        &self,
+        switching: crate::watch_service::Switching,
+    ) -> Result<schedule::Location> {
+        crate::watch_service::install(&self.ctx, self.permit()?, switching)
     }
 
     /// `false` where nothing was installed.
@@ -2930,7 +2934,7 @@ mod tests {
         }),
         ("schedule_repair", |p, _| failed(p.schedule_repair())),
         ("watch_service_install", |p, _| {
-            failed(p.watch_service_install(Threshold::DEFAULT))
+            failed(p.watch_service_install(crate::watch_service::Switching::Never))
         }),
         ("watch_service_uninstall", |p, _| {
             failed(p.watch_service_uninstall())

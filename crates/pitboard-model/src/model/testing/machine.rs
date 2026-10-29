@@ -167,7 +167,7 @@ pub(crate) struct Stub {
     /// at, and how many times it was read and asked to take it away. It refuses as the
     /// scheduler does, `refusing`.
     pub watch_service: WatchService,
-    pub watch_installs: Vec<u8>,
+    pub watch_installs: Vec<pitboard_core::watch_service::Switching>,
     pub watch_reads: usize,
     pub watch_uninstalls: usize,
     /// What repairing a schedule an older app wrote gives.
@@ -692,11 +692,11 @@ impl Stub {
                     after_change,
                 }
             }
-            Job::SetWatchService { on, at } => Answer::WatchServiceSet {
+            Job::SetWatchService { on, switching } => Answer::WatchServiceSet {
                 own: self.own,
                 outcome: lanes::set_schedule(on, self.own, |on| {
                     if on {
-                        self.watch_installs.push(at.percent());
+                        self.watch_installs.push(switching);
                     } else {
                         self.watch_uninstalls += 1;
                     }
@@ -705,7 +705,7 @@ impl Stub {
                     }
                     self.watch_service = if on {
                         WatchService::Installed {
-                            at: Some(at.percent()),
+                            switching: Some(switching),
                         }
                     } else {
                         WatchService::Absent

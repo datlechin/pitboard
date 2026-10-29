@@ -446,10 +446,15 @@ keeps it is in the header of the module named.
   of a change, and `uninstall` takes it away before the schedule
   (`the_services_run_is_ended_only_between_changes`,
   `uninstalling_takes_the_watch_service_with_it`).
+- The watch service switches at the share it was installed with, or never, with
+  `--no-switch`, and says which as it is read back
+  (`a_service_that_never_switches_runs_watch_with_no_switch_and_reads_back_so`,
+  `with_no_switch_watch_warms_up_and_never_switches`).
 - Where its front has no status item, closing the window quits the app, so the app offers to
   run the automatic switch and the warm-ups in the watch service, reads it on each visit to
-  them and installs it only when asked. Installed, it is installed again at each share the
-  settings take, and the settings say it switches where their choice does not
+  them and installs it only when asked. Installed, it switches only where the settings' choice
+  is Switch, at their share, and never otherwise, installed again as either changes, and the
+  settings say what it does once the window is closed
   (`without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs_it`,
   `with_a_status_item_it_is_not_offered`, `the_watch_service_is_read_on_each_visit`,
   `the_watch_service_follows_the_share_and_limits_says_what_it_does`).

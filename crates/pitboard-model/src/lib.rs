@@ -341,8 +341,10 @@ pub(crate) struct Abandoned {
 // Whether this machine's own service manager runs `pitboard watch` from each sign-in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WatchService {
-    // switching at `at` percent, where its job says one the way Pitboard writes it
-    Installed { at: Option<u8> },
+    // doing at a limit what `switching` says, where its job says it the way Pitboard writes it
+    Installed {
+        switching: Option<pitboard_core::watch_service::Switching>,
+    },
     Absent,
     // no service manager Pitboard knows how to write to
     Unsupported,

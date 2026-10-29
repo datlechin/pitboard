@@ -108,10 +108,11 @@ program on the session's homes is the Linux session's to measure (Documented, no
   automatic switch and the warm-ups once it has, which Preferences turns on (brief `close`):
   stock GNOME has no StatusNotifierItem host, and Background Apps lists no host app (synthesis
   1). The model offers it while the app reports no status item, reads it on each visit to
-  Preferences and installs it, at the share Limits has, through the core's watch service, which
-  on Linux the core's systemd host writes as a user service. `pitboard watch` switches at its
-  `--at` whatever the app's choice, so the model installs it again at each new share, and Limits
-  says it switches where the choice is Notify or Do Nothing.
+  Preferences and installs it through the core's watch service, which on Linux the core's
+  systemd host writes as a user service: with `--at` and the share Limits has where its choice is
+  Switch, and with `--no-switch` where it is Notify Me or Do Nothing, so it then only warms up
+  (brief, 2026-10-29). The model installs it again as the choice or the share changes, and Limits
+  and Advanced say what it does once the window is closed.
 - **The app runs while something holds it.** `g_application_run` iterates while the use count
   is above nought or an inactivity timeout is pending, and in service mode waits 10 seconds
   with a use count of nought for the call that activated it (`gio/gapplication.c` at 2.84.0,
