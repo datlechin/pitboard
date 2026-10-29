@@ -138,7 +138,7 @@ pub mod testing {
     pub use crate::provider::claude::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
     pub use crate::provider::jwt::unsigned as unsigned_token;
     #[cfg(target_os = "linux")]
-    pub use crate::secret_service_testing::{self as secret_service, SecretService};
+    pub use crate::secret_service_testing::SecretService;
     /// The program the integration tests, the model's tests and the fixtures' tests start in
     /// place of `claude`, `codex` and every other program they run, on every system.
     pub use crate::stand_in;
