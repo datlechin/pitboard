@@ -410,8 +410,11 @@ After you update Pitboard, the service runs the updated `pitboard` from your nex
 `install` follows the rules of [`schedule install`](/reference/maintenance-commands#schedule):
 
 - It watches the accounts in Pitboard's own directory, whatever `PITBOARD_HOME` it is given. While `PITBOARD_HOME` names another directory, `install` refuses with `schedule_not_default_home`.
+- On Linux, it refuses with `schedule_manager_elsewhere` where your user's systemd would not read the service, or would run it with another `HOME`.
 - It gives the service each proxy variable it was started with. Run `install` again after your proxy changes.
 - Where Pitboard may change nothing, it refuses with `elevated` or `system_too_old`.
+
+On Linux, `uninstall` takes the service away only once `systemctl` has stopped it, even where nothing answers for your user's systemd, as in a shell from `su`: one left running would write Pitboard's directory again. It refuses with `schedule_manager_elsewhere` while systemd runs another `HOME`.
 
 The app and the service can both switch Claude Code: as with `pitboard watch` in a terminal, they never make two switches from one reading.
 

@@ -32,11 +32,7 @@ jobs:
       - run: cargo fmt --check
 
   clippy:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,11 +44,7 @@ jobs:
       - run: cargo clippy -p pitboard-model --all-targets --locked --features fixture
 
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +62,88 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: junit-${{ matrix.os }}
+          name: junit-macos-latest
+          path: target/nextest/ci/junit.xml
+
+  # Linux on both machines a release is built for, with glibc and with musl. Each image is named,
+  # never ubuntu-latest. Only the command line ships for musl, so a musl row builds it and the
+  # core alone. The tests run as AGENTS.md's On Linux asks, through test-in-fresh-homes.sh.
+  linux:
+    name: linux (${{ matrix.triple }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            triple: x86_64-unknown-linux-gnu
+            libc: gnu
+          - os: ubuntu-26.04-arm
+            triple: aarch64-unknown-linux-gnu
+            libc: gnu
+          - os: ubuntu-26.04
+            triple: x86_64-unknown-linux-musl
+            libc: musl
+          - os: ubuntu-26.04-arm
+            triple: aarch64-unknown-linux-musl
+            libc: musl
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      TRIPLE: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/rust
+        with:
+          targets: ${{ matrix.libc == 'musl' && matrix.triple || '' }}
+          key: ${{ matrix.libc }}
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: nextest@0.9.146
+      # The Secret Service the tests start on a bus of their own (`testing::SecretService`).
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus-daemon gnome-keyring
+      # ring compiles C, and needs a compiler that targets musl, as release.yml builds it.
+      - if: matrix.libc == 'musl'
+        run: |
+          sudo apt-get install -y --no-install-recommends musl-tools
+          echo "CC_$(echo "$TRIPLE" | tr '-' '_')=musl-gcc" >> "$GITHUB_ENV"
+      # One D-Bus stack, the core's zbus 5, and a command line that links no tokio
+      # (docs/facts/linux.md, zbus). `-i` fails where two zbus make the name ambiguous.
+      - name: One zbus, and no tokio in the command line
+        run: |
+          cargo tree --locked --workspace --target "$TRIPLE" -i zbus --depth 0
+          linked=$(cargo tree --locked -p pitboard --target "$TRIPLE" -e normal,build \
+            --prefix none --format '{p}')
+          if printf '%s\n' "$linked" | grep '^tokio '; then
+            echo "pitboard links tokio on $TRIPLE" >&2
+            exit 1
+          fi
+      - if: matrix.libc == 'gnu'
+        run: cargo clippy --all-targets --locked
+      # The fixtures, which only a build with the feature compiles.
+      - if: matrix.libc == 'gnu'
+        run: cargo clippy -p pitboard-model --all-targets --locked --features fixture
+      - if: matrix.libc == 'musl'
+        run: cargo clippy -p pitboard-core -p pitboard --all-targets --locked --target "$TRIPLE"
+      - if: matrix.libc == 'gnu'
+        run: sh .github/scripts/test-in-fresh-homes.sh --locked --profile ci
+      # The crate's other tests ran above, and the feature changes none of them.
+      - if: matrix.libc == 'gnu'
+        run: >
+          sh .github/scripts/test-in-fresh-homes.sh --locked --profile ci
+          -p pitboard-model --features fixture -E 'test(/^fixture::/)'
+      - if: matrix.libc == 'musl'
+        run: >
+          sh .github/scripts/test-in-fresh-homes.sh --locked --profile ci
+          -p pitboard-core -p pitboard --target "$TRIPLE"
+      # Both runs of a glibc row write this report, and a step that fails is the last to run.
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-${{ matrix.triple }}
           path: target/nextest/ci/junit.xml
 
   # The install script under each shell named here, with no network, and the release's scripts.
@@ -105,6 +178,7 @@ jobs:
           .github/scripts/core-unchanged.sh .github/scripts/release-kind.sh
           .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
+          .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
           apps/macos/scripts/build-number.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
@@ -1045,12 +1119,13 @@ jobs:
           if ($found) { exit 1 }
       # The update key rehearsal ships bundles that really do update themselves, so it must
       # never be able to reach the real key, the real certificate or the real feed.
-      # windows-facts.yml runs on whatever branch it is dispatched on, and its session job ships
-      # a bundle off the runner. A workflow that never names secrets cannot be handed one, and
-      # that is worth knowing on the pull request that changes it rather than the month after.
+      # windows-facts.yml and linux-facts.yml run on whatever branch they are dispatched on, and
+      # windows-facts.yml's session job ships a bundle off the runner. A workflow that never names
+      # secrets cannot be handed one, and that is worth knowing on the pull request that changes
+      # it rather than the month after.
       - name: The update key rehearsal, the runner facts and the session bundle name no repository secret
         run: |
-          for workflow in rotation.yml windows-facts.yml; do
+          for workflow in rotation.yml windows-facts.yml linux-facts.yml; do
             if grep -qw secrets ".github/workflows/$workflow"; then
               echo "$workflow names secrets, so it can be given one" >&2
               exit 1
@@ -1175,6 +1250,7 @@ jobs:
       - fmt
       - clippy
       - test
+      - linux
       - install-script
       - windows-pending
       - windows

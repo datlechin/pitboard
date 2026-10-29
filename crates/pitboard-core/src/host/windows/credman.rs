@@ -3,6 +3,7 @@
 // its blob, enterprise persistence, no comment and no attributes. Names alone for the rest.
 
 use crate::context::Context;
+use crate::host::SecretStore;
 use crate::permit::Permit;
 use crate::provider::claude::pieces::BLOB;
 use crate::store::{Backend, Cost, Error, RawStore};
@@ -251,6 +252,7 @@ impl RawStore for Generic {
             needs: contents.len(),
             limit: BLOB,
             second_route: false,
+            store: SecretStore::CredentialManager,
         })
     }
 }

@@ -53,6 +53,13 @@ const READ: &[&str] = &[
     "ANTHROPIC_ORGANIZATION_ID",
     "ANTHROPIC_CONFIG_DIR",
     "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+    "SSH_CONNECTION",
     "WSL_DISTRO_NAME",
     "CODEX_HOME",
     "CODEX_INSTALL_DIR",
@@ -76,12 +83,15 @@ const READ: &[&str] = &[
 
 // Read only by a build for tests: a release lists none and reads none.
 #[cfg(any(test, feature = "test-support"))]
-const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[TEST_CLAUDE_DESKTOP];
+const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[TEST_CLAUDE_DESKTOP, TEST_BUS];
 #[cfg(not(any(test, feature = "test-support")))]
 const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[];
 
 #[cfg(any(test, feature = "test-support"))]
 const TEST_CLAUDE_DESKTOP: &str = "PITBOARD_TEST_CLAUDE_DESKTOP";
+// The D-Bus address of the bus a test started, the only one a build for tests reaches on Linux.
+#[cfg(any(test, feature = "test-support"))]
+const TEST_BUS: &str = "PITBOARD_TEST_BUS";
 
 /// Every variable Pitboard reads from its environment, by name.
 pub(crate) fn variables() -> impl Iterator<Item = &'static str> {
@@ -396,6 +406,22 @@ pub struct Context {
     pub(crate) git_bash: Option<PathBuf>,
     // `WSL_DISTRO_NAME` on Linux, set even empty, which WSL gives its programs.
     pub(crate) wsl_distro: Option<String>,
+    // The base folders of XDG Base Directory 0.8 on macOS and Linux, Pitboard's reading of
+    // them: Claude Code reads `XDG_CONFIG_HOME` its own way (`settings::Profiles`).
+    pub(crate) config_home: Option<PathBuf>,
+    pub(crate) data_home: Option<PathBuf>,
+    pub(crate) cache_home: Option<PathBuf>,
+    // `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` on Linux, where the user's systemd and
+    // the session's D-Bus are found.
+    pub(crate) runtime_dir: Option<PathBuf>,
+    pub(crate) session_bus_address: Option<String>,
+    // On Linux, whether this run is in the desktop session, where the keyring's prompter shows
+    // its dialog: with a display, `WAYLAND_DISPLAY` or `DISPLAY`, and not over SSH, whose
+    // forwarded display is not the one the prompter shows on.
+    pub(crate) desktop_session: bool,
+    // Whether a person dismissed the keyring's unlock prompt in this run, shared by every copy
+    // of the context, so it is not put up again for each question.
+    pub(crate) prompt_dismissed: Arc<std::sync::atomic::AtomicBool>,
     /// The scheduler's job this process runs as, where a test says. `None` is whatever the
     /// scheduler said when it started this process.
     pub(crate) scheduled_job: Option<String>,
@@ -426,6 +452,9 @@ pub struct Context {
     pub(crate) sign_in_script: Option<Arc<dyn crate::switch::SignInScript>>,
     #[cfg(any(test, feature = "test-support"))]
     scratch_claude: Option<ScratchClaude>,
+    // The bus a test started, on Linux: in a build for tests, the only one reached.
+    #[cfg(any(test, feature = "test-support"))]
+    test_bus: Option<String>,
     #[cfg(any(test, feature = "test-support"))]
     awaited_every: Option<std::time::Duration>,
     #[cfg(test)]
@@ -436,6 +465,44 @@ pub struct Context {
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) warm_script: Option<Arc<dyn crate::duty::warm::run::WarmScript>>,
 }
+
+// As XDG Base Directory 0.8 reads a base folder: the one its variable names where that is a full
+// path, since a relative one is ignored as one unset or empty, and otherwise `default` in the
+// home. Windows has none.
+fn base_folder(
+    os: Os,
+    home: &std::path::Path,
+    named: Option<PathBuf>,
+    default: &[&str],
+) -> Option<PathBuf> {
+    match os {
+        Os::MacOs | Os::Linux => Some(named.filter(|folder| folder.is_absolute()).unwrap_or_else(
+            || {
+                default
+                    .iter()
+                    .fold(home.to_path_buf(), |at, part| at.join(part))
+            },
+        )),
+        Os::Windows => None,
+    }
+}
+
+/// Where a context finds the session's D-Bus ([`Context::session_bus`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(dead_code, reason = "only Linux has a session bus to find")
+)]
+pub(crate) enum SessionBus {
+    /// A D-Bus address, as `DBUS_SESSION_BUS_ADDRESS` gives it.
+    Address(String),
+    /// A socket's path.
+    Socket(PathBuf),
+}
+
+const CONFIG_HOME: &[&str] = &[".config"];
+const DATA_HOME: &[&str] = &[".local", "share"];
+const CACHE_HOME: &[&str] = &[".cache"];
 
 fn programs(
     named: impl Fn(ProviderId, crate::provider::Cli) -> PathBuf,
@@ -467,6 +534,77 @@ impl Context {
         &self.home
     }
 
+    /// Where XDG Base Directory 0.8 puts this context's configuration on macOS and Linux:
+    /// `XDG_CONFIG_HOME` where it names a full path, else `.config` in the home. None on
+    /// Windows.
+    pub fn config_home(&self) -> Option<&std::path::Path> {
+        self.config_home.as_deref()
+    }
+
+    /// The same for data: `XDG_DATA_HOME`, else `.local/share` in the home.
+    pub fn data_home(&self) -> Option<&std::path::Path> {
+        self.data_home.as_deref()
+    }
+
+    /// The same for what may be thrown away: `XDG_CACHE_HOME`, else `.cache` in the home.
+    pub fn cache_home(&self) -> Option<&std::path::Path> {
+        self.cache_home.as_deref()
+    }
+
+    /// `XDG_RUNTIME_DIR` on Linux, where it names a full path. None where it does not, as
+    /// XDG Base Directory 0.8 ignores a relative one, and off Linux.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a user manager to find")
+    )]
+    pub(crate) fn runtime_dir(&self) -> Option<&std::path::Path> {
+        self.runtime_dir.as_deref()
+    }
+
+    /// The session's D-Bus, as sd-bus finds it at systemd 262 (`bus_set_address_user`):
+    /// `DBUS_SESSION_BUS_ADDRESS` as given, else `bus` in the runtime folder. None where neither
+    /// is set, and off Linux.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a session bus to find")
+    )]
+    pub(crate) fn session_bus(&self) -> Option<SessionBus> {
+        match (&self.session_bus_address, &self.runtime_dir) {
+            (Some(address), _) => Some(SessionBus::Address(address.clone())),
+            (None, Some(runtime)) => Some(SessionBus::Socket(runtime.join("bus"))),
+            (None, None) => None,
+        }
+    }
+
+    /// Whether this run is in the desktop session on Linux, where a dialog the session's
+    /// keyring puts up is in front of whoever started it.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn in_the_desktop_session(&self) -> bool {
+        self.desktop_session
+    }
+
+    /// Whether a person dismissed the keyring's unlock prompt in this run.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn unlock_was_dismissed(&self) -> bool {
+        self.prompt_dismissed
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux's keyring is asked to unlock")
+    )]
+    pub(crate) fn unlock_dismissed(&self) {
+        self.prompt_dismissed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
     // The one the schedule renews, whatever `PITBOARD_HOME` says.
     pub(crate) fn default_pitboard_home(&self) -> PathBuf {
         self.os.default_pitboard_home(&self.home)
@@ -489,6 +627,9 @@ impl Context {
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn new(home: PathBuf) -> Context {
+        let base = |default| base_folder(crate::host::OS, &home, None, default);
+        let (config_home, data_home, cache_home) =
+            (base(CONFIG_HOME), base(DATA_HOME), base(CACHE_HOME));
         Context {
             os: crate::host::OS,
             pitboard_home: crate::host::OS.default_pitboard_home(&home),
@@ -520,6 +661,13 @@ impl Context {
             path_ext: None,
             git_bash: None,
             wsl_distro: None,
+            config_home,
+            data_home,
+            cache_home,
+            runtime_dir: None,
+            session_bus_address: None,
+            desktop_session: false,
+            prompt_dismissed: Arc::default(),
             scheduled_job: None,
             started_by: None,
             sudo: false,
@@ -532,6 +680,8 @@ impl Context {
             sign_in_script: None,
             #[cfg(any(test, feature = "test-support"))]
             scratch_claude: None,
+            #[cfg(any(test, feature = "test-support"))]
+            test_bus: None,
             #[cfg(any(test, feature = "test-support"))]
             awaited_every: None,
             #[cfg(test)]
@@ -788,6 +938,25 @@ impl Context {
         self
     }
 
+    // The bus a test started, which a release has no word for.
+    #[cfg(any(test, feature = "test-support"))]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a session bus to find")
+    )]
+    pub(crate) fn test_bus(&self) -> Option<&str> {
+        self.test_bus.as_deref()
+    }
+
+    /// Reach the D-Bus at `address` on Linux, a bus the test started: in a build for tests no
+    /// other is reached, the session's own least of all.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_test_bus(mut self, address: String) -> Context {
+        self.test_bus = Some(address);
+        self
+    }
+
     // How often a sign-in waited for asks the process list: a second, unless a test said.
     pub(crate) fn awaited_every(&self) -> std::time::Duration {
         #[cfg(any(test, feature = "test-support"))]
@@ -873,6 +1042,13 @@ impl Context {
                 .filter(|named| !named.is_empty())
                 .map_or_else(|| PathBuf::from(tool.program()), PathBuf::from)
         };
+        let base =
+            |variable, default| base_folder(env.os(), &home, env.named_folder(variable), default);
+        let (config_home, data_home, cache_home) = (
+            base("XDG_CONFIG_HOME", CONFIG_HOME),
+            base("XDG_DATA_HOME", DATA_HOME),
+            base("XDG_CACHE_HOME", CACHE_HOME),
+        );
         let read = Context {
             os: env.os(),
             pitboard_home: env.pitboard_home(),
@@ -931,6 +1107,18 @@ impl Context {
                 .path("WSL_DISTRO_NAME")
                 .filter(|_| env.os() == Os::Linux)
                 .map(|named| named.to_string_lossy().into_owned()),
+            config_home,
+            data_home,
+            cache_home,
+            runtime_dir: env
+                .named_folder("XDG_RUNTIME_DIR")
+                .filter(|folder| env.os() == Os::Linux && folder.is_absolute()),
+            session_bus_address: owned("DBUS_SESSION_BUS_ADDRESS")
+                .filter(|address| env.os() == Os::Linux && !address.is_empty()),
+            desktop_session: env.os() == Os::Linux
+                && (env.set("WAYLAND_DISPLAY") || env.set("DISPLAY"))
+                && !env.set("SSH_CONNECTION"),
+            prompt_dismissed: Arc::default(),
             scheduled_job: None,
             started_by: None,
             sudo: env.set("SUDO_UID"),
@@ -943,6 +1131,9 @@ impl Context {
             sign_in_script: None,
             #[cfg(any(test, feature = "test-support"))]
             scratch_claude: None,
+            #[cfg(any(test, feature = "test-support"))]
+            test_bus: owned(TEST_BUS)
+                .filter(|address| env.os() == Os::Linux && !address.is_empty()),
             #[cfg(any(test, feature = "test-support"))]
             awaited_every: None,
             #[cfg(test)]
@@ -1062,7 +1253,15 @@ pub struct ScratchMachine {
 impl ScratchMachine {
     // Panics where `more` put back this machine's keychain or the network, before any write.
     pub fn at(home: &std::path::Path, more: impl FnOnce(Context) -> Context) -> ScratchMachine {
-        let host = crate::host::memory::MemoryHost::new();
+        ScratchMachine::on(crate::host::memory::MemoryHost::new(), home, more)
+    }
+
+    // As `at`, on a machine in memory a test made, such as one that parks by form.
+    pub fn on(
+        host: Arc<crate::host::memory::MemoryHost>,
+        home: &std::path::Path,
+        more: impl FnOnce(Context) -> Context,
+    ) -> ScratchMachine {
         let api = crate::api::scripted::ScriptedApi::new();
         let ctx = more(
             Context::new(home.to_path_buf())
@@ -1100,6 +1299,21 @@ mod tests {
         let scratch = read.scratch_claude().expect("named");
         assert_eq!(scratch.data, folder.join("data"));
         assert_eq!(scratch.app, folder.join("Claude.app"));
+    }
+
+    // Withheld from every command a test runs unless it passes its own bus on by name.
+    #[test]
+    fn the_test_bus_is_listed_only_in_a_build_for_tests_and_read_on_linux() {
+        assert!(variables().any(|name| name == "PITBOARD_TEST_BUS"));
+        assert!(!READ.contains(&"PITBOARD_TEST_BUS"));
+        assert_eq!(Context::for_unit_test().test_bus(), None);
+        let address = "unix:path=/tmp/pitboard-test/bus";
+        let read = |os| {
+            let pairs = [("HOME", "/home/x"), ("PITBOARD_TEST_BUS", address)];
+            Context::read(&Environment::on(os, pairs), "cli")
+        };
+        assert_eq!(read(Os::Linux).test_bus(), Some(address));
+        assert_eq!(read(Os::MacOs).test_bus(), None);
     }
 
     // It panics before anything there is listed or opened.
@@ -1533,6 +1747,126 @@ mod tests {
         );
         let posix = Context::read(&Environment::on(Os::Linux, pairs), "cli");
         assert_eq!(posix.home, PathBuf::from("/c/Users/x"));
+    }
+
+    // XDG Base Directory 0.8 ignores one that is not a full path, as one unset or empty.
+    #[test]
+    fn a_relative_xdg_folder_is_taken_for_unset() {
+        let (_scratch, home, named) = full_home();
+        let elsewhere = home.with_file_name("elsewhere");
+        let full = elsewhere.to_string_lossy().into_owned();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let homes = [("HOME", named.as_str()), ("USERPROFILE", named.as_str())];
+            Context::read(
+                &Environment::on(os, homes.iter().chain(pairs).copied()),
+                "cli",
+            )
+        };
+        let given = read(
+            Os::Linux,
+            &[
+                ("XDG_CONFIG_HOME", &full),
+                ("XDG_DATA_HOME", "relative/data"),
+                ("XDG_CACHE_HOME", ""),
+            ],
+        );
+        assert_eq!(given.config_home(), Some(elsewhere.as_path()));
+        let data = home.join(".local").join("share");
+        assert_eq!(given.data_home(), Some(data.as_path()), "relative");
+        let cache = home.join(".cache");
+        assert_eq!(given.cache_home(), Some(cache.as_path()), "empty");
+        let unset = read(Os::MacOs, &[]);
+        let config = home.join(".config");
+        assert_eq!(
+            (unset.config_home(), unset.data_home(), unset.cache_home()),
+            (
+                Some(config.as_path()),
+                Some(data.as_path()),
+                Some(cache.as_path())
+            )
+        );
+        let windows = read(Os::Windows, &[("XDG_DATA_HOME", &full)]);
+        assert_eq!(
+            (
+                windows.config_home(),
+                windows.data_home(),
+                windows.cache_home()
+            ),
+            (None, None, None),
+            "Windows has none"
+        );
+    }
+
+    // On Linux alone: an empty address reads as unset, and a relative runtime folder is ignored.
+    #[test]
+    fn the_session_bus_is_found_as_sd_bus_finds_it() {
+        let (_scratch, home, named) = full_home();
+        let runtime = home.with_file_name("runtime");
+        let full = runtime.to_string_lossy().into_owned();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let homes = [("HOME", named.as_str()), ("USERPROFILE", named.as_str())];
+            Context::read(
+                &Environment::on(os, homes.iter().chain(pairs).copied()),
+                "cli",
+            )
+        };
+        let address = "unix:path=/tmp/a%20bus,guid=0123456789abcdef0123456789abcdef";
+        let both = [
+            ("XDG_RUNTIME_DIR", full.as_str()),
+            ("DBUS_SESSION_BUS_ADDRESS", address),
+        ];
+        let given = read(Os::Linux, &both);
+        assert_eq!(given.runtime_dir(), Some(runtime.as_path()));
+        assert_eq!(
+            given.session_bus(),
+            Some(SessionBus::Address(address.into()))
+        );
+        let in_the_runtime_folder = read(
+            Os::Linux,
+            &[("XDG_RUNTIME_DIR", &full), ("DBUS_SESSION_BUS_ADDRESS", "")],
+        );
+        assert_eq!(
+            in_the_runtime_folder.session_bus(),
+            Some(SessionBus::Socket(runtime.join("bus")))
+        );
+        let relative = read(Os::Linux, &[("XDG_RUNTIME_DIR", "relative/runtime")]);
+        assert_eq!(
+            (relative.runtime_dir(), relative.session_bus()),
+            (None, None)
+        );
+        let mac = read(Os::MacOs, &both);
+        assert_eq!((mac.runtime_dir(), mac.session_bus()), (None, None));
+    }
+
+    // On Linux alone, with a display, and not over SSH, whose forwarded display is another than
+    // the one the keyring's prompter shows its dialog on.
+    #[test]
+    fn the_desktop_session_has_a_display_not_forwarded_over_ssh() {
+        let (_scratch, _home, named) = full_home();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let home = [("HOME", named.as_str())];
+            Context::read(
+                &Environment::on(os, home.iter().chain(pairs).copied()),
+                "cli",
+            )
+            .in_the_desktop_session()
+        };
+        assert!(read(Os::Linux, &[("WAYLAND_DISPLAY", "wayland-0")]));
+        assert!(read(Os::Linux, &[("DISPLAY", ":0")]));
+        assert!(!read(Os::Linux, &[]));
+        assert!(!read(
+            Os::Linux,
+            &[("WAYLAND_DISPLAY", ""), ("DISPLAY", "")]
+        ));
+        assert!(!read(
+            Os::Linux,
+            &[
+                ("DISPLAY", "localhost:10.0"),
+                ("SSH_CONNECTION", "10.0.0.2 50022 10.0.0.1 22")
+            ]
+        ));
+        assert!(!read(Os::MacOs, &[("DISPLAY", ":0")]));
+        assert!(!Context::for_unit_test().in_the_desktop_session());
     }
 
     // A full path on every system, which nothing makes, in a folder of the test's own.

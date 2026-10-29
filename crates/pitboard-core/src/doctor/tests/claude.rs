@@ -19,6 +19,28 @@ fn an_unreadable_store_fails_rather_than_reporting_nothing_stored() {
     assert_eq!(check(&checks, "credential_store").level, Level::Fail);
 }
 
+// The login keyring on Linux, which no file stands behind, and which a desktop session unlocks.
+#[test]
+fn a_park_behind_a_locked_login_keyring_is_not_read_and_needs_no_sign_in() {
+    let mut f = facts();
+    f.os = Os::Linux;
+    f.vault = store::Backend::SecretService;
+    let mut behind = parked("work", Some(NOW + 20 * 86_400));
+    behind.unreadable = Some(Unreadable::Locked(store::Backend::SecretService));
+    f.parks = vec![behind];
+
+    let checks = evaluate(&f);
+    let park = named(&checks, "account work");
+    assert_eq!(park.level, Level::Warn, "{}", park.detail);
+    assert_eq!(
+        (park.detail.as_str(), park.advice.as_str()),
+        (
+            words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+            words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR
+        )
+    );
+}
+
 // Every parked login behind it used to fail too, each advised to sign in again for nothing.
 #[test]
 fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
@@ -26,7 +48,7 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
     f.os = Os::MacOs;
     f.credential = Err(store::Error::Locked);
     let mut behind = parked("work", Some(NOW + 20 * 86_400));
-    behind.unreadable = Some(Unreadable::Locked);
+    behind.unreadable = Some(Unreadable::Locked(store::Backend::Keychain));
     f.parks = vec![behind];
 
     let checks = evaluate(&f);
@@ -54,6 +76,7 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
 
     f.fallback_login = Some(FallbackLogin {
         path: f.credential_file.clone(),
+        store: SecretStore::Keychain,
         fingerprint: Ok(Some("0123456789abcdef".into())),
     });
     assert_eq!(
@@ -70,6 +93,7 @@ fn a_login_left_behind_the_keychain_is_said_with_what_reads_it() {
 
     f.fallback_login = Some(FallbackLogin {
         path: f.credential_file.clone(),
+        store: SecretStore::Keychain,
         fingerprint: Ok(Some("0123456789abcdef".into())),
     });
     let checks = evaluate(&f);
@@ -80,7 +104,10 @@ fn a_login_left_behind_the_keychain_is_said_with_what_reads_it() {
         said.detail,
         words::file_refresh(f.credential_file.display(), "0123456789abcdef")
     );
-    assert_eq!(said.advice, words::the_file_signs_sessions_in(Os::MacOs));
+    assert_eq!(
+        said.advice,
+        words::the_file_signs_sessions_in(SecretStore::Keychain)
+    );
     assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 }
 
@@ -90,6 +117,7 @@ fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_bac
     let mut f = facts();
     f.fallback_login = Some(FallbackLogin {
         path: f.credential_file.clone(),
+        store: SecretStore::Keychain,
         fingerprint: Ok(None),
     });
     let checks = evaluate(&f);
@@ -120,6 +148,7 @@ fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
     f.os = Os::MacOs;
     f.fallback_login = Some(FallbackLogin {
         path: f.credential_file.clone(),
+        store: SecretStore::Keychain,
         fingerprint: Err(store::Error::Unreadable(
             "cannot read /home/x/.claude/.credentials.json: Permission denied".into(),
         )),
@@ -136,7 +165,10 @@ fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
     );
     assert_eq!(
         said.advice,
-        words::delete_it_yourself(Os::MacOs, "rm '/home/x/.claude/.credentials.json'")
+        words::delete_it_yourself(
+            SecretStore::Keychain,
+            "rm '/home/x/.claude/.credentials.json'"
+        )
     );
     assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 
@@ -155,21 +187,23 @@ fn a_file_behind_credential_manager_is_said_in_the_words_of_windows() {
     let path = PathBuf::from(r"C:\Users\o'neil\.claude\.credentials.json");
     f.fallback_login = Some(FallbackLogin {
         path: path.clone(),
+        store: SecretStore::CredentialManager,
         fingerprint: Ok(Some("0123456789abcdef".into())),
     });
     assert_eq!(
         check(&evaluate(&f), "fallback_login").advice,
-        words::the_file_signs_sessions_in(Os::Windows)
+        words::the_file_signs_sessions_in(SecretStore::CredentialManager)
     );
 
     f.fallback_login = Some(FallbackLogin {
         path,
+        store: SecretStore::CredentialManager,
         fingerprint: Err(store::Error::Unreadable("access is denied".into())),
     });
     assert_eq!(
         check(&evaluate(&f), "fallback_login").advice,
         words::delete_it_yourself(
-            Os::Windows,
+            SecretStore::CredentialManager,
             r"Remove-Item -LiteralPath 'C:\Users\o''neil\.claude\.credentials.json'"
         )
     );
@@ -307,6 +341,57 @@ fn the_successor_backend_alone_does_not_move_the_login() {
     }
 }
 
+// What each store says with the flag on: the keychain and Credential Manager keep the login,
+// macOS's file is the fallback a failed keychain write left, and Linux's is Claude Code's one
+// store (`live_chain_order`).
+#[test]
+fn the_successor_backend_says_the_store_the_login_is_in() {
+    let on = |os, backend| {
+        let mut f = facts();
+        f.os = os;
+        f.hover_rest_env = true;
+        f.backend = Ok(backend);
+        let checks = evaluate(&f);
+        let said = check(&checks, "storage_v5");
+        (said.level, said.detail.clone(), said.advice.clone())
+    };
+    assert_eq!(
+        on(Os::MacOs, store::Backend::Keychain),
+        (
+            Level::Ok,
+            words::on_in(SecretStore::Keychain),
+            String::new()
+        )
+    );
+    assert_eq!(
+        on(Os::Windows, store::Backend::CredentialManager),
+        (
+            Level::Ok,
+            words::on_in(SecretStore::CredentialManager),
+            String::new()
+        )
+    );
+    for (os, detail) in [
+        (Os::MacOs, words::ON_IN_THE_FALLBACK_STORE),
+        (Os::Windows, words::ON_IN_THE_FALLBACK_STORE),
+        (Os::Linux, words::ON_IN_ITS_ONE_STORE),
+    ] {
+        assert_eq!(
+            on(os, store::Backend::File),
+            (
+                Level::Warn,
+                detail.to_owned(),
+                words::MAYBE_NOT_THE_SAME_FILE.to_owned()
+            ),
+            "{os:?}"
+        );
+    }
+    assert_eq!(
+        on(Os::Linux, store::Backend::SecretService),
+        (Level::Ok, words::SWITCHED_ON.to_owned(), String::new())
+    );
+}
+
 #[test]
 fn the_successor_backend_is_quiet_when_it_is_off() {
     let mut f = facts();
@@ -407,6 +492,7 @@ fn a_login_in_credential_manager_is_counted_in_pieces_and_257_fail() {
         needs: 900,
         limit: 460_800,
         second_route: false,
+        store: SecretStore::CredentialManager,
     });
     assert_eq!(
         check(&evaluate(&f), "credential_size").detail,
@@ -476,6 +562,7 @@ fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() 
         needs: 8503,
         limit: 4032,
         second_route: true,
+        store: SecretStore::Keychain,
     });
     let checks = evaluate(&f);
     let written = check(&checks, "credential_size");
@@ -489,6 +576,7 @@ fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() 
         needs: 8503,
         limit: 4032,
         second_route: false,
+        store: SecretStore::Keychain,
     });
     let checks = evaluate(&f);
     let refused = check(&checks, "credential_size");
@@ -508,6 +596,7 @@ fn a_login_too_big_says_what_is_taking_up_the_room() {
         needs: 8503,
         limit: 4032,
         second_route: true,
+        store: SecretStore::Keychain,
     });
     f.credential_parts = parts_of(&json!({
         "claudeAiOauth": {"refreshToken": "r"},

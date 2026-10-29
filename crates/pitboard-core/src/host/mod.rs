@@ -25,6 +25,7 @@ use crate::context::{Context, Environment};
 use crate::error::Result;
 use crate::permit::Permit;
 use crate::schedule::Job;
+use crate::state::VaultForm;
 use crate::store::RawStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -97,9 +98,50 @@ pub enum Os {
 /// The system this build runs on.
 pub const OS: Os = os::OS;
 
+/// A system's store of secrets that holds a login ahead of a tool's file, with a ceiling on
+/// what one item takes: the login keychain on macOS, Credential Manager on Windows. On Linux
+/// Claude Code keeps its login in `.credentials.json` alone (`live_chain_order`), so no file
+/// there is behind a store, and no store's ceiling refuses a write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretStore {
+    Keychain,
+    CredentialManager,
+}
+
+/// Where a home keeps its parked logins of Claude Code and Codex, as a person would look for
+/// them: on macOS the keychain, on Windows sealed files, on Linux the form the home recorded.
+/// Kept in a record by its [`Vault::code`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Vault {
+    /// Items of the login keychain, which every home on the Mac shares.
+    Keychain,
+    /// Items of the Secret Service's default collection, which every home of the session shares.
+    SecretService,
+    /// Files in the home's `vault`, which only this account reads.
+    Files,
+    /// Files in the home's `vault`, sealed to this Windows account.
+    SealedFiles,
+}
+
+impl Vault {
+    /// What a program branches on: `keychain`, `secret_service`, `files` or `sealed_files`.
+    pub fn code(self) -> &'static str {
+        match self {
+            Vault::Keychain => "keychain",
+            Vault::SecretService => "secret_service",
+            Vault::Files => "files",
+            Vault::SealedFiles => "sealed_files",
+        }
+    }
+}
+
 /// The only program trusted to read Claude Code's keychain item. Named here so the backend
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";
+
+// The Linux app's program, which its packages put beside `pitboard`.
+const LINUX_APP: &str = "pitboard-app";
 
 impl Os {
     /// The program Pitboard reaches the system's own store of secrets through, where it goes
@@ -172,11 +214,12 @@ impl Os {
         }
     }
 
-    // Homebrew's on a Mac, also npm's global `bin` there (`install_places`); none on Linux.
+    // Homebrew's on a Mac, also npm's global `bin` there (`install_places`), and on Linux its
+    // default prefix's (docs/facts/linux.md).
     pub(crate) fn package_bins(self, env: &Environment) -> Vec<PathBuf> {
         match self {
             Os::MacOs => vec!["/opt/homebrew/bin".into(), "/usr/local/bin".into()],
-            Os::Linux => Vec::new(),
+            Os::Linux => vec!["/home/linuxbrew/.linuxbrew/bin".into()],
             Os::Windows => [
                 ("APPDATA", &["npm"][..]),
                 ("LOCALAPPDATA", &["Microsoft", "WinGet", "Links"]),
@@ -247,12 +290,28 @@ impl Os {
         match self {
             Os::MacOs => (app.extension() == Some("app".as_ref()))
                 .then(|| app.join("Contents/Helpers/pitboard")),
-            Os::Linux => None,
+            Os::Linux => (app.file_name() == Some(LINUX_APP.as_ref()))
+                .then(|| app.with_file_name("pitboard")),
             Os::Windows => app
                 .file_name()
                 .filter(|name| name.eq_ignore_ascii_case("Pitboard.exe"))
                 .and_then(|_| app.parent())
                 .map(|install| install.join("bin").join("pitboard.exe")),
+        }
+    }
+
+    // The program an app itself starts, where no command line is kept, so a schedule that runs
+    // it renews nothing. Windows keeps macOS's bundle rule, which no path there meets.
+    pub(crate) fn an_apps_own_program(self, program: &Path) -> bool {
+        match self {
+            Os::MacOs | Os::Windows => {
+                let mut dirs = program
+                    .ancestors()
+                    .skip(1)
+                    .map(|dir| dir.file_name().and_then(|n| n.to_str()));
+                dirs.next() == Some(Some("MacOS")) && dirs.next() == Some(Some("Contents"))
+            }
+            Os::Linux => program.file_name() == Some(LINUX_APP.as_ref()),
         }
     }
 }
@@ -384,8 +443,21 @@ pub(crate) fn pitboard_app_on_windows(local: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
+// Where the Linux app keeps its own data and cache, each build its own: the account windows'
+// sign-ins among them, as on Windows.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn pitboard_app_on_linux(data: &[PathBuf], cache: &[PathBuf]) -> Vec<PathBuf> {
+    data.iter()
+        .chain(cache)
+        .flat_map(|dir| {
+            ["com.usepitboard.Pitboard", "com.usepitboard.Pitboard.Devel"].map(|id| dir.join(id))
+        })
+        .collect()
+}
+
 // Where this account keeps a real login, or would, and where `started_in` says, for a build for
-// tests to refuse. This account's own are asked of the system, never of the environment.
+// tests to refuse. This account's own are asked of the system, never of the environment: its
+// XDG folders are the defaults in the home the system names.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn real_login_places(
     started_in: Option<&Context>,
@@ -406,12 +478,18 @@ pub(crate) fn real_login_places(
                 ctx.pitboard_home.clone(),
                 ctx.default_pitboard_home(),
             ];
-            if ctx.os != Os::Windows {
-                places.extend([
+            match ctx.os {
+                Os::MacOs => places.extend([
                     ctx.home.join("Library/Application Support/Claude"),
                     ctx.home.join("Library/Application Support/Claude-3p"),
                     PathBuf::from("/Applications/Claude.app"),
-                ]);
+                ]),
+                Os::Linux => places.extend(pitboard_app_on_linux(
+                    ctx.data_home.as_slice(),
+                    ctx.cache_home.as_slice(),
+                )),
+                // Asked of the system below, with the ones this process was started with.
+                Os::Windows => {}
             }
             places
         })
@@ -840,16 +918,30 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// The single file at `path`, as a store.
     fn file(&self, path: PathBuf) -> Box<dyn RawStore>;
 
-    /// Where Pitboard's own parked logins go: the system's store of secrets where there is
-    /// one, a private directory of files where there is not. This one really is a fact
-    /// about the machine.
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
+    /// The forms a home may keep its parked logins in, where this system offers a choice,
+    /// which each home records in `state.json`: Linux's Secret Service and files. None where
+    /// the system keeps them one way, as macOS does in the keychain and Windows in sealed files.
+    fn vault_forms(&self) -> &'static [VaultForm] {
+        &[]
+    }
 
-    /// Whether every `PITBOARD_HOME` on this machine parks its logins in the one vault. A
-    /// keychain belongs to the whole login session, so a park in it that one home cannot
-    /// account for may be another home's; a vault of files lives inside its home, and
-    /// nothing in it can be anybody else's.
-    fn vault_is_shared(&self) -> bool;
+    /// Whether a vault of `form` answers here, for a form this system offers: files always do,
+    /// and the Secret Service where something on this session's bus has a default collection,
+    /// locked or not. Nothing is unlocked to tell.
+    fn answers(&self, _ctx: &Context, _form: VaultForm) -> bool {
+        false
+    }
+
+    /// Where Pitboard's own parked logins go: the system's store of secrets where there is
+    /// one, a private directory of files where there is not, and where the system offers
+    /// both, the one `form` names. This one really is a fact about the machine.
+    fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore>;
+
+    /// Whether every `PITBOARD_HOME` on this machine that keeps its parks in `form` parks
+    /// them in the one vault. A keychain or a Secret Service collection belongs to the whole
+    /// login session, so a park in it that one home cannot account for may be another home's;
+    /// a vault of files lives inside its home, and nothing in it can be anybody else's.
+    fn vault_is_shared(&self, form: Option<VaultForm>) -> bool;
 
     // Every process this user runs, in any session; Err says why the list could not be read.
     fn listing(&self) -> std::result::Result<Vec<Listed>, String>;
@@ -1060,6 +1152,12 @@ pub(crate) trait Scheduler: Send + Sync + std::fmt::Debug {
     fn task(&self, _ctx: &Context, _job: Job) -> Option<task::Task> {
         None
     }
+
+    // Whether the job is there as an earlier Pitboard wrote it, which installing again mends:
+    // systemd's alone.
+    fn outdated(&self, _ctx: &Context, _job: Job) -> bool {
+        false
+    }
 }
 
 // Time awake since a fixed moment (boot on Windows, the first call elsewhere); a sleep adds none.
@@ -1086,6 +1184,20 @@ pub(crate) fn current_program() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vault_is_kept_by_its_code() {
+        for vault in [
+            Vault::Keychain,
+            Vault::SecretService,
+            Vault::Files,
+            Vault::SealedFiles,
+        ] {
+            let kept = serde_json::to_value(vault).expect("kept");
+            assert_eq!(kept, vault.code(), "{vault:?}");
+            assert_eq!(serde_json::from_value::<Vault>(kept).expect("read"), vault);
+        }
+    }
 
     // As a pipe a program started meanwhile took with it, or one that left the run's group.
     #[test]
@@ -1378,6 +1490,34 @@ mod tests {
         }
     }
 
+    // Compared by component, so the release's folder and the debug build's never hold each other.
+    #[test]
+    fn the_linux_apps_folders_are_refused_in_any_spelling() {
+        let (data, cache) = (PathBuf::from("/h/.local/share"), PathBuf::from("/h/.cache"));
+        let places =
+            pitboard_app_on_linux(std::slice::from_ref(&data), std::slice::from_ref(&cache));
+        let refused = |path: PathBuf| places.iter().any(|place| lies_in(&path, place));
+        for path in [
+            data.join("com.usepitboard.Pitboard").join("window.json"),
+            data.join("com.usepitboard.pitboard.devel").join("x"),
+            cache.join("COM.USEPITBOARD.PITBOARD"),
+            cache.join("com.usepitboard.Pitboard.Devel"),
+            data.clone(),
+            cache.clone(),
+        ] {
+            assert!(refused(path.clone()), "{}", path.display());
+        }
+        for path in [
+            data.join("com.usepitboard.Pitboards"),
+            data.join("com.usepitboard.Pitboard.Develop"),
+            data.join("com.usepitboard"),
+            cache.join("pitboard"),
+            PathBuf::from("/h/.config/com.usepitboard.Pitboard"),
+        ] {
+            assert!(!refused(path.clone()), "{}", path.display());
+        }
+    }
+
     #[test]
     #[cfg(windows)]
     fn a_verbatim_path_lies_where_its_plain_spelling_does() {
@@ -1394,6 +1534,57 @@ mod tests {
             r"\\?\D:\Users\Dana\Library\x",
             r"C:\Users\Dana\Library"
         ));
+    }
+
+    // Homebrew's default prefix on Linux, where its `claude-code` and `codex` casks install too.
+    #[test]
+    fn an_app_on_linux_looks_in_homebrews_bin() {
+        let env = Environment::on(Os::Linux, [("HOME", "/home/x")]);
+        let brew = PathBuf::from("/home/linuxbrew/.linuxbrew/bin");
+        assert_eq!(Os::Linux.package_bins(&env), std::slice::from_ref(&brew));
+        for tool in crate::provider::ProviderId::ALL {
+            if let Some(cli) = tool.cli() {
+                assert!((cli.install_places)(&env).contains(&brew), "{tool}");
+            }
+        }
+        assert!(crate::app::command_line_places(&env, None).contains(&brew));
+    }
+
+    // Linux's packages put `pitboard-app` beside `pitboard` in one `bin`.
+    #[test]
+    fn each_systems_app_names_the_command_line_it_comes_with() {
+        let names = |os: Os, app: &str| os.app_command_line(Path::new(app));
+        let helper = |app: &str| Some(Path::new(app).join("Contents/Helpers/pitboard"));
+        for (os, app, inside) in [
+            (
+                Os::Linux,
+                "/usr/bin/pitboard-app",
+                Some(PathBuf::from("/usr/bin/pitboard")),
+            ),
+            (
+                Os::Linux,
+                "/home/x/.local/bin/pitboard-app",
+                Some(PathBuf::from("/home/x/.local/bin/pitboard")),
+            ),
+            (Os::Linux, "/usr/bin/pitboard", None),
+            (Os::Linux, "/usr/bin/Pitboard-App", None),
+            (Os::Linux, "/usr/bin/pitboard-app.desktop", None),
+            (Os::Linux, "/Applications/Pitboard.app", None),
+            (
+                Os::MacOs,
+                "/Applications/Pitboard.app",
+                helper("/Applications/Pitboard.app"),
+            ),
+            (Os::MacOs, "/usr/bin/pitboard-app", None),
+            (
+                Os::Windows,
+                "C:/Program Files/Pitboard/Pitboard.exe",
+                Some(PathBuf::from("C:/Program Files/Pitboard/bin/pitboard.exe")),
+            ),
+            (Os::Windows, "C:/Program Files/Pitboard/pitboard-app", None),
+        ] {
+            assert_eq!(names(os, app), inside, "{os:?} {app}");
+        }
     }
 
     // launchd, a systemd user timer where systemd started Linux, and Task Scheduler.

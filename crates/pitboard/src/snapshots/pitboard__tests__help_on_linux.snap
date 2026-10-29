@@ -1,0 +1,557 @@
+---
+source: crates/pitboard/src/main.rs
+expression: every_help()
+---
+== pitboard
+Switch Claude Code and Codex between your own accounts without signing out, and see what each
+account has left
+
+Usage: pitboard [OPTIONS] [COMMAND]
+
+Commands:
+  status       What is signed in, and how much each Claude Code and Codex account has left (the
+               default)
+  use          Switch a tool to an enrolled account
+  enroll       Add an account: the one signed in now, or with --sign-in, another one
+  rename       Change the label an account is enrolled under
+  forget       Drop an account and its parked login
+  watch        Switch Claude Code before the account in use runs out, and warm up accounts
+  warm         Start an account's five-hour period early, so it resets sooner
+  statusline   One line for Claude Code's status bar; reads its session JSON on stdin
+  renew        Renew every parked login that is due, and nothing else
+  schedule     Keep parked logins alive without running anything yourself
+  vault        Where parked logins are kept: in the login keyring, or in 0600 files
+  log          What Pitboard has changed, and when
+  doctor       Check that what Pitboard relies on still holds on this machine
+  uninstall    Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch
+               service and Pitboard's own files
+  stow         Put away the login Claude Code left in a file behind the store it keeps its login in,
+               then delete the file
+  repair       Ask the credential store what parked logins are here, and account for every one
+  abandon      Give up on an interrupted switch that cannot be finished, keeping every login
+  adopt        Take over a Pitboard directory another computer wrote, keeping the accounts
+  completions  Print a shell completion script
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+  -V, --version
+          Print version
+
+Examples:
+  pitboard enroll personal        Add the account Claude Code is signed in to
+  pitboard enroll work --sign-in  Sign in to another account and add it
+  pitboard use work               Switch Claude Code to work
+
+== pitboard status
+What is signed in, and how much each Claude Code and Codex account has left (the default)
+
+Usage: pitboard status [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+      --offline
+          Answer from what was last measured, without asking anyone
+
+      --fresh
+          Ask about every account, even one asked about moments ago
+
+  -h, --help
+          Print help
+
+== pitboard use
+Switch a tool to an enrolled account
+
+Usage: pitboard use [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          The label the account was enrolled under, such as `work` or `codex/work`
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -y, --yes
+          Where the service refuses the login in use for good, put this account's login in its place
+          without asking; needed without a terminal or with `--json`
+
+  -h, --help
+          Print help
+
+== pitboard enroll
+Add an account: the one signed in now, or with --sign-in, another one
+
+Usage: pitboard enroll [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          A short name for this account, such as `personal` or `work`. `codex/work` names a Codex
+          account; a bare name means Claude Code
+
+Options:
+      --json
+          Print JSON instead of text
+
+      --sign-in
+          Sign in to another account first, through the tool's own sign-in
+
+  -h, --help
+          Print help
+
+== pitboard rename
+Change the label an account is enrolled under
+
+Usage: pitboard rename [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          The label it has now
+
+  <TO>
+          The label it should have
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard forget
+Drop an account and its parked login
+
+Usage: pitboard forget [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          The label to drop
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -y, --yes
+          Do not ask first; needed without a terminal or with `--json`
+
+  -h, --help
+          Print help
+
+== pitboard watch
+Switch Claude Code before the account in use runs out, and warm up accounts
+
+Usage: pitboard watch [OPTIONS] [COMMAND]
+
+Commands:
+  install    Have this computer's own service manager run `pitboard watch` from now on and at each
+             sign-in
+  status     Say whether it is installed
+  uninstall  Stop it and take it away
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --at <PERCENT>
+          Switch once a limit of the account in use reaches this share, from 50 to 99
+          
+          [default: 95]
+
+      --json
+          Print JSON instead of text
+
+      --once
+          Decide once whether to switch, from the usage Pitboard last measured, asking no service
+          for usage, and stop. Warms nothing up
+
+  -h, --help
+          Print help
+
+Anthropic's terms may cover automatic switching and warm-ups:
+https://docs.usepitboard.com/concepts/limits#is-this-allowed
+
+== pitboard watch install
+Have this computer's own service manager run `pitboard watch` from now on and at each sign-in
+
+Usage: pitboard watch install [OPTIONS]
+
+Options:
+      --at <PERCENT>
+          Switch once a limit of the account in use reaches this share, from 50 to 99
+          
+          [default: 95]
+
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard watch status
+Say whether it is installed
+
+Usage: pitboard watch status [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard watch uninstall
+Stop it and take it away
+
+Usage: pitboard watch uninstall [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard warm
+Start an account's five-hour period early, so it resets sooner
+
+Usage: pitboard warm [OPTIONS] [COMMAND]
+
+Commands:
+  now    Start an account's five-hour period now, whatever the span, through one short request
+         Claude Code makes with that account's login
+  on     Warm up an account from now on, within the span `range` sets
+  off    Stop warming up an account
+  range  Warm up accounts only between these times of each day, in this computer's time zone
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard warm now
+Start an account's five-hour period now, whatever the span, through one short request Claude Code
+makes with that account's login
+
+Usage: pitboard warm now [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          The label the account was enrolled under, such as `work`
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard warm on
+Warm up an account from now on, within the span `range` sets
+
+Usage: pitboard warm on [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          The label the account was enrolled under, such as `work`
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard warm off
+Stop warming up an account
+
+Usage: pitboard warm off [OPTIONS] <LABEL>
+
+Arguments:
+  <LABEL>
+          The label the account was enrolled under
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard warm range
+Warm up accounts only between these times of each day, in this computer's time zone
+
+Usage: pitboard warm range [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          When to start, such as 06:00
+
+  <TO>
+          When to stop, such as 22:00; 00:00 and 24:00 are midnight, and a time before FROM runs
+          past it
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard statusline
+One line for Claude Code's status bar; reads its session JSON on stdin
+
+Usage: pitboard statusline [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard renew
+Renew every parked login that is due, and nothing else
+
+Usage: pitboard renew [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard schedule
+Keep parked logins alive without running anything yourself
+
+Usage: pitboard schedule [OPTIONS] <COMMAND>
+
+Commands:
+  install    Ask this computer's own scheduler to renew parked logins daily
+  status     Say whether it is installed
+  uninstall  Take it away
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard schedule install
+Ask this computer's own scheduler to renew parked logins daily
+
+Usage: pitboard schedule install [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard schedule status
+Say whether it is installed
+
+Usage: pitboard schedule status [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard schedule uninstall
+Take it away
+
+Usage: pitboard schedule uninstall [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard vault
+Where parked logins are kept: in the login keyring, or in 0600 files
+
+Usage: pitboard vault [OPTIONS] [COMMAND]
+
+Commands:
+  status  Say where parked logins are kept (the default)
+  move    Move every parked login into the login keyring or into 0600 files
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard vault status
+Say where parked logins are kept (the default)
+
+Usage: pitboard vault status [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard vault move
+Move every parked login into the login keyring or into 0600 files
+
+Usage: pitboard vault move [OPTIONS] <FORM>
+
+Arguments:
+  <FORM>
+          Where to keep them: `secret-service`, the login keyring, or `files`, 0600 files in
+          Pitboard's directory
+          
+          [possible values: secret-service, files]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard log
+What Pitboard has changed, and when
+
+Usage: pitboard log [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -n, --lines <LINES>
+          How many changes to show
+          
+          [default: 20]
+
+  -h, --help
+          Print help
+
+== pitboard doctor
+Check that what Pitboard relies on still holds on this machine
+
+Usage: pitboard doctor [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard uninstall
+Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and
+Pitboard's own files
+
+Usage: pitboard uninstall [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -y, --yes
+          Do not ask first; needed without a terminal or with `--json`
+
+  -h, --help
+          Print help
+
+== pitboard stow
+Put away the login Claude Code left in a file behind the store it keeps its login in, then delete
+the file
+
+Usage: pitboard stow [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -y, --yes
+          Do not ask first; needed without a terminal or with `--json`
+
+  -h, --help
+          Print help
+
+== pitboard repair
+Ask the credential store what parked logins are here, and account for every one
+
+Usage: pitboard repair [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard abandon
+Give up on an interrupted switch that cannot be finished, keeping every login
+
+Usage: pitboard abandon [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard adopt
+Take over a Pitboard directory another computer wrote, keeping the accounts
+
+Usage: pitboard adopt [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard completions
+Print a shell completion script
+
+Usage: pitboard completions [OPTIONS] <SHELL>
+
+Arguments:
+  <SHELL>
+          [possible values: bash, elvish, fish, powershell, zsh]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard manpage
+Print the man page
+
+Usage: pitboard manpage [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help

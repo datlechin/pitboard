@@ -167,6 +167,7 @@ pub(super) fn renew(
             label: which.name().to_owned(),
             bytes: price.needs,
             limit: price.limit,
+            store: price.store,
         }));
     }
     let writing = write_lock(ctx, permit, tool)?;

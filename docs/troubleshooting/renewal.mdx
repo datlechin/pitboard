@@ -21,6 +21,8 @@ description: "Fix an expired parked login, a renewal schedule that stopped or us
 | `which is the app itself and not a command line` | macOS | The schedule runs the app, which renews nothing. |
 | `but in Task Scheduler it`, then what changed, such as `is disabled` | Windows | Someone changed the task in Task Scheduler. |
 | `and its last run`, then how it ended | Windows | The last run failed. |
+| `as an earlier Pitboard wrote it` | Linux | The timer counts only time awake, and the units fail once their `pitboard` is gone. |
+| `but a run of it`, then what it `could not open` | All | A run found the keychain or the login keyring locked, or could not read the parked logins. |
 
 As it starts, the app points a schedule whose `pitboard` is gone at its own command line. Otherwise, turn daily renewal off and on again: with **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, or on the command line:
 
@@ -31,9 +33,33 @@ pitboard schedule install
 
 Where the last run failed, run `pitboard renew` to see what it says. [Renewal schedule](/reference/files#renewal-schedule) lists where each system keeps the schedule.
 
+Where a run could not open the parked logins, renewal tries again at its next run, and the line goes once a run of it opens them. A `pitboard renew` you run yourself renews them now and leaves the line, since it says nothing of what the schedule's runs find.
+
+### Renewal found the login keyring locked
+
+On Linux, a run before you sign in can find the login keyring locked, as on a computer where `loginctl enable-linger` starts your user's systemd at boot. Renewal runs again at your next sign-in to GNOME or KDE Plasma, where signing in unlocks the keyring. In another desktop, sign in before its daily run.
+
+Where nobody signs in to a desktop, as on a server, keep the parked logins in files, which need no unlocking:
+
+```sh
+pitboard vault move files
+```
+
 ### Linux has no scheduler for it
 
-`pitboard schedule install` asks your user's systemd, as `pitboard watch install` does. Where systemd did not start the system, as in many containers, it refuses with `schedule_unsupported`. Where your user has no systemd session, such as a root shell from `su`, it refuses with `schedule_refused` and what `systemctl` said. Run `pitboard renew` yourself instead, such as from cron.
+`pitboard schedule install` asks your user's systemd, as `pitboard watch install` does. Where systemd did not start the system, as in many containers, it refuses with `schedule_unsupported`. Where your user has no systemd session, such as a root shell from `su`, it refuses with `schedule_refused` and what systemd said. Run `pitboard renew` yourself instead, such as from cron.
+
+### systemd reads units from another folder or home
+
+`pitboard schedule install` and `pitboard watch install` refuse with `schedule_manager_elsewhere` where your user's systemd would not run the job for your home. systemd reads your units from `systemd/user` in its own `XDG_CONFIG_HOME`, or in `~/.config`, and runs them with its own `HOME`.
+
+Compare your shell's `HOME` and `XDG_CONFIG_HOME` with systemd's:
+
+```sh
+systemctl --user show-environment
+```
+
+Make them the same, then install again. Unset `XDG_CONFIG_HOME` in your shell where systemd has none. Give systemd yours with `systemctl --user set-environment XDG_CONFIG_HOME=<folder>`, or for every session in a `.conf` file in `~/.config/environment.d`, as environment.d(5) says.
 
 ### The schedule uses another proxy
 

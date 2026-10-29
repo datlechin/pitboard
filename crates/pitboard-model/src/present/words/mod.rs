@@ -34,6 +34,7 @@ pub(crate) use status_item::*;
 pub(crate) use windows::*;
 
 use crate::Front;
+use pitboard_core::host::SecretStore;
 use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::words::capitalised;
 use std::ops::Range;
@@ -106,6 +107,19 @@ pub(crate) fn utc_date(epoch: i64) -> String {
                 .to_string()
         })
         .unwrap_or_default()
+}
+
+// The store a sign-in file is left behind, said after Claude Code is named. On Linux the file is
+// Claude Code's store and nothing is in front of it, so it leaves none there, and only a
+// fixture's machine shows these words.
+fn store_in_front(front: Front) -> &'static str {
+    match front {
+        Front::MacMenuBar => pitboard_core::words::store_in_front(SecretStore::Keychain),
+        Front::WindowsNotificationArea => {
+            pitboard_core::words::store_in_front(SecretStore::CredentialManager)
+        }
+        Front::Gnome => "the store it keeps its sign-in in",
+    }
 }
 
 /// How a sentence names the machine the app runs on, as the account windows' alerts do.

@@ -17,6 +17,7 @@ ACCEPTED = {
     "the login keychain is macOS's own": None,
     "`SUDO_UID` is Unix's sign of sudo": None,
     "`systemctl` is Linux's own": None,
+    "the Secret Service is Linux's own": None,
     "macOS and Linux print this help": None,
     "the probe refuses off Windows": None,
     "the Linux app runs on Linux alone": None,

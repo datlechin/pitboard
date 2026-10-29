@@ -1,0 +1,1182 @@
+---
+source: crates/pitboard/src/main.rs
+expression: "completions(clap_complete::Shell::Zsh)"
+---
+#compdef pitboard
+
+autoload -U is-at-least
+
+_pitboard() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_pitboard_commands" \
+"*::: :->pitboard" \
+&& ret=0
+    case $state in
+    (pitboard)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--offline[Answer from what was last measured, without asking anyone]' \
+'(--offline)--fresh[Ask about every account, even one asked about moments ago]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(use)
+_arguments "${_arguments_options[@]}" : \
+'-y[Where the service refuses the login in use for good, put this account'\''s login in its place without asking; needed without a terminal or with \`--json\`]' \
+'--yes[Where the service refuses the login in use for good, put this account'\''s login in its place without asking; needed without a terminal or with \`--json\`]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- The label the account was enrolled under, such as `work` or `codex/work`:_default' \
+&& ret=0
+;;
+(enroll)
+_arguments "${_arguments_options[@]}" : \
+'--sign-in[Sign in to another account first, through the tool'\''s own sign-in]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- A short name for this account, such as `personal` or `work`. `codex/work` names a Codex account; a bare name means Claude Code:_default' \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':from -- The label it has now:_default' \
+':to -- The label it should have:_default' \
+&& ret=0
+;;
+(forget)
+_arguments "${_arguments_options[@]}" : \
+'-y[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--yes[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- The label to drop:_default' \
+&& ret=0
+;;
+(watch)
+_arguments "${_arguments_options[@]}" : \
+'--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
+'--once[Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_pitboard__subcmd__watch_commands" \
+"*::: :->watch" \
+&& ret=0
+
+    case $state in
+    (watch)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-watch-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+'--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__watch__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-watch-help-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(warm)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_pitboard__subcmd__warm_commands" \
+"*::: :->warm" \
+&& ret=0
+
+    case $state in
+    (warm)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-warm-command-$line[1]:"
+        case $line[1] in
+            (now)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- The label the account was enrolled under, such as `work`:_default' \
+&& ret=0
+;;
+(on)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- The label the account was enrolled under, such as `work`:_default' \
+&& ret=0
+;;
+(off)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':label -- The label the account was enrolled under:_default' \
+&& ret=0
+;;
+(range)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':from -- When to start, such as 06\:00:_default' \
+':to -- When to stop, such as 22\:00; 00\:00 and 24\:00 are midnight, and a time before FROM runs past it:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__warm__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-warm-help-command-$line[1]:"
+        case $line[1] in
+            (now)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(on)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(off)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(range)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(statusline)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(renew)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(schedule)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_pitboard__subcmd__schedule_commands" \
+"*::: :->schedule" \
+&& ret=0
+
+    case $state in
+    (schedule)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-schedule-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__schedule__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-schedule-help-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(vault)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_pitboard__subcmd__vault_commands" \
+"*::: :->vault" \
+&& ret=0
+
+    case $state in
+    (vault)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-vault-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':to -- Where to keep them\: `secret-service`, the login keyring, or `files`, 0600 files in Pitboard'\''s directory:(secret-service files)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__vault__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-vault-help-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(log)
+_arguments "${_arguments_options[@]}" : \
+'-n+[How many changes to show]:LINES:_default' \
+'--lines=[How many changes to show]:LINES:_default' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+'-y[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--yes[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(stow)
+_arguments "${_arguments_options[@]}" : \
+'-y[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--yes[Do not ask first; needed without a terminal or with \`--json\`]' \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(repair)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(abandon)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(adopt)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':shell:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(use)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(enroll)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(forget)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(watch)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help__subcmd__watch_commands" \
+"*::: :->watch" \
+&& ret=0
+
+    case $state in
+    (watch)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-watch-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(warm)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help__subcmd__warm_commands" \
+"*::: :->warm" \
+&& ret=0
+
+    case $state in
+    (warm)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-warm-command-$line[1]:"
+        case $line[1] in
+            (now)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(on)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(off)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(range)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(statusline)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(renew)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(schedule)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help__subcmd__schedule_commands" \
+"*::: :->schedule" \
+&& ret=0
+
+    case $state in
+    (schedule)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-schedule-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(vault)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help__subcmd__vault_commands" \
+"*::: :->vault" \
+&& ret=0
+
+    case $state in
+    (vault)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-vault-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(log)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stow)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(repair)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(abandon)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(adopt)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_pitboard_commands] )) ||
+_pitboard_commands() {
+    local commands; commands=(
+'status:What is signed in, and how much each Claude Code and Codex account has left (the default)' \
+'use:Switch a tool to an enrolled account' \
+'enroll:Add an account\: the one signed in now, or with --sign-in, another one' \
+'rename:Change the label an account is enrolled under' \
+'forget:Drop an account and its parked login' \
+'watch:Switch Claude Code before the account in use runs out, and warm up accounts' \
+'warm:Start an account'\''s five-hour period early, so it resets sooner' \
+'statusline:One line for Claude Code'\''s status bar; reads its session JSON on stdin' \
+'renew:Renew every parked login that is due, and nothing else' \
+'schedule:Keep parked logins alive without running anything yourself' \
+'vault:Where parked logins are kept\: in the login keyring, or in 0600 files' \
+'log:What Pitboard has changed, and when' \
+'doctor:Check that what Pitboard relies on still holds on this machine' \
+'uninstall:Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard'\''s own files' \
+'stow:Put away the login Claude Code left in a file behind the store it keeps its login in, then delete the file' \
+'repair:Ask the credential store what parked logins are here, and account for every one' \
+'abandon:Give up on an interrupted switch that cannot be finished, keeping every login' \
+'adopt:Take over a Pitboard directory another computer wrote, keeping the accounts' \
+'completions:Print a shell completion script' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__abandon_commands] )) ||
+_pitboard__subcmd__abandon_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard abandon commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__adopt_commands] )) ||
+_pitboard__subcmd__adopt_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard adopt commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__completions_commands] )) ||
+_pitboard__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard completions commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__doctor_commands] )) ||
+_pitboard__subcmd__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard doctor commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__enroll_commands] )) ||
+_pitboard__subcmd__enroll_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard enroll commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__forget_commands] )) ||
+_pitboard__subcmd__forget_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard forget commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help_commands] )) ||
+_pitboard__subcmd__help_commands() {
+    local commands; commands=(
+'status:What is signed in, and how much each Claude Code and Codex account has left (the default)' \
+'use:Switch a tool to an enrolled account' \
+'enroll:Add an account\: the one signed in now, or with --sign-in, another one' \
+'rename:Change the label an account is enrolled under' \
+'forget:Drop an account and its parked login' \
+'watch:Switch Claude Code before the account in use runs out, and warm up accounts' \
+'warm:Start an account'\''s five-hour period early, so it resets sooner' \
+'statusline:One line for Claude Code'\''s status bar; reads its session JSON on stdin' \
+'renew:Renew every parked login that is due, and nothing else' \
+'schedule:Keep parked logins alive without running anything yourself' \
+'vault:Where parked logins are kept\: in the login keyring, or in 0600 files' \
+'log:What Pitboard has changed, and when' \
+'doctor:Check that what Pitboard relies on still holds on this machine' \
+'uninstall:Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard'\''s own files' \
+'stow:Put away the login Claude Code left in a file behind the store it keeps its login in, then delete the file' \
+'repair:Ask the credential store what parked logins are here, and account for every one' \
+'abandon:Give up on an interrupted switch that cannot be finished, keeping every login' \
+'adopt:Take over a Pitboard directory another computer wrote, keeping the accounts' \
+'completions:Print a shell completion script' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__abandon_commands] )) ||
+_pitboard__subcmd__help__subcmd__abandon_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help abandon commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__adopt_commands] )) ||
+_pitboard__subcmd__help__subcmd__adopt_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help adopt commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__completions_commands] )) ||
+_pitboard__subcmd__help__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help completions commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__doctor_commands] )) ||
+_pitboard__subcmd__help__subcmd__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help doctor commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__enroll_commands] )) ||
+_pitboard__subcmd__help__subcmd__enroll_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help enroll commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__forget_commands] )) ||
+_pitboard__subcmd__help__subcmd__forget_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help forget commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__log_commands] )) ||
+_pitboard__subcmd__help__subcmd__log_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help log commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__rename_commands] )) ||
+_pitboard__subcmd__help__subcmd__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help rename commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__renew_commands] )) ||
+_pitboard__subcmd__help__subcmd__renew_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help renew commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__repair_commands] )) ||
+_pitboard__subcmd__help__subcmd__repair_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help repair commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__schedule_commands] )) ||
+_pitboard__subcmd__help__subcmd__schedule_commands() {
+    local commands; commands=(
+'install:Ask this computer'\''s own scheduler to renew parked logins daily' \
+'status:Say whether it is installed' \
+'uninstall:Take it away' \
+    )
+    _describe -t commands 'pitboard help schedule commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__schedule__subcmd__install_commands] )) ||
+_pitboard__subcmd__help__subcmd__schedule__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help schedule install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__schedule__subcmd__status_commands] )) ||
+_pitboard__subcmd__help__subcmd__schedule__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help schedule status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__schedule__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__help__subcmd__schedule__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help schedule uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__status_commands] )) ||
+_pitboard__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__statusline_commands] )) ||
+_pitboard__subcmd__help__subcmd__statusline_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help statusline commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__stow_commands] )) ||
+_pitboard__subcmd__help__subcmd__stow_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help stow commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__help__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__use_commands] )) ||
+_pitboard__subcmd__help__subcmd__use_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help use commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login into the login keyring or into 0600 files' \
+    )
+    _describe -t commands 'pitboard help vault commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault__subcmd__move_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help vault move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault__subcmd__status_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help vault status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__warm_commands] )) ||
+_pitboard__subcmd__help__subcmd__warm_commands() {
+    local commands; commands=(
+'now:Start an account'\''s five-hour period now, whatever the span, through one short request Claude Code makes with that account'\''s login' \
+'on:Warm up an account from now on, within the span \`range\` sets' \
+'off:Stop warming up an account' \
+'range:Warm up accounts only between these times of each day, in this computer'\''s time zone' \
+    )
+    _describe -t commands 'pitboard help warm commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__warm__subcmd__now_commands] )) ||
+_pitboard__subcmd__help__subcmd__warm__subcmd__now_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help warm now commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__warm__subcmd__off_commands] )) ||
+_pitboard__subcmd__help__subcmd__warm__subcmd__off_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help warm off commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__warm__subcmd__on_commands] )) ||
+_pitboard__subcmd__help__subcmd__warm__subcmd__on_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help warm on commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__warm__subcmd__range_commands] )) ||
+_pitboard__subcmd__help__subcmd__warm__subcmd__range_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help warm range commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__watch_commands] )) ||
+_pitboard__subcmd__help__subcmd__watch_commands() {
+    local commands; commands=(
+'install:Have this computer'\''s own service manager run \`pitboard watch\` from now on and at each sign-in' \
+'status:Say whether it is installed' \
+'uninstall:Stop it and take it away' \
+    )
+    _describe -t commands 'pitboard help watch commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__watch__subcmd__install_commands] )) ||
+_pitboard__subcmd__help__subcmd__watch__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help watch install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__watch__subcmd__status_commands] )) ||
+_pitboard__subcmd__help__subcmd__watch__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help watch status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__watch__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__help__subcmd__watch__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help watch uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__log_commands] )) ||
+_pitboard__subcmd__log_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard log commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__rename_commands] )) ||
+_pitboard__subcmd__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard rename commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__renew_commands] )) ||
+_pitboard__subcmd__renew_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard renew commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__repair_commands] )) ||
+_pitboard__subcmd__repair_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard repair commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule_commands] )) ||
+_pitboard__subcmd__schedule_commands() {
+    local commands; commands=(
+'install:Ask this computer'\''s own scheduler to renew parked logins daily' \
+'status:Say whether it is installed' \
+'uninstall:Take it away' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard schedule commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__help_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__help_commands() {
+    local commands; commands=(
+'install:Ask this computer'\''s own scheduler to renew parked logins daily' \
+'status:Say whether it is installed' \
+'uninstall:Take it away' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard schedule help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__help__subcmd__install_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__help__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule help install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__help__subcmd__status_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule help status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__help__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__help__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule help uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__install_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__status_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__schedule__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__schedule__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard schedule uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__status_commands] )) ||
+_pitboard__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__statusline_commands] )) ||
+_pitboard__subcmd__statusline_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard statusline commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__stow_commands] )) ||
+_pitboard__subcmd__stow_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard stow commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__use_commands] )) ||
+_pitboard__subcmd__use_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard use commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault_commands] )) ||
+_pitboard__subcmd__vault_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login into the login keyring or into 0600 files' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard vault commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login into the login keyring or into 0600 files' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard vault help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__move_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__status_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__move_commands] )) ||
+_pitboard__subcmd__vault__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__status_commands] )) ||
+_pitboard__subcmd__vault__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm_commands] )) ||
+_pitboard__subcmd__warm_commands() {
+    local commands; commands=(
+'now:Start an account'\''s five-hour period now, whatever the span, through one short request Claude Code makes with that account'\''s login' \
+'on:Warm up an account from now on, within the span \`range\` sets' \
+'off:Stop warming up an account' \
+'range:Warm up accounts only between these times of each day, in this computer'\''s time zone' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard warm commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help_commands() {
+    local commands; commands=(
+'now:Start an account'\''s five-hour period now, whatever the span, through one short request Claude Code makes with that account'\''s login' \
+'on:Warm up an account from now on, within the span \`range\` sets' \
+'off:Stop warming up an account' \
+'range:Warm up accounts only between these times of each day, in this computer'\''s time zone' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard warm help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help__subcmd__now_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help__subcmd__now_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm help now commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help__subcmd__off_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help__subcmd__off_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm help off commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help__subcmd__on_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help__subcmd__on_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm help on commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__help__subcmd__range_commands] )) ||
+_pitboard__subcmd__warm__subcmd__help__subcmd__range_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm help range commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__now_commands] )) ||
+_pitboard__subcmd__warm__subcmd__now_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm now commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__off_commands] )) ||
+_pitboard__subcmd__warm__subcmd__off_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm off commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__on_commands] )) ||
+_pitboard__subcmd__warm__subcmd__on_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm on commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__warm__subcmd__range_commands] )) ||
+_pitboard__subcmd__warm__subcmd__range_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard warm range commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch_commands] )) ||
+_pitboard__subcmd__watch_commands() {
+    local commands; commands=(
+'install:Have this computer'\''s own service manager run \`pitboard watch\` from now on and at each sign-in' \
+'status:Say whether it is installed' \
+'uninstall:Stop it and take it away' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard watch commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__help_commands] )) ||
+_pitboard__subcmd__watch__subcmd__help_commands() {
+    local commands; commands=(
+'install:Have this computer'\''s own service manager run \`pitboard watch\` from now on and at each sign-in' \
+'status:Say whether it is installed' \
+'uninstall:Stop it and take it away' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard watch help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__watch__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__help__subcmd__install_commands] )) ||
+_pitboard__subcmd__watch__subcmd__help__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch help install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__help__subcmd__status_commands] )) ||
+_pitboard__subcmd__watch__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch help status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__help__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__watch__subcmd__help__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch help uninstall commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__install_commands] )) ||
+_pitboard__subcmd__watch__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch install commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__status_commands] )) ||
+_pitboard__subcmd__watch__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__watch__subcmd__uninstall_commands] )) ||
+_pitboard__subcmd__watch__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard watch uninstall commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_pitboard" ]; then
+    _pitboard "$@"
+else
+    compdef _pitboard pitboard
+fi

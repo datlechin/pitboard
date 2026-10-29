@@ -1,7 +1,7 @@
 use super::{Check, Facts, fail, ok, read_from, warn, words};
 use crate::context::Context;
 use crate::error::Error;
-use crate::host::Os;
+use crate::host::{Os, SecretStore};
 use crate::in_use::Stored;
 use crate::provider::claude::live as claude_live;
 use crate::provider::{LoginKind, ProviderId};
@@ -14,6 +14,8 @@ use std::path::PathBuf;
 // Claude Code's plaintext file, there while the keychain holds the login in use.
 pub(crate) struct FallbackLogin {
     pub(crate) path: PathBuf,
+    // The store it is behind.
+    pub(crate) store: SecretStore,
     // `None` where it holds no login, and empty where that login has no refresh token.
     pub(crate) fingerprint: Result<Option<String>, store::Error>,
 }
@@ -45,9 +47,11 @@ fn fallback_login(
     holder: &dyn store::RawStore,
     service: &str,
 ) -> Option<FallbackLogin> {
+    let store = holder.kind().secret_store()?;
     let login = claude_live::behind_holder(chain, holder, service)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
+        store,
         fingerprint: login.map(|held| {
             claude_live::login_in(&held)
                 .map(|document| crate::provider::claude::document::fingerprint_of(&document))
@@ -253,8 +257,10 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
                 Os::Linux | Os::Windows => ok("credential_store", "credential store", detail),
             }
         }
-        // No tool keeps its login in Pitboard's sealed files.
-        Ok(store::Backend::Unknown | store::Backend::SealedFile) => fail(
+        // No tool keeps its login in Pitboard's sealed files or its Secret Service items.
+        Ok(
+            store::Backend::Unknown | store::Backend::SealedFile | store::Backend::SecretService,
+        ) => fail(
             "credential_store",
             "credential store",
             words::NOT_READ_YET,
@@ -466,18 +472,20 @@ pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
                     fingerprint
                 },
             ),
-            words::the_file_signs_sessions_in(facts.os),
+            words::the_file_signs_sessions_in(left.store),
         ),
         Ok(None) => (words::file_without_a_login(path), words::stow_deletes_it()),
         Err(e) => (
             words::file_not_read(path, e),
-            words::delete_it_yourself(facts.os, &facts.os.remove_file_command(&left.path)),
+            words::delete_it_yourself(left.store, &facts.os.remove_file_command(&left.path)),
         ),
     };
     Some(warn("fallback_login", "fallback login", detail, advice))
 }
 
-// The flag moves no login out of the keychain (`live_chain_order`): only the file's may differ.
+// The flag moves no login out of the keychain or Credential Manager (`live_chain_order`,
+// `credman_migration`): only the file's may differ, a fallback on macOS and the one store on
+// Linux.
 pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
     let flag_on = facts
         .config
@@ -494,10 +502,19 @@ pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
         Ok(store::Backend::File) => warn(
             "storage_v5",
             "storage v5",
-            words::ON_IN_THE_FALLBACK_STORE,
+            words::on_in_the_file(facts.os),
             words::MAYBE_NOT_THE_SAME_FILE,
         ),
-        _ => ok("storage_v5", "storage v5", words::ON_IN_THE_KEYCHAIN),
+        _ => ok(
+            "storage_v5",
+            "storage v5",
+            facts
+                .backend
+                .as_ref()
+                .ok()
+                .and_then(|backend| backend.secret_store())
+                .map_or_else(|| words::SWITCHED_ON.to_owned(), words::on_in),
+        ),
     }
 }
 

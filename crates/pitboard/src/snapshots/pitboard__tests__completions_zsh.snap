@@ -329,6 +329,68 @@ esac
     ;;
 esac
 ;;
+(vault)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_pitboard__subcmd__vault_commands" \
+"*::: :->vault" \
+&& ret=0
+
+    case $state in
+    (vault)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-vault-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+'--json[Print JSON instead of text]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':to -- Where to keep them:(secret-service files)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__vault__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-vault-help-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (log)
 _arguments "${_arguments_options[@]}" : \
 '-n+[How many changes to show]:LINES:_default' \
@@ -520,6 +582,30 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(vault)
+_arguments "${_arguments_options[@]}" : \
+":: :_pitboard__subcmd__help__subcmd__vault_commands" \
+"*::: :->vault" \
+&& ret=0
+
+    case $state in
+    (vault)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:pitboard-help-vault-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(move)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (log)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -578,6 +664,7 @@ _pitboard_commands() {
 'statusline:One line for Claude Code'\''s status bar; reads its session JSON on stdin' \
 'renew:Renew every parked login that is due, and nothing else' \
 'schedule:Keep parked logins alive without running anything yourself' \
+'vault:Where parked logins are kept\: in the login keychain' \
 'log:What Pitboard has changed, and when' \
 'doctor:Check that what Pitboard relies on still holds on this machine' \
 'uninstall:Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard'\''s own files' \
@@ -633,6 +720,7 @@ _pitboard__subcmd__help_commands() {
 'statusline:One line for Claude Code'\''s status bar; reads its session JSON on stdin' \
 'renew:Renew every parked login that is due, and nothing else' \
 'schedule:Keep parked logins alive without running anything yourself' \
+'vault:Where parked logins are kept\: in the login keychain' \
 'log:What Pitboard has changed, and when' \
 'doctor:Check that what Pitboard relies on still holds on this machine' \
 'uninstall:Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard'\''s own files' \
@@ -748,6 +836,24 @@ _pitboard__subcmd__help__subcmd__uninstall_commands() {
 _pitboard__subcmd__help__subcmd__use_commands() {
     local commands; commands=()
     _describe -t commands 'pitboard help use commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login to another way of keeping them, which macOS does not offer' \
+    )
+    _describe -t commands 'pitboard help vault commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault__subcmd__move_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help vault move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__help__subcmd__vault__subcmd__status_commands] )) ||
+_pitboard__subcmd__help__subcmd__vault__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard help vault status commands' commands "$@"
 }
 (( $+functions[_pitboard__subcmd__help__subcmd__warm_commands] )) ||
 _pitboard__subcmd__help__subcmd__warm_commands() {
@@ -902,6 +1008,49 @@ _pitboard__subcmd__uninstall_commands() {
 _pitboard__subcmd__use_commands() {
     local commands; commands=()
     _describe -t commands 'pitboard use commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault_commands] )) ||
+_pitboard__subcmd__vault_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login to another way of keeping them, which macOS does not offer' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard vault commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help_commands() {
+    local commands; commands=(
+'status:Say where parked logins are kept (the default)' \
+'move:Move every parked login to another way of keeping them, which macOS does not offer' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'pitboard vault help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__help_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help help commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__move_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__help__subcmd__status_commands] )) ||
+_pitboard__subcmd__vault__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault help status commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__move_commands] )) ||
+_pitboard__subcmd__vault__subcmd__move_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault move commands' commands "$@"
+}
+(( $+functions[_pitboard__subcmd__vault__subcmd__status_commands] )) ||
+_pitboard__subcmd__vault__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'pitboard vault status commands' commands "$@"
 }
 (( $+functions[_pitboard__subcmd__warm_commands] )) ||
 _pitboard__subcmd__warm_commands() {

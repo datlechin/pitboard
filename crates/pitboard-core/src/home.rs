@@ -222,7 +222,10 @@ pub(crate) fn check_absolute(ctx: &Context) -> Result<()> {
 }
 
 // On Linux root may change things only where it owns each of these.
-#[cfg(any(target_os = "linux", test))]
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(dead_code, reason = "only Linux's host lets root change things")
+)]
 pub(crate) fn written(ctx: &Context) -> Vec<PathBuf> {
     use crate::provider::{claude, codex};
     vec![

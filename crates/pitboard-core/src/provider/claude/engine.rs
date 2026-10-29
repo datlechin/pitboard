@@ -297,13 +297,15 @@ impl Provider for Claude {
     }
 
     fn behind(&self, ctx: &Context) -> Option<Behind> {
-        let held = match live::login_behind(ctx)? {
+        let (store, read) = live::login_behind(ctx)?;
+        let held = match read {
             Ok(Some(_)) => Held::Login,
             Ok(None) => Held::NoLogin,
             Err(_) => Held::Unreadable,
         };
         Some(Behind {
             path: live::credential_file(ctx),
+            store,
             held,
         })
     }
@@ -539,6 +541,7 @@ mod tests {
         let file = PathBuf::from("/Users/x/.claude/.credentials.json");
         let holding = |held: Held| Behind {
             path: file.clone(),
+            store: crate::host::SecretStore::Keychain,
             held,
         };
         for os in [Os::MacOs, Os::Linux, Os::Windows] {

@@ -36,6 +36,16 @@ error: the credential store could not be read: Credential Manager cannot be reac
 
 Run the command again from a desktop session. Nothing is wrong with the login, and no account needs a sign-in.
 
+## Linux says the login keyring is locked
+
+Where the login keyring that holds parked logins is locked and cannot ask to be unlocked, or no Secret Service answers on the session's bus, Pitboard stops with `credential_store_locked`:
+
+```text
+error: the credential store could not be read: the login keyring is locked, or nothing answers for it on this session's bus, and it cannot ask to be unlocked from here; run Pitboard in your desktop session, where signing in unlocks it
+```
+
+Run the command again in your desktop session, where your keyring asks for your password, or unlock it there. Daily renewal and the watch service never ask, nor does a command run over SSH or where no display is set. Meanwhile `pitboard doctor` marks each parked login `not read: the login keyring is locked, or nothing answers for it on this session's bus`, and none needs a sign-in.
+
 ## The Claude Code login in Credential Manager cannot be read
 
 On Windows, Pitboard stops with `credential_store_unreadable` and says that Claude Code cannot read the login either. Measured with Claude Code 2.1.302 on 18 October 2026: moving a login from `.credentials.json` into Credential Manager left part of it missing, and lost it.

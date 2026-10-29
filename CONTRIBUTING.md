@@ -28,7 +28,7 @@ and later, the `rust-version` in `Cargo.toml`.
 | `cargo-semver-checks` | `pitboard-core`'s public API |
 | `cargo-insta` | Reviewing a changed `--json` snapshot |
 | `cargo-hack` | The Rust 1.91 floor |
-| `cargo-zigbuild`, Zig and Rust's `x86_64-unknown-linux-gnu` target | Linting the Linux code from a Mac |
+| `cargo-zigbuild`, Zig and Rust's Linux targets | Linting the Linux code from a Mac, as [Linux](#linux) says |
 | `shellcheck` 0.11.0 or later, Python 3.11 or later | The install script and the release's scripts |
 | Xcode with Swift 6.2 or later, XcodeGen | [The macOS app](#the-macos-app) |
 | .NET 10 SDK | [The C# bindings](#the-c-bindings) |
@@ -89,6 +89,8 @@ Some code compiles only on Linux. To lint it from a Mac:
 cargo-zigbuild clippy --target x86_64-unknown-linux-gnu --all-targets
 ```
 
+[Linux](#linux) lints aarch64 and musl too, and runs the tests there.
+
 Every program a Rust test starts in place of `claude`, `codex` or another tool is one
 compiled stand-in, the `pitboard` crate's example `stand-in`. `cargo nextest run` builds
 it. A test run alone with `--test`, or `pitboard-model`'s tests on their own, does not, so
@@ -112,6 +114,12 @@ holds or lies in the account's own `Library/Application Support` or a `Claude.ap
 either `Applications` panics. So does one named through `..`. The harness names one in each
 test's own folder, and starts the stand-in under its `Claude.app` where a test needs Claude
 open. `pitboard_core::testing::desktop` writes a data folder as Claude leaves one.
+
+On Linux, a build for tests reaches no D-Bus but one a test started and named, with
+`Context::with_test_bus` or `PITBOARD_TEST_BUS`. `pitboard_core::testing::SecretService` starts
+`dbus-daemon` and `gnome-keyring-daemon` in the test's own folder, on a bus of its own, and the
+tests that park there fail, naming the package, where `dbus-daemon` or `gnome-keyring` is not
+installed.
 
 As root, under `sudo`, from an elevated terminal on Windows, or on a file system without Unix
 modes, some tests fail and say why.
@@ -159,9 +167,9 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
 python3 .github/scripts/test-release.py
 ```
 
-The macOS app, Windows, the Windows app and the website have checks of their own, in their
-sections. CI's `all-green` check fails when any other job failed or was cancelled, and a pull
-request needs it to pass.
+The macOS app, Windows, the Windows app, Linux and the website have checks of their own, in
+their sections. CI's `all-green` check fails when any other job failed or was cancelled, and a
+pull request needs it to pass.
 
 ## The macOS app
 
@@ -600,6 +608,111 @@ The app's icon is drawn in `apps/windows/Icon`. After changing a drawing, run
 `python3 make-ico.py` there, with `rsvg-convert` and Pillow installed, and commit the
 `Pitboard.App/Pitboard.ico` it writes.
 
+## Linux
+
+The core and the command line build and run on Linux with glibc or musl, on x86_64 and
+aarch64. A release's command line is musl's. Read the
+[Linux rules in AGENTS.md](AGENTS.md#on-linux) first.
+
+Working there takes `dbus-daemon` and `gnome-keyring`, which the Secret Service tests start in
+their own folder. A musl build also takes Rust's musl target and `musl-tools`, whose `musl-gcc`
+compiles ring's C. Those are Debian's and Ubuntu's package names.
+
+Lint as [Check a change](#check-a-change) does, and run the tests through
+`.github/scripts/test-in-fresh-homes.sh`. It builds what `cargo nextest run` is given, then
+runs it with every home and XDG folder AGENTS.md names at a fresh folder, on a bus of
+`dbus-run-session`'s and with no display:
+
+```sh
+cargo clippy --all-targets --locked
+cargo clippy -p pitboard-model --all-targets --locked --features fixture
+sh .github/scripts/test-in-fresh-homes.sh --locked
+sh .github/scripts/test-in-fresh-homes.sh --locked -p pitboard-model --features fixture -E 'test(/^fixture::/)'
+```
+
+Only the command line ships for musl, so a musl build lints and tests it and the core alone:
+
+```sh
+target=$(uname -m)-unknown-linux-musl
+rustup target add "$target"
+export "CC_$(echo "$target" | tr - _)=musl-gcc"
+cargo clippy --locked -p pitboard-core -p pitboard --all-targets --target "$target"
+sh .github/scripts/test-in-fresh-homes.sh --locked -p pitboard-core -p pitboard --target "$target"
+```
+
+CI's `linux` job runs both on `ubuntu-26.04` and `ubuntu-26.04-arm`, glibc and musl each in a
+row of its own. Each row also fails where the workspace has a second zbus or the command line
+links tokio ([zbus](docs/facts/linux.md#zbus)).
+
+To lint for aarch64 and musl from a Mac, as [Check a change](#check-a-change) lints x86_64:
+
+```sh
+rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+cargo-zigbuild clippy --locked --target aarch64-unknown-linux-gnu --all-targets
+cargo-zigbuild clippy --locked --target x86_64-unknown-linux-musl -p pitboard-core -p pitboard --all-targets
+cargo-zigbuild clippy --locked --target aarch64-unknown-linux-musl -p pitboard-core -p pitboard --all-targets
+```
+
+To run the tests from a Mac with Apple silicon, run them in Docker on aarch64, as AGENTS.md's
+Linux rules allow: as uid 1000, with nothing of the Mac mounted but the working tree, and
+Cargo's home and target in volumes of their own. Build the image once:
+
+```sh
+docker build -t pitboard-linux - <<'EOF'
+FROM rust:1.98.1-slim-trixie@sha256:4cd829461bd5c4d511c32e269da9cb8929223b666519d8004e35fc8d1d771ab7
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl dbus-daemon gnome-keyring \
+      musl-tools procps \
+ && rm -rf /var/lib/apt/lists/*
+RUN rustup component add clippy && rustup target add aarch64-unknown-linux-musl
+RUN curl -LsSf https://get.nexte.st/0.9.146/linux-arm | tar zxf - -C /usr/local/cargo/bin
+RUN useradd -u 1000 -m tester && mkdir /cargo /target && chown tester /cargo /target
+ENV RUSTUP_TOOLCHAIN=1.98.1 CARGO_HOME=/cargo CARGO_TARGET_DIR=/target
+EOF
+```
+
+`RUSTUP_TOOLCHAIN` names the image's Rust, where `rust-toolchain.toml`'s `stable` would be
+fetched. Fetch the crates with the network, then run the checks without it:
+
+```sh
+docker run --rm --user 1000:1000 -v "$PWD":/src -w /src \
+  -v pitboard-linux-cargo:/cargo -v pitboard-linux-target:/target \
+  pitboard-linux cargo fetch --locked
+docker run --rm --user 1000:1000 --network none -v "$PWD":/src -w /src \
+  -v pitboard-linux-cargo:/cargo -v pitboard-linux-target:/target \
+  -e CARGO_NET_OFFLINE=true -e CC_aarch64_unknown_linux_musl=musl-gcc pitboard-linux sh -c '
+    cargo clippy --locked --all-targets &&
+    cargo clippy --locked -p pitboard-model --all-targets --features fixture &&
+    sh .github/scripts/test-in-fresh-homes.sh --locked &&
+    sh .github/scripts/test-in-fresh-homes.sh --locked -p pitboard-model --features fixture \
+      -E "test(/^fixture::/)" &&
+    cargo clippy --locked -p pitboard-core -p pitboard --all-targets \
+      --target aarch64-unknown-linux-musl &&
+    sh .github/scripts/test-in-fresh-homes.sh --locked -p pitboard-core -p pitboard \
+      --target aarch64-unknown-linux-musl'
+```
+
+`gh workflow run linux-facts.yml --ref <branch>` measures, on `ubuntu-26.04` and
+`ubuntu-26.04-arm`, what Pitboard rests on in Linux and no test shows, with
+`.github/scripts/linux-runner-facts.sh`: a throwaway user's own systemd running a `pitboard`
+built as a release builds it, inotify on four file systems, the process names of npm's `claude`
+and `codex` with the stand-in in their place, and headless mutter in Ubuntu 26.04's image. No pull request runs it on its own: one that
+changes the script dispatches it on its branch and names the run. What a run measured goes in
+`docs/facts/linux-runners.md` once it is read.
+
+The display parts also run in Docker, packages while the image builds and the rest as the user
+they made, with no network:
+
+```sh
+docker build -t pitboard-linux-display -f - .github/scripts <<'EOF'
+FROM docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+COPY linux-runner-facts.sh /opt/
+RUN sh /opt/linux-runner-facts.sh display-setup --out /report/display.json
+EOF
+docker run --rm --user pbfacts --network none pitboard-linux-display sh -c \
+  'sh /opt/linux-runner-facts.sh display --out /report/display.json && cat /report/display.json'
+```
+
 ## Tool registers
 
 Each tool's register is `crates/pitboard-core/src/provider/<tool>/assumptions.rs`: what
@@ -618,7 +731,8 @@ cargo run -p pitboard-conformance -- <app.asar> --provider desktop
 Point it at the tool's native binary, not the npm wrapper, which carries none.
 `npm pack @anthropic-ai/claude-code-<system>@<version>` holds `claude`, and
 `npm pack @openai/codex@<version>-<system>` holds `codex` under `vendor/`. `<system>` is one
-of `darwin-arm64`, `linux-x64`, `win32-x64` and `win32-arm64`.
+of `darwin-arm64`, `linux-x64`, `linux-arm64`, `win32-x64` and `win32-arm64`, and for Claude
+Code `linux-x64-musl` and `linux-arm64-musl` too: Codex's Linux builds are musl already.
 
 Claude Desktop's register is read by hand from `Contents/Resources/app.asar` in Claude's
 bundle, on a Mac where Claude is installed. No conformance job reads it, since where its

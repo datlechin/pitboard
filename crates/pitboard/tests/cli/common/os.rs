@@ -21,6 +21,13 @@ pub(crate) enum Kept {
     InFile,
     // Sealed to the Windows account: only Pitboard's own vault can write or open it.
     Sealed,
+    // An item of the Secret Service a test started on Linux, which goes with its bus: only
+    // Pitboard's own vault keeps one.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a Secret Service")
+    )]
+    InSecretService,
 }
 
 // An item of the login keychain on macOS; `.credentials.json` in its config folder on Linux, and
@@ -47,6 +54,16 @@ pub(crate) fn same_variable(a: &str, b: &str) -> bool {
         Os::MacOs | Os::Linux => a == b,
         // Windows takes a variable's name in any case: `all_proxy` and `ALL_PROXY` are one.
         Os::Windows => a.eq_ignore_ascii_case(b),
+    }
+}
+
+// What a build for tests is told on installing a job: its system's scheduler refuses it, and on
+// Linux there is none where systemd did not start the system, as in a container (sd_booted(3)).
+pub(crate) fn schedule_refused_with() -> &'static str {
+    match OS {
+        Os::MacOs | Os::Windows => "schedule_refused",
+        Os::Linux if Path::new("/run/systemd/system").is_dir() => "schedule_refused",
+        Os::Linux => "schedule_unsupported",
     }
 }
 

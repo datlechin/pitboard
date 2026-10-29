@@ -12,7 +12,10 @@ mod harness;
 mod inherited_environment;
 mod keychain_write_is_harmless;
 mod proxy;
+#[cfg(target_os = "linux")]
+mod secret_service;
 mod switch_round_trip;
+mod vault;
 mod version_resource;
 mod warm;
 mod watch;

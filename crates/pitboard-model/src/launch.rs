@@ -1669,11 +1669,13 @@ mod tests {
             service::Warning::FallbackLogin {
                 tool: claude,
                 path: path(),
+                store: pitboard_core::host::SecretStore::Keychain,
                 held: provider::Held::Login,
             },
             service::Warning::FallbackLogin {
                 tool: claude,
                 path: path(),
+                store: pitboard_core::host::SecretStore::Keychain,
                 held: provider::Held::Unreadable,
             },
             service::Warning::LoginReplaced {

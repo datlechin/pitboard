@@ -54,12 +54,14 @@ built with a `context::Context`:
   - `printed.rs`, `names.rs`, `jwt.rs`: what a terminal makes of a tool's output, the names a
     real login may be kept under, and a token's claims, never checked.
 - `holder.rs`: what keeps a tool's login in memory while it runs.
-- `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, and
-  the `fs`, `proc` and `user` functions each system answers. `watch.rs` watches one folder
-  through each system's own notice of a change.
+- `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, the
+  `fs`, `proc` and `user` functions each system answers, and the folders each system's app keeps
+  of its own, which a build for tests refuses. `watch.rs` watches one folder through each
+  system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
-    launchd, SQLite and managed preferences; `/proc` and systemd; and what both POSIX systems
-    share.
+    launchd, SQLite and managed preferences; `/proc`, systemd, the Secret Service
+    (`secret_service.rs`), the D-Bus both are asked over (`bus.rs`) and glibc's way to keep
+    descriptors from the login shell; and what both POSIX systems share.
   - `host/windows/`: Credential Manager, DPAPI seals, Task Scheduler, processes, tokens, jobs,
     the registry and files made private by their access list.
   - `acl.rs`, `owner.rs`, `replace.rs`, `token.rs`, `task.rs`: Windows' rules, compiled on
@@ -85,9 +87,11 @@ built with a `context::Context`:
     renewed where Claude Code keeps it.
   - `auto.rs`, `warm.rs`, `stow.rs`: the automatic switch, the warm-up and putting away, under
     the lock every change takes.
+  - `vault.rs`: where a home keeps its parked logins of Claude Code and Codex, and a move of them
+    between the forms its system offers.
   - `switch/folder/`: every change to a tool whose login is its app's files.
-  - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`: the
-    crash matrix and the changes' tests.
+  - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`,
+    `forms.rs`: the crash matrix and the changes' tests.
 - `lock.rs`: Claude Code's locks around its login, taken as it takes them.
 - `duty/`: what a front end does by itself: how often (`cadence.rs`), what it tried and said
   (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`), the warm-up (`warm/`), and when
@@ -105,14 +109,15 @@ built with a `context::Context`:
   each a function of typed values, and every error and warning with its code.
 - `audit.rs`, `redact.rs`: the activity log, and a diagnosis made safe to paste.
 - `assumptions.rs`: how a register is written.
-- `stand_in.rs`, `desktop_testing.rs`, `fault.rs`, `helper.rs`: for tests alone: the stand-in
-  program, the Claude Desktop the tests play, crash points and a test run as another process.
+- `stand_in.rs`, `desktop_testing.rs`, `secret_service_testing.rs`, `fault.rs`, `helper.rs`: for
+  tests alone: the stand-in program, the Claude Desktop the tests play, the Secret Service they
+  start on Linux, crash points and a test run as another process.
 
 The other crates:
 
 - `crates/pitboard`: the command line. `main.rs` holds the commands, `render/` what each says
   to a person, `ui.rs` its styles and column widths, `json.rs` the one writer of `--json`,
-  `manpage.rs` the man page, and `watch.rs` and `warm.rs` their commands. `build/` is a
+  `manpage.rs` the man page, and `watch.rs`, `warm.rs` and `vault.rs` their commands. `build/` is a
   Windows build's manifest and version resource, which the FFI crates include too.
   `tests/cli/` is its one integration test binary, with the `--json` snapshots, and its
   example `stand-in` the program every test starts in place of a tool.
@@ -192,8 +197,9 @@ The rest:
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
   `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
-  session bundle, `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and
-  `winsparkle.yml` for new releases of the updaters and the Windows App SDK.
+  session bundle, `linux-facts.yml` for the Linux runners, `rotation.yml` for the update key's
+  rehearsal, and `sparkle.yml` and `winsparkle.yml` for new releases of the updaters and the
+  Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
 - `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
   `test-windows-app.ps1` and `test-windows-release.ps1`.
@@ -220,6 +226,9 @@ keeps it is in the header of the module named.
 - Every request goes out on its context's agent, `api::agent`, given the proxy the context read
   from its variables alone. `clippy.toml` refuses every other way ureq makes an agent or lets a
   request change its configuration.
+- On Linux the core speaks D-Bus through one zbus 5, on its blocking API and its own executor,
+  and the command line links no tokio. Each row of CI's `linux` job fails where the workspace
+  has a second zbus or `pitboard` links tokio ([zbus](docs/facts/linux.md#zbus)).
 - No request goes past a SOCKS proxy the person named: `proxy::Refusal` fails each request
   `NO_PROXY` does not exempt before anything is sent, and the agent follows no redirect
   (`every_socks_proxy_is_refused_before_anything_is_sent`,
@@ -233,8 +242,10 @@ keeps it is in the header of the module named.
   `a_windows_folder_that_syncs_or_roams_is_refused`).
 - Which system Pitboard runs on is decided in `host/mod.rs` alone, and anything else that
   differs by system is the host's to answer or a `match` on `host::OS` with no `_` arm, so a
-  system added to `host::Os` does not compile until each is said. A context carries the system
-  its environment was read as, so Windows' homes and variable names are tested everywhere.
+  system added to `host::Os` does not compile until each is said. The command line's help is
+  one such `match` (`the_help_names_claude_desktop_only_on_macos`). A context carries the
+  system its environment was read as, so Windows' homes and variable names are tested
+  everywhere.
 - A `\\?\` path is for comparing alone: what Pitboard shows, locks by or hands a tool is
   spelled without it (`a_verbatim_path_is_spelled_as_libuv_and_codex_spell_it`).
 - Pitboard changes nothing as root or under sudo, elevated on Windows, or on a Windows older
@@ -272,8 +283,8 @@ keeps it is in the header of the module named.
 - A read never settles an interrupted switch or move: every change settles an interrupted
   switch first, under `state.lock`, and a move of Claude Desktop, with Claude closed, before a
   change of Claude Desktop, `repair` or `uninstall`. `status` and `doctor` say a switch a
-  change would stop at by the same decision, taking no lock (`switch::stuck`), and a waiting
-  move as `move_waiting`.
+  change would stop at by the same decision, taking no lock (`switch::stuck`), a waiting
+  move as `move_waiting`, and `doctor` a move of the parks cut short in its `vault` check.
 - No Claude Code or Codex login moves until Pitboard knows whose it is: asked of its service,
   or known by its refresh token's fingerprint from an earlier answer about that login
   (`switch/identify.rs`, `a_login_with_no_fingerprint_is_always_asked_about`).
@@ -315,6 +326,25 @@ keeps it is in the header of the module named.
   entropy naming the park, never kept in Credential Manager, and one that does not open is
   unreadable, never absent (`store/vault.rs`,
   `a_seal_whose_key_is_not_found_is_unreadable_not_absent`).
+- On Linux each home's parks are where `state.json`'s `vault` says: one Secret Service item per
+  park in the default collection, shared by every home of the session as the keychain is, or
+  0600 files in the home. A home records the form its first save found and keeps it
+  (`a_home_keeps_the_vault_form_it_recorded`), and one on the Secret Service never falls back to
+  files (`a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files`).
+  A home that records none takes files while its `vault/` holds a park, as one whose state file
+  was lost, so those are never left unread (`store::new_home_form`,
+  `a_home_whose_state_file_was_lost_keeps_the_parks_its_files_hold`).
+- Only `pitboard vault move` changes a home's form. It records the move first, writes every park
+  into the new form and reads it back before the index names that form, and deletes each from the
+  old form only after; a move cut short is finished forward by the next change or renewal, before
+  anything else writes a park (`a_move_killed_after_any_step_is_finished_by_the_next_change`,
+  `a_renewal_finishes_a_move_cut_short_before_it_renews`). A park another home keeps in the
+  shared collection stays there (`a_move_leaves_another_homes_parks_where_they_are`).
+- A locked Secret Service collection, a dismissed prompt and a bus with nothing to answer are
+  `credential_store_locked`, never a store with nothing in it
+  (`a_locked_collection_is_locked_never_absent`). A run a job started never asks to unlock the
+  login keyring, nor a run out of the desktop session (`a_run_a_job_started_never_asks_to_unlock`,
+  `a_run_out_of_the_desktop_session_never_asks_to_unlock`).
 - `abandon` gives up an interrupted switch first, whatever Claude Desktop's state, and `adopt`
   drops every waiting move and awaited sign-in, which were the other computer's. A change of
   Claude Desktop that fails carries what it did first in its error (`Error::SaidFirst`), which
@@ -361,6 +391,24 @@ keeps it is in the header of the module named.
   whatever `PITBOARD_HOME` says, and installing either refuses elsewhere with
   `schedule_not_default_home` (`schedule::serves`,
   `the_schedule_belongs_to_the_default_home_alone`).
+- On Linux a unit is written only where the user's systemd reads its folder and runs it with
+  this home, asked before anything is written or taken away, and each service is skipped where
+  its Pitboard is gone (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
+  `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`,
+  `a_service_whose_pitboard_is_gone_is_skipped`). Where nothing reaches the user's systemd to
+  ask, a job is still taken away, the watch service only once `systemctl` stopped it
+  (`a_job_is_taken_away_where_nothing_reaches_the_user_manager`).
+- A renewal the schedule started records what the store refused it in `renewal.json`, under
+  `state.lock`, and doctor says it until a run the schedule started opens the store. A renewal
+  by hand records nothing (`schedule::ran`,
+  `a_scheduled_renewal_that_cannot_open_the_store_is_recorded_and_doctor_says_so`,
+  `the_next_scheduled_renewal_that_opens_the_store_clears_the_record`,
+  `a_renewal_by_hand_records_nothing`). A switch or warm-up of the watch service keeps the same
+  in `watch.json` (`a_switch_the_store_refuses_the_watch_service_is_kept_until_one_opens_it`).
+  On Linux renewal also runs at each graphical sign-in, and a start systemd refused leaves
+  neither unit enabled where none was
+  (`the_renewal_service_also_runs_at_each_graphical_sign_in`,
+  `a_refused_start_takes_back_both_enables`).
 - A job is given the installing context's proxy variables, in files written private, or in
   `schedule.env` and `watch.env` on Windows, and `doctor` warns with `schedule_proxy` where
   they would send a request another way than this run
@@ -371,9 +419,10 @@ keeps it is in the header of the module named.
   `uninstalling_takes_the_watch_service_with_it`).
 - Nothing rewrites a task changed in Task Scheduler, which `doctor` warns of
   (`task::drifted`), and the app's start-up repair points a schedule at the command line
-  inside the app only where its Pitboard is gone or it runs an app's own program
-  (`schedule::fault`). The MSI's full uninstall takes away only the tasks
-  that run its own `bin\pitboard.exe` (`schedule::uninstall_for_app`).
+  inside the app only where its Pitboard is gone or it runs an app's own program, macOS's
+  bundle's or Linux's `pitboard-app` (`schedule::fault`, `Os::an_apps_own_program`,
+  `a_schedule_running_the_linux_app_is_at_fault`). The MSI's full uninstall takes away only
+  the tasks that run its own `bin\pitboard.exe` (`schedule::uninstall_for_app`).
 
 ### Tests
 
@@ -382,8 +431,12 @@ keeps it is in the header of the module named.
   folders.
 - No test starts the person's login shell or reaches the system's scheduler. A test names a
   shell of its own, and the real hosts refuse launchd, systemd and Task Scheduler in any build
-  for tests (`a_test_never_reaches_the_systems_own_scheduler`). The Release build
+  for tests (`a_test_never_reaches_the_systems_own_scheduler`), and on Linux the user's systemd
+  is asked nothing (`the_systems_user_manager_is_never_asked_from_a_build_for_tests`). The Release build
   `ReleaseGateTests` starts at 1.x only reads Task Scheduler and writes no task.
+- No test reaches the session's bus: a build for tests connects only to a bus a test started
+  and named, and never to one in the account's own runtime folder
+  (`a_build_for_tests_connects_to_no_bus_it_was_not_given`).
 - No test addresses a name a real login may be kept under, or a folder that is, holds or lies
   in a real login place: `guard_not_live` refuses `provider::names`' families, `host::lies_in`
   answers for folders, and CI's Windows legs check afterwards that nothing leaked
@@ -395,10 +448,10 @@ keeps it is in the header of the module named.
 - Outside a host's own face, a test sets a file's mode or makes a link only through
   `fs::testing`. The integration harness says what differs by system in
   `crates/pitboard/tests/cli/common/os.rs`, one `match` on `host::OS` for each fact.
-- The whole suite runs on macOS, Linux and Windows: a test put off on a system says why in its
-  `ignore` reason or a `// windows:` line, which `.github/scripts/windows-pending.py` holds to
-  the reasons it accepts. A test of Claude Desktop outside the core returns
-  where the tool is not supported rather than being ignored.
+- The whole suite runs on macOS, Linux and Windows, and the core's and the command line's on
+  musl too: a test put off on a system says why in its `ignore` reason or a `// windows:` line,
+  which `.github/scripts/windows-pending.py` holds to the reasons it accepts. A test of Claude
+  Desktop outside the core returns where the tool is not supported rather than being ignored.
 - No test makes the app model over the machine's own environment. The Rust tests run the real
   core over a `ScratchMachine`, the C# and Swift tests only a fixture's model or one never
   started, and every `OtherApps` and `Notifier` a test hands in records and posts
@@ -506,8 +559,9 @@ keeps it is in the header of the module named.
   `a_snapshot_asked_for_names_every_part`). A field added to `Snapshot` does not compile until
   it has a `Part` (`Snapshot::parts_changed_since`).
 - One change to daily renewal runs at a time, and turning it on is refused where the command
-  line inside this copy would not last (`schedule::in_a_temporary_copy`,
-  `model/maintaining.rs`).
+  line inside this copy would not last: in macOS's translocated copy, Explorer's copy of a zip
+  or an AppImage's folder (`schedule::in_a_temporary_copy`,
+  `a_temporary_copy_is_told_by_its_path`, `model/maintaining.rs`).
 - The macOS app's `AppModel` shows only a snapshot newer than the one it shows
   (`aSnapshotThatIsNotNewerIsDropped`), and `ModelListening` holds it weakly, since the model
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
@@ -532,9 +586,16 @@ keeps it is in the header of the module named.
 - The macOS app's Shortcuts actions run in the app, over its model, and the release holds
   the metadata Shortcuts and Spotlight read them and their App Shortcuts from
   (`scripts/build-app.sh`).
+- The login shell an app asks for its `PATH` is handed none of the app's descriptors but its
+  three: on macOS by `POSIX_SPAWN_CLOEXEC_DEFAULT`, on Linux with glibc by
+  `posix_spawn_file_actions_addclosefrom_np`, and musl has neither, where no app runs
+  (`host::unix::shell::Spawn`, `a_login_shell_is_handed_only_its_three_descriptors`).
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).
+- The Linux app's own folders are `com.usepitboard.Pitboard` and its `.Devel` twin in the XDG
+  data and cache folders, never in Pitboard's directory (`host::pitboard_app_on_linux`,
+  `the_linux_apps_folders_are_refused_in_any_spelling`).
 - Only a Release build an MSI installed registers anything with Windows, and
   `Pitboard.exe --unregister` takes back what it registered. CI's Windows legs fail a run that
   leaves a link scheme, a notification registration, a start at sign-in, a `PATH` entry or a
@@ -657,7 +718,7 @@ is parked, and whose login each tool has stored. It carries a `schema` number.
 - An older Pitboard refuses a newer file and says to update
   (`a_file_from_a_newer_pitboard_is_refused`). A field an older version would drop at its next
   save, or a shape it would misread, is a bump, not a field beside the old ones, so that
-  Pitboard refuses it (`renewing` at 7, typed `discarded` at 8).
+  Pitboard refuses it (`renewing` at 7, typed `discarded` at 8, `vault` at 9).
 - A file naming a tool this build does not know is a newer Pitboard's, never corrupt: the
   advice for a corrupt file is to delete it, which would orphan every parked login
   (`an_account_of_an_unknown_tool_asks_for_an_upgrade_not_a_deletion`).
@@ -673,6 +734,11 @@ What it holds besides the accounts:
 - `aside`: each folder under `parks` no account holds, with why it was set aside. Only `forget`
   of its account and `uninstall` delete one, and `repair` gives one back.
 - `awaiting`: by tool, a sign-in inside the tool's app that Pitboard waits for.
+- `vault`: how this home keeps its parked logins, where the system offers more than one way
+  (`Host::vault_forms`). The home's first save records it, before its first park is written,
+  and only `pitboard vault move` changes it (`a_home_keeps_the_vault_form_it_recorded`), with
+  `moving_to` while a move is under way and `leaving`, what it has still to delete from the form
+  it left. macOS and Windows record none.
 
 ## Tool registers
 
@@ -692,8 +758,8 @@ has measured.
   Electron app's `app.asar` for the system `assumptions::archive_platform` names. The check is
   shallow on purpose: a literal present proves nothing, and one gone, or one ruled out
   appearing, proves something moved.
-- `.github/workflows/conformance.yml` checks four builds each of Claude Code's and Codex's
-  newest against their registers twice a week. Claude Desktop's is checked by hand on an
+- `.github/workflows/conformance.yml` checks seven builds of Claude Code's newest and five of
+  Codex's against their registers twice a week. Claude Desktop's is checked by hand on an
   installed copy, since where its builds are published is not recorded.
 - Adding a tool takes a register read out of a named build, with its table; a module under
   `provider/` implementing `Provider` or `Folder`; and, where its builds have a recorded

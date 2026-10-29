@@ -10,6 +10,7 @@ expression: "printed(&world::doctor_on_a_healthy_linux())"
 ✓ credential                         refresh fcda3e5dfe80953d  ·  good for 26d 4h  ·  keys ["claudeAiOauth"]
 ✓ Pitboard home                      /home/me/.pitboard
 ✓ logins on disk                     nothing holding a login is readable by anyone else
+✓ parked logins                      in the login keyring, which every Pitboard directory of your session shares
 ✓ accounts                           4 enrolled
 ✓ account personal                   signed in; parked when you switch away
 ✓ account work                       parked, good for 26d 4h

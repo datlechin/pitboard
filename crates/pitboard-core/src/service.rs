@@ -202,9 +202,18 @@ impl Pitboard {
         })
     }
 
-    /// Switches Claude Code where a limit of the account in use has reached `threshold`.
+    /// Switches Claude Code where a limit of the account in use has reached `threshold`. A run
+    /// of the watch service keeps what the store refused it ([`Pitboard::kept_for_doctor`]).
     pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
         let permit = self.permitted()?;
+        let switched = self.switching_by_itself(permit, threshold);
+        self.kept_for_doctor(permit, &switched, |value| {
+            matches!(value, Auto::Switched { .. })
+        });
+        switched
+    }
+
+    fn switching_by_itself(&self, permit: Permit, threshold: Threshold) -> Changing<Auto> {
         let looked = self.auto_look(threshold).map_err(Failed::refused)?;
         if let Look::Stands(value) = looked {
             return Ok(Done {
@@ -595,6 +604,23 @@ impl Pitboard {
         }
     }
 
+    /// Where this home keeps the parked logins of Claude Code and Codex: from its files, and on
+    /// Linux by asking the session's bus whether a Secret Service answers, which D-Bus may answer
+    /// by starting the keyring there, as it starts a service on its first call. Nothing is
+    /// unlocked or changed.
+    pub fn vault(&self) -> Result<switch::Keeping> {
+        switch::keeping(&self.ctx)
+    }
+
+    /// Moves every parked login of Claude Code and Codex this home holds into `to`, where the
+    /// system offers that form.
+    pub fn vault_move(&self, to: state::VaultForm) -> Changing<switch::Moved> {
+        let permit = self.permitted()?;
+        self.changing(permit, "vault-move", to.code(), None, |settled| {
+            switch::move_to(settled, to)
+        })
+    }
+
     /// Where an app's parked logins and the folders set aside are kept.
     pub fn parks_folder(&self) -> std::path::PathBuf {
         crate::store::folder::parks_dir(&self.ctx)
@@ -722,9 +748,35 @@ impl Pitboard {
         Self::warming(settled, switch::warm::Target::Account(key))
     }
 
-    /// Warms up the first account turned on that is due, as [`crate::duty::warm`] says.
+    /// Warms up the first account turned on that is due, as [`crate::duty::warm`] says. A run of
+    /// the watch service keeps what the store refused it ([`Pitboard::kept_for_doctor`]).
     pub fn warm_up(&self) -> Changing<switch::warm::WarmUp> {
         let permit = self.permitted()?;
+        let warmed = self.warming_up(permit);
+        self.kept_for_doctor(permit, &warmed, |value| {
+            matches!(value, switch::warm::WarmUp::Started { .. })
+        });
+        warmed
+    }
+
+    // The watch service never asks to unlock the store its parked logins are in, so what the
+    // store answered one of its switches or warm-ups is kept for doctor, until one opens it. A
+    // switch or a warm-up that started reads a parked login; anything else asks the store nothing.
+    fn kept_for_doctor<T>(
+        &self,
+        permit: Permit,
+        outcome: &Changing<T>,
+        opened: impl FnOnce(&T) -> bool,
+    ) {
+        let answer = match outcome {
+            Err(failed) => schedule::StoreAnswer::of(&failed.error),
+            Ok(done) if opened(&done.value) => schedule::StoreAnswer::Opened,
+            Ok(_) => schedule::StoreAnswer::NotAsked,
+        };
+        schedule::ran(&self.ctx, permit, schedule::Job::Watch, answer);
+    }
+
+    fn warming_up(&self, permit: Permit) -> Changing<switch::warm::WarmUp> {
         let looked = self.warm_look().map_err(Failed::refused)?;
         if let crate::duty::Look::Stands(overview) = looked {
             return Ok(Done {
@@ -832,6 +884,7 @@ impl Pitboard {
         Some(Warning::FallbackLogin {
             tool,
             path: behind.path,
+            store: behind.store,
             held: behind.held,
         })
     }
@@ -968,6 +1021,16 @@ impl Audited for switch::Removed {
             "parks_pending_removal"
         } else {
             "ok"
+        }
+    }
+}
+
+impl Audited for switch::Moved {
+    fn audit_code(&self) -> &'static str {
+        match (self.changed, self.leaving) {
+            (false, _) => "already_kept",
+            (true, 0) => "ok",
+            (true, _) => "parks_pending_removal",
         }
     }
 }

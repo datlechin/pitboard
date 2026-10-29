@@ -24,6 +24,7 @@ pub(super) mod watch;
 use super::administered::{Administered, Hive};
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Scheduler};
 use crate::context::{Context, Environment};
+use crate::state::VaultForm;
 use crate::store::vault::FileVault;
 use crate::store::{PlainFile, RawStore};
 use std::path::{Path, PathBuf};
@@ -161,12 +162,12 @@ impl Host for Windows {
         Box::new(PlainFile::at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+    fn vault(&self, ctx: &Context, _form: Option<VaultForm>) -> Box<dyn RawStore> {
         Box::new(FileVault::sealed(ctx, &seal::Dpapi))
     }
 
-    // Inside this home, as on Linux.
-    fn vault_is_shared(&self) -> bool {
+    // Inside this home.
+    fn vault_is_shared(&self, _form: Option<VaultForm>) -> bool {
         false
     }
 
@@ -397,13 +398,13 @@ mod tests {
         let scratch = tempfile::tempdir().expect("a scratch home");
         let ctx = Context::new(scratch.path().to_path_buf())
             .with_pitboard_home(scratch.path().join("pitboard"));
-        let vault = ctx.host().vault(&ctx);
+        let vault = ctx.host().vault(&ctx, None);
         let (park, login) = (
             "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123",
             r#"{"claudeAiOauth":{"refreshToken":"r"}}"#,
         );
         assert_eq!(vault.kind(), crate::store::Backend::SealedFile);
-        assert!(!host().vault_is_shared());
+        assert!(!host().vault_is_shared(None));
         vault
             .write(crate::permit::Permit::for_a_test(), park, login)
             .expect("sealed");

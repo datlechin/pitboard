@@ -719,9 +719,8 @@ fn a_switch_killed_before_it_took_the_file_away_leaves_a_login_doctor_names() {
         m.live().expect("a login")["claudeAiOauth"]["refreshToken"],
         "there-refresh"
     );
-    let behind = provider::claude::live::behind(&m.ctx)
-        .expect("a file behind")
-        .expect("read");
+    let (_, behind) = provider::claude::live::behind(&m.ctx).expect("a file behind");
+    let behind = behind.expect("read");
     assert!(behind.contains("here-refresh"), "{behind}");
     hold(&m, "killed before the file was taken away");
 }
@@ -893,4 +892,65 @@ fn forgetting_killed_after_the_record_still_deletes_the_park() {
         m.mem.vault().services().is_empty(),
         "a forgotten account's login is deleted, not left in the vault"
     );
+}
+
+/// A move of the parks between the Secret Service and files, killed after each durable step:
+/// the record, each park written into the new form, the save that names it, and each park
+/// deleted from the old one. The next change finishes it forward: every park is in the new form,
+/// none is left in the old, and nothing waits.
+#[test]
+fn a_move_killed_after_any_step_is_finished_by_the_next_change() {
+    use crate::host::memory::MemoryHost;
+    use crate::state::{Vault, VaultForm};
+    use harness::{parked_services, two_parked_on};
+    const STEPS: [(&str, usize); 6] = [
+        ("vault.recorded", 1),
+        ("vault.copied", 1),
+        ("vault.copied", 2),
+        ("vault.named", 1),
+        ("vault.deleted", 1),
+        ("vault.deleted", 2),
+    ];
+    for to in [VaultForm::Files, VaultForm::SecretService] {
+        for (point, nth) in STEPS {
+            let at = format!("into {}, killed at {point} {nth}", to.code());
+            let host = MemoryHost::by_form();
+            host.secret_service_answers(to == VaultForm::Files);
+            let m = two_parked_on(
+                Arc::clone(&host),
+                &format!("move-{}-{}-{nth}", to.code(), point.replace('.', "-")),
+            );
+            host.secret_service_answers(true);
+            let parks = parked_services(&m);
+
+            let died = fault::killing_nth(point, nth, || {
+                let settled = settle(&m.ctx, Permit::for_a_test(), None)?.0;
+                move_to(settled, to)
+            });
+            assert_eq!(
+                died.unwrap_err(),
+                point,
+                "{at}: the move must reach it on this machine, or the case proves nothing"
+            );
+
+            for after in [at.clone(), format!("{at}, recovered twice")] {
+                recover(&m).unwrap_or_else(|e| panic!("{after}: recovery refused: {e}"));
+                let state = state::load(&m.ctx).expect("state");
+                assert_eq!(state.vault, Some(Vault::kept_as(to)), "{after}");
+                let (into, out) = match to {
+                    VaultForm::SecretService => (
+                        m.mem.vault().services(),
+                        m.mem.files_vault(&m.ctx).services(),
+                    ),
+                    VaultForm::Files => (
+                        m.mem.files_vault(&m.ctx).services(),
+                        m.mem.vault().services(),
+                    ),
+                };
+                assert_eq!(into, parks, "{after}");
+                assert!(out.is_empty(), "{after}: {out:?} left behind");
+                hold(&m, &after);
+            }
+        }
+    }
 }

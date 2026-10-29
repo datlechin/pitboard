@@ -756,10 +756,11 @@ fn every_command_refuses_a_home_that_is_not_a_full_path() {
 /// own whatever home a test gives: `pitboard schedule install`, with a scratch home that is
 /// a full path, `PITBOARD_HOME` the default directory under it, since the schedule is
 /// installed from there alone, and nothing else in its way, is refused with
-/// `schedule_refused` and leaves no unit behind. The `systemctl` it would start is a
-/// stand-in on `PATH` that writes down that it was asked, which it was. Linux only: launchd
-/// is asked by its full path, so no stand-in can take its place there, and running this
-/// against a build that asked it would replace the person's real schedule.
+/// `schedule_refused`, or `schedule_unsupported` where systemd did not start the system, and
+/// leaves no unit behind. The `systemctl` it would start is a stand-in on `PATH` that writes
+/// down that it was asked, which it was. Linux only: launchd is asked by its full path, so no
+/// stand-in can take its place there, and running this against a build that asked it would
+/// replace the person's real schedule.
 // windows: `systemctl` is Linux's own; no_build_for_tests_asks_task_scheduler is Windows'
 #[cfg(target_os = "linux")]
 #[test]
@@ -791,7 +792,11 @@ fn no_build_for_tests_asks_the_systems_service_manager() {
 
     let refused = envelope(&String::from_utf8_lossy(&out.stdout));
     assert_eq!(out.status.code(), Some(1), "{refused}");
-    assert_eq!(refused["error"]["code"], "schedule_refused", "{refused}");
+    assert_eq!(
+        refused["error"]["code"],
+        common::os::schedule_refused_with(),
+        "{refused}"
+    );
     assert!(
         !asked.exists(),
         "systemctl was asked: {}",

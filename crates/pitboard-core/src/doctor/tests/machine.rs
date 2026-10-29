@@ -279,6 +279,48 @@ fn an_interrupted_switch_and_leftover_parks_are_reported() {
     assert!(healthy(&checks), "neither stops Pitboard working");
 }
 
+// A keychain or a login keyring can be locked; a folder of files Pitboard reads as itself cannot.
+#[test]
+fn parks_left_to_delete_or_resolve_are_waited_on_as_their_vault_keeps_them() {
+    let mut f = facts();
+    f.state = Ok(State {
+        discarded: vec![crate::state::Dropped {
+            service: "pitboard-park-x-1".into(),
+            kind: crate::state::ParkKind::Vault,
+            forgotten: false,
+        }],
+        ..State::default()
+    });
+    f.pending_parks = vec!["pitboard-park-y-1".into()];
+    for (vault, discarded, pending) in [
+        (
+            store::Backend::Keychain,
+            words::DELETED_ONCE_THE_KEYCHAIN_OPENS,
+            words::UNLOCK_AND_RUN_ANY_COMMAND,
+        ),
+        (
+            store::Backend::File,
+            words::DELETED_ON_THE_NEXT_CHANGE,
+            words::RUN_ANY_COMMAND,
+        ),
+        (
+            store::Backend::SealedFile,
+            words::DELETED_ON_THE_NEXT_CHANGE,
+            words::RUN_ANY_COMMAND,
+        ),
+        (
+            store::Backend::SecretService,
+            words::DELETED_ONCE_THE_LOGIN_KEYRING_OPENS,
+            words::RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION,
+        ),
+    ] {
+        f.vault = vault;
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "discarded").advice, discarded, "{vault:?}");
+        assert_eq!(check(&checks, "pending_parks").advice, pending, "{vault:?}");
+    }
+}
+
 #[test]
 fn a_switch_the_next_change_cannot_finish_says_why_and_the_way_out() {
     let mut f = facts();

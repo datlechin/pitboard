@@ -16,6 +16,12 @@ mod forget;
 #[cfg(test)]
 #[allow(
     clippy::disallowed_methods,
+    reason = "a test reads the state file a home saved"
+)]
+mod forms;
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
     reason = "a test sets up its scratch files as a person or a tool would"
 )]
 pub(crate) mod harness;
@@ -37,6 +43,7 @@ mod stow;
 #[cfg(test)]
 mod two_tools;
 mod uninstall;
+mod vault;
 pub mod warm;
 
 pub use crate::pending::Reclaimed;
@@ -68,6 +75,8 @@ pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
 pub use uninstall::Removed;
 pub(crate) use uninstall::{uninstall, uninstall_from_app};
+pub use vault::{Keeping, Moved};
+pub(crate) use vault::{keeping, move_to};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
@@ -1093,6 +1102,7 @@ fn priced(
             label: label.to_string(),
             bytes: price.needs,
             limit: price.limit,
+            store: price.store,
         });
     }
     Ok(price

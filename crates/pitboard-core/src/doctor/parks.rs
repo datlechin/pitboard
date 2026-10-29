@@ -19,8 +19,8 @@ pub(crate) struct ParkFact {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Unreadable {
-    // Behind a locked keychain, which says nothing about the login.
-    Locked,
+    // Behind a locked keychain or Secret Service, the vault's, which says nothing about the login.
+    Locked(store::Backend),
     // A lost key, with `CryptUnprotectData`'s code: not a missing or damaged file.
     Sealed(Option<i32>),
     Broken(String),
@@ -37,6 +37,7 @@ impl ParkFact {
 }
 
 pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
+    let vault = store::vault_kind(ctx);
     // From files alone, never Claude Code's config, which another session can rewrite.
     let in_use: std::collections::BTreeMap<ProviderId, Option<crate::provider::Owner>> =
         ProviderId::ALL
@@ -66,7 +67,7 @@ pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
                     LoginKind::Folder(_) => return None,
                 };
                 park::load(ctx, tool, &a.key(), p).err().map(|e| match e {
-                    Error::Store(store::Error::Locked) => Unreadable::Locked,
+                    Error::Store(store::Error::Locked) => Unreadable::Locked(vault),
                     Error::Store(store::Error::Sealed { code, .. }) => Unreadable::Sealed(code),
                     Error::ParkedCredentialMissing { .. } => {
                         Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into())
@@ -116,10 +117,29 @@ pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
 // (docs/facts/windows-runners.md).
 pub(super) const DPAPI_KEY_RESET: i32 = 0x8009_000B_u32 as i32;
 
+// How a home keeps its parks on a system that offers more than one way, as Linux offers the
+// Secret Service and files.
+pub(crate) struct FormFact {
+    pub(crate) kept: crate::switch::Keeping,
+    // Asked what it holds, the vault said it is locked or that nothing answers for it.
+    pub(crate) locked: bool,
+}
+
+// Asked before any park is read, so a person's run is asked to unlock the keyring once.
+pub(super) fn form_fact(ctx: &Context) -> Option<FormFact> {
+    if ctx.host().vault_forms().is_empty() {
+        return None;
+    }
+    Some(FormFact {
+        kept: crate::switch::keeping(ctx).ok()?,
+        locked: matches!(store::vault_list(ctx), Err(store::Error::Locked)),
+    })
+}
+
 // Every sealed park lost at once is one finding, worded for a reset only where the code says so.
 pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
     if facts.vault != store::Backend::SealedFile {
-        return None;
+        return judge_form(facts.vault_form.as_ref()?);
     }
     if lost.is_empty() {
         return Some(ok("vault", "parked logins", words::SEALED_TO_THIS_ACCOUNT));
@@ -145,6 +165,54 @@ pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
         words::none_opens(lost.len()),
         way_out,
     ))
+}
+
+// What a move left comes first, then whether the form the home keeps answers, and one in files
+// where a Secret Service answers is told how to move.
+fn judge_form(fact: &FormFact) -> Option<Check> {
+    use crate::host::Vault;
+    let kept = &fact.kept;
+    let folder = kept
+        .folder
+        .as_deref()
+        .map(|folder| folder.display().to_string())
+        .unwrap_or_default();
+    let name = "parked logins";
+    if let Some(to) = kept.moving_to {
+        let detail = words::moving_into(&words::form(to, &folder));
+        return Some(warn(
+            "vault",
+            name,
+            detail,
+            words::THE_NEXT_RENEWAL_FINISHES_IT,
+        ));
+    }
+    if let Some((from, parks)) = kept.leaving {
+        let detail = words::left_in(parks, &words::form(from, &folder));
+        return Some(warn(
+            "vault",
+            name,
+            detail,
+            words::THE_NEXT_CHANGE_DELETES_THEM,
+        ));
+    }
+    Some(match (kept.place?, kept.secret_service) {
+        (Vault::SecretService, _) if fact.locked => warn(
+            "vault",
+            name,
+            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER,
+            words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
+        ),
+        (Vault::SecretService, _) => ok("vault", name, words::IN_THE_LOGIN_KEYRING),
+        (Vault::Files, Some(true)) => warn(
+            "vault",
+            name,
+            words::in_files_though_a_secret_service_answers(&folder),
+            words::MOVE_INTO_THE_LOGIN_KEYRING,
+        ),
+        (Vault::Files, _) => ok("vault", name, words::in_files(&folder)),
+        (Vault::Keychain | Vault::SealedFiles, _) => return None,
+    })
 }
 
 // Two or more, each sealed and failing to open: a lost key, not a stray unreadable park.
@@ -190,7 +258,15 @@ fn park_judged(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -
         };
     };
     match &fact.unreadable {
-        Some(Unreadable::Locked) => {
+        Some(Unreadable::Locked(store::Backend::SecretService)) => {
+            return warn(
+                code,
+                name,
+                words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+                words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
+            );
+        }
+        Some(Unreadable::Locked(_)) => {
             return warn(
                 code,
                 name,

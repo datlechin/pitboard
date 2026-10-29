@@ -15,10 +15,12 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 
 | File | Holds | Written or taken by |
 | --- | --- | --- |
-| `state.json` | The enrolled accounts with their email addresses, ids and plans, their parked logins' names and expiry, whose login each tool has stored, a renewal of Claude Code's login not saved yet, a Claude Desktop move under way, a sign-in inside Claude left halfway, and which folders in `parks/` are set aside | Every change and renewal, and a read that finds a tool's stored login changed or an account's plan different from the one recorded |
+| `state.json` | The enrolled accounts with their email addresses, ids and plans, their parked logins' names and expiry, whose login each tool has stored, a renewal of Claude Code's login not saved yet, a Claude Desktop move under way, a sign-in inside Claude left halfway, which folders in `parks/` are set aside, and on Linux how parked logins are kept | Every change and renewal, and a read that finds a tool's stored login changed or an account's plan different from the one recorded |
 | `state.lock` | The lock that lets one change run at a time | As `state.json`, and every automatic switch |
 | `journal.json` | The record of a Claude Code or Codex switch until it is done. One left behind marks an [interrupted switch](/concepts/switching#interrupted-switches). | A switch |
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. A line for a folder in `parks/` starts with `folder `. Absent when empty. | Anything that parks a login |
+| `renewal.json` | Where a run of [daily renewal](/reference/files#renewal-schedule) could not open the parked logins, when, and why, as error codes, until a run of it opens them. Absent otherwise. | Daily renewal |
+| `watch.json` | Where a switch or warm-up of the [watch service](/reference/files#watch-service) could not open the parked logins, when, and why, as error codes, until one of them opens them. Absent otherwise. | The watch service |
 | `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. When it last failed to identify Claude Code's login. | The automatic switch |
 | `signin.lock` | The lock that allows one sign-in at a time | A sign-in |
 | `warm.json` | The accounts turned on for warm-ups, by id, and the hours they are made in | `pitboard warm on`, `off` and `range`, and the app's **Warm-Up** |
@@ -27,7 +29,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `warm/` | Where Claude Code runs a warm-up, in `warm/claude/`, with a home and config of its own made for the run and removed after it. | A warm-up |
 | `signin/` | Where a tool signs in, apart from the login in use. Removed when the sign-in ends, or by the next one. | A sign-in |
 | `signin-work/` | The folder a tool's sign-in runs in. Emptied as each sign-in starts and kept after it, since the browser it opens may run there. | A sign-in |
-| `vault/` | Linux and Windows: the parked logins of Claude Code and Codex, one file each, sealed to your Windows account on Windows | Anything that parks or renews a login |
+| `vault/` | Windows, and Linux where `state.json` says files: the parked logins of Claude Code and Codex, one file each, sealed to your Windows account on Windows | Anything that parks or renews a login |
 | `parks/` | macOS: the parked logins of Claude Desktop and the folders set aside, one folder each, as [Folders in parks](/reference/files#folders-in-parks) lists | A change to a Claude Desktop account, `repair` and `adopt` |
 | `usage.json` | The newest usage reading of each account | Reading usage, and the status line |
 | `usage.lock` | The lock around `usage.json` and `sessions.json` | As `usage.json` |
@@ -63,11 +65,23 @@ Your home's own folders count, so `/home/sync/.pitboard` is refused.
 | Tool | System | A parked login is | Named |
 | --- | --- | --- | --- |
 | Claude Code, Codex | macOS | An item in your default keychain | `pitboard-park-<account id>-<time>` |
-| Claude Code, Codex | Linux | A file in `~/.pitboard/vault/` | `pitboard-park-<account id>-<time>.json` |
+| Claude Code, Codex | Linux | An item in your login keyring, the Secret Service's default collection | `pitboard-park-<account id>-<time>` |
+| Claude Code, Codex | Linux, where `state.json` says files | A file in `~/.pitboard/vault/` | `pitboard-park-<account id>-<time>.json` |
 | Claude Code, Codex | Windows | A file in `vault` in Pitboard's directory, sealed with Windows' data protection under your account | `pitboard-park-<account id>-<time>.json` |
 | Claude Desktop | macOS | A folder in `~/.pitboard/parks/`, as [Folders in parks](/reference/files#folders-in-parks) lists | `pitboard-park-<account id>-<time>` |
 
 On macOS, a keychain item's account is the one Claude Code's own item uses, from `USER`. Pitboard writes it through `/usr/bin/security`: on macOS 26, an item written through the Security framework takes about a second for each read by `security`, against 0.01 seconds.
+
+On Linux, a Secret Service item is labelled `Pitboard parked login`, with the attribute `xdg:schema` set to `com.usepitboard.Pitboard.Park` and `service` to its name.
+
+On Linux, `state.json` records how a Pitboard directory keeps its parked logins, as `vault`:
+
+| `form` | Parked logins are | Recorded |
+| --- | --- | --- |
+| `secret_service` | Items in your login keyring | By the directory's first save, where a Secret Service answers with a default collection and `vault/` holds no parked login |
+| `files` | Files in `vault/` | By the directory's first save, where none answers or `vault/` holds a parked login, as after `state.json` was lost, and for a directory an earlier Pitboard made |
+
+Pitboard keeps the form a directory recorded until [`pitboard vault move`](/reference/maintenance-commands#vault) changes it, and `move` records the form it names in a directory that recorded none yet. While a move is under way, `vault` also holds `moving_to`, the form it goes to, and once the new form is recorded, `leaving`, the parked logins still to be deleted from the form it left, with `from` and `parks`.
 
 When Pitboard renews Claude Code's login, a copy of the renewed login waits beside the parked logins as `pitboard-park-renewing-<time>` until it is saved where Claude Code keeps it.
 
@@ -140,19 +154,22 @@ Each place was read in Codex 0.160.0, and in 0.164.0 on Windows.
 
 On Windows, Codex's home is `.codex` in the profile folder Windows names for your account, whatever `USERPROFILE` says, as read in Codex 0.164.0.
 
-Pitboard switches Codex only while `auth.json` is its store, which `cli_auth_credentials_store` chooses. The `Codex login store` line of [`pitboard doctor`](/reference/maintenance-commands#doctor) names it. Each other store keeps the login elsewhere, as read in Codex 0.154.0 on macOS and in 0.164.0 on Windows:
+Pitboard switches Codex only while `auth.json` is its store, which `cli_auth_credentials_store` chooses. The `Codex login store` line of [`pitboard doctor`](/reference/maintenance-commands#doctor) names it. Each other store keeps the login elsewhere, as read in Codex 0.154.0 on macOS, in 0.165.0 on Linux and in 0.164.0 on Windows:
 
 | `Codex login store` | System | Where Codex keeps the login |
 | --- | --- | --- |
-| `keyring` | macOS, Linux | A keychain item Codex made for itself. |
+| `keyring` | macOS | A keychain item Codex made for itself. |
+| `keyring` | Linux | A Secret Service item of the service `Codex Auth`, in the default collection. Codex writes nothing to the kernel keyring. |
 | `keyring` | Windows | A Credential Manager item, while `secret_auth_storage` is off. |
-| `auto` | macOS, Linux | The same keychain item, falling back to the file. |
+| `auto` | macOS | The same keychain item, falling back to the file. |
+| `auto` | Linux | The same Secret Service item, falling back to the file. |
 | `auto` | Windows | The same Credential Manager item, falling back to the file, while `secret_auth_storage` is off. |
-| `secrets` | macOS, Linux | An encrypted file whose key is in the keychain: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
+| `secrets` | macOS | An encrypted file whose key is in the keychain: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
+| `secrets` | Linux | `secrets/codex_auth.age` in Codex's home, whose key is a Secret Service item: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
 | `secrets` | Windows | `secrets\codex_auth.age` in Codex's home, whose key is in Credential Manager: `keyring` or `auto` while `secret_auth_storage` is on, as it is by default. |
 | `ephemeral` | All | In memory, for one run of Codex. |
 
-On macOS and Linux, Pitboard does not read Codex's keychain stores, because every read would ask you for permission. A login kept in memory leaves nothing to park.
+On macOS, Pitboard does not read Codex's keychain stores, because every read would ask you for permission. A login kept in memory leaves nothing to park.
 
 Codex reads `cli_auth_credentials_store`, and `secret_auth_storage` under `[features]`, from these places, each over the one before:
 
@@ -216,11 +233,13 @@ Pitboard reads the list of processes to tell whether Claude is open:
 
 `pitboard schedule install`, or turning on **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So do `pitboard uninstall` and the app's **Uninstall Pitboard** while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
 
+On Linux, `uninstall` also has systemd forget when the timer last ran. `status`, `uninstall` and `pitboard doctor` look for the units in `~/.config/systemd/user` too.
+
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| Where | `~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist` | The task `\Pitboard\Renew <SID>` in Task Scheduler, `<SID>` being your account's security identifier | `pitboard-renew.service` and `pitboard-renew.timer` in `~/.config/systemd/user`, even with `XDG_CONFIG_HOME` set |
+| Where | `~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist` | The task `\Pitboard\Renew <SID>` in Task Scheduler, `<SID>` being your account's security identifier | `pitboard-renew.service` and `pitboard-renew.timer` in `systemd/user` in `XDG_CONFIG_HOME`, or in `~/.config` while it is unset |
 | Runs | `<program> renew` | `<program> renew --scheduled` | `<program> renew --scheduled` |
-| When | `StartInterval` 86400 and `RunAtLoad` false: first a day after it is written | Each day at the time of day it was written, first a day after. Only while you are signed in, at least privilege, with a 10-minute limit, and as soon as it can after a missed start | `OnUnitActiveSec=86400`, `OnStartupSec=900` and `Persistent=true` |
+| When | `StartInterval` 86400 and `RunAtLoad` false: first a day after it is written | Each day at the time of day it was written, first a day after. Only while you are signed in, at least privilege, with a 10-minute limit, and as soon as it can after a missed start | `OnCalendar=daily`, `RandomizedDelaySec=1h` and `Persistent=true`: once each day in the hour after midnight, or after the computer wakes or your user's systemd starts where it missed that hour. The service's `WantedBy=graphical-session.target` and `After=graphical-session.target`: also at each sign-in to a desktop that starts that target, as GNOME and KDE Plasma do, once the session is up. `ConditionFileIsExecutable=`: skipped while `<program>` is not there |
 | Environment | `EnvironmentVariables` | `schedule.env` in Pitboard's directory | One `Environment=` line each |
 
 `<program>` is the `pitboard` that installed the job, by the path it was started with, such as Homebrew's link. From the app, it is the command line that came with it: `Pitboard.app/Contents/Helpers/pitboard` on macOS and `bin\pitboard.exe` in the app's folder on Windows.
@@ -233,9 +252,9 @@ The environment holds the proxy variables as they were set at install, and on ma
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| Where | `~/Library/LaunchAgents/com.datlechin.pitboard.watch.plist` | The task `\Pitboard\Watch <SID>` in Task Scheduler | `pitboard-watch.service` in `~/.config/systemd/user` |
+| Where | `~/Library/LaunchAgents/com.datlechin.pitboard.watch.plist` | The task `\Pitboard\Watch <SID>` in Task Scheduler | `pitboard-watch.service` in the folder of the renewal schedule's units |
 | Runs | `<program> watch --scheduled --at <PERCENT>` | The same | The same |
-| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes |
+| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes. `ConditionFileIsExecutable=`: skipped while `<program>` is not there |
 | Environment | `EnvironmentVariables` | `watch.env` in Pitboard's directory | One `Environment=` line each |
 | Lines it prints | `~/Library/Logs/Pitboard/watch.log`, removed with the service | Kept nowhere | Your user's journal |
 

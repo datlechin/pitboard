@@ -1,7 +1,7 @@
 //! Every way Pitboard can fail. Each variant has a message naming the cause and an action,
 //! a stable code for programs to branch on, and an exit code.
 
-use crate::host::Os;
+use crate::host::{Os, SecretStore};
 use crate::provider::ProviderId;
 use crate::state::Key;
 use crate::words::Spelling;
@@ -189,12 +189,14 @@ pub enum Error {
     #[error("{}.", codex_home_missing(path))]
     CodexHomeMissing { path: PathBuf },
 
-    #[error("{}", too_large(crate::host::OS, *tool, label, *bytes, *limit))]
+    #[error("{}", too_large(*store, *tool, label, *bytes, *limit))]
     CredentialTooLarge {
         tool: ProviderId,
         label: String,
         bytes: usize,
         limit: usize,
+        // The store whose ceiling `limit` is.
+        store: SecretStore,
     },
 
     #[error(
@@ -301,6 +303,11 @@ pub enum Error {
     #[error("the scheduler refused: {detail}")]
     ScheduleRefused { detail: String },
 
+    /// `pitboard vault move` on a system that keeps parked logins one way, as macOS keeps them
+    /// in the keychain and Windows in sealed files (`Host::vault_forms`). `form` is the one asked.
+    #[error("{}", vault_form_unsupported(*form))]
+    VaultFormUnsupported { form: crate::state::VaultForm },
+
     /// Each job serves the default home alone, so it is installed only where `PITBOARD_HOME`
     /// names that home or nothing. `home` is the directory it names, and `default` the
     /// default home, `~/.pitboard`.
@@ -323,6 +330,15 @@ pub enum Error {
     #[error("{}", temporary_copy(.path, *job))]
     ScheduleProgramTemporary {
         path: PathBuf,
+        job: crate::schedule::Job,
+    },
+
+    /// On Linux, the user's systemd would not run the job for this home, which `elsewhere`
+    /// says why. Its `UnitPath` and `HOME` are asked before anything is written, and before a
+    /// job is taken away.
+    #[error("{}", manager_elsewhere(elsewhere, *job))]
+    ScheduleManagerElsewhere {
+        elsewhere: crate::schedule::Elsewhere,
         job: crate::schedule::Job,
     },
 
@@ -827,7 +843,7 @@ pub enum Error {
     )]
     SignInPinnedToConsole { layer: String },
 
-    #[error("{}", pitboard_open(home))]
+    #[error("{}", pitboard_open(crate::host::OS, home))]
     PitboardOpen { home: PathBuf },
 
     #[error("{}", app_open(app, still))]
@@ -1023,10 +1039,12 @@ impl Error {
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported { .. } => "schedule_unsupported",
             ScheduleRefused { .. } => "schedule_refused",
+            VaultFormUnsupported { .. } => "vault_form_unsupported",
             ScheduleNotDefaultHome { .. } => "schedule_not_default_home",
             ScheduleProgramMissing { .. } => "schedule_program_missing",
             ScheduleProgramTemporary { .. } => "schedule_program_temporary",
             ScheduleProgramUnnamed => "schedule_program_unnamed",
+            ScheduleManagerElsewhere { .. } => "schedule_manager_elsewhere",
             HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
@@ -1275,21 +1293,77 @@ fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
         crate::schedule::Job::Renew => "turn on daily renewal",
         crate::schedule::Job::Watch => "install the watch service",
     };
-    if crate::schedule::opened_from_a_zip(path) {
-        return format!(
+    use crate::schedule::TemporaryCopy;
+    match crate::schedule::temporary_copy(path) {
+        Some(TemporaryCopy::Zip) => format!(
             "{} would run {}, which is in a temporary copy Windows made of a zip it opened. \
              Install Pitboard, or extract the zip, and {turn_on} from there.",
             job_named(job),
             path.display()
-        );
+        ),
+        Some(TemporaryCopy::AppImage) => format!(
+            "{} would run {}, which is in the folder an AppImage runs from and is gone once it \
+             quits. Install Pitboard rather than run it from an AppImage, and {turn_on} from \
+             there.",
+            job_named(job),
+            path.display()
+        ),
+        Some(TemporaryCopy::Translocated) | None => format!(
+            "{} would run {}, which is in a temporary copy macOS made of the app and is gone \
+             once the app quits. Move Pitboard to your Applications folder, open it from there, \
+             and {turn_on} again.",
+            job_named(job),
+            path.display()
+        ),
     }
-    format!(
-        "{} would run {}, which is in a temporary copy macOS made of the app and is gone once \
-         the app quits. Move Pitboard to your Applications folder, open it from there, and \
-         {turn_on} again.",
-        job_named(job),
-        path.display()
-    )
+}
+
+fn vault_form_unsupported(form: crate::state::VaultForm) -> String {
+    let into = match form {
+        crate::state::VaultForm::SecretService => "the login keyring",
+        crate::state::VaultForm::Files => "files",
+    };
+    let kept = match crate::host::OS {
+        Os::MacOs => "On macOS, Pitboard keeps parked logins only in the login keychain",
+        Os::Windows => {
+            "On Windows, Pitboard keeps parked logins only in files sealed to your Windows account"
+        }
+        Os::Linux => "Pitboard keeps parked logins one way on this computer",
+    };
+    format!("{kept}, so they cannot be moved into {into}. Nothing has changed.")
+}
+
+fn manager_elsewhere(elsewhere: &crate::schedule::Elsewhere, job: crate::schedule::Job) -> String {
+    use crate::schedule::Elsewhere;
+    match elsewhere {
+        Elsewhere::Folder { units } => format!(
+            "{} would be written in {}, and your user's systemd does not read units from there. \
+             Nothing was {}. Give this shell and systemd the same XDG_CONFIG_HOME, set or unset \
+             as `systemctl --user show-environment` shows systemd's, then install it again.",
+            job_named(job),
+            units.display(),
+            job_done(job)
+        ),
+        Elsewhere::Home {
+            home,
+            theirs: Some(theirs),
+        } => format!(
+            "your user's systemd runs {} with HOME set to {}, not to {}, so it would not serve \
+             this home. Nothing was changed. Run this from a shell whose HOME is {}.",
+            job_named(job),
+            theirs.display(),
+            home.display(),
+            theirs.display()
+        ),
+        Elsewhere::Home { home, theirs: None } => format!(
+            "your user's systemd runs {} with no HOME, so it would not serve {}. Nothing was \
+             changed. Give systemd yours with `systemctl --user set-environment HOME={}`, then \
+             try again.",
+            job_named(job),
+            home.display(),
+            home.display()
+        ),
+    }
 }
 
 fn not_absolute(variable: &str, path: &std::path::Path) -> String {
@@ -1411,7 +1485,9 @@ fn session_expired(tool: ProviderId, program: &str, refused: bool) -> String {
 fn make_readable(os: Os, tool: ProviderId) -> &'static str {
     match tool {
         ProviderId::Claude => match os {
-            Os::MacOs | Os::Linux => "Unlock the keychain",
+            Os::MacOs => "Unlock the keychain",
+            // The file is Claude Code's only store there (`live_chain_order`).
+            Os::Linux => "Make Claude Code's .credentials.json readable to you again",
             Os::Windows => {
                 "Check that you can read and change Claude Code's folder and its .credentials.json"
             }
@@ -1431,15 +1507,21 @@ fn login_elsewhere(os: Os, email: &str) -> String {
 }
 
 // A keychain's ceiling is what `security` reads from stdin; Credential Manager's, 256 pieces.
-fn too_large(os: Os, tool: ProviderId, label: &str, bytes: usize, limit: usize) -> String {
-    match os {
-        Os::MacOs | Os::Linux => format!(
+fn too_large(
+    store: SecretStore,
+    tool: ProviderId,
+    label: &str,
+    bytes: usize,
+    limit: usize,
+) -> String {
+    match store {
+        SecretStore::Keychain => format!(
             "the login for `{label}` needs {bytes} bytes and `security` reads {limit} from \
              stdin, so it can only be written on the argument line, which PITBOARD_NO_ARGV \
              forbids. {}",
             smaller(tool)
         ),
-        Os::Windows => format!(
+        SecretStore::CredentialManager => format!(
             "the login for `{label}` needs {}. Sign out of MCP servers you no longer use to make \
              the login smaller.",
             crate::words::past_credential_manager(bytes, limit)
@@ -1547,9 +1629,11 @@ pub enum LoginDoubt {
     },
 }
 
-fn pitboard_open(home: &std::path::Path) -> String {
-    let quit = match crate::host::OS {
-        Os::MacOs | Os::Linux => "Quit it from its item in the menu bar",
+fn pitboard_open(os: Os, home: &std::path::Path) -> String {
+    let quit = match os {
+        Os::MacOs => "Quit it from its item in the menu bar",
+        // Every desktop shows its window; only some show a tray.
+        Os::Linux => "Quit it from the main menu in its window",
         Os::Windows => "Exit it from its icon's menu in the notification area",
     };
     format!(
@@ -1789,23 +1873,27 @@ fn recovery_elsewhere(tool: ProviderId, from: &str, to: &str, slot: &str) -> Str
 mod tests {
     use super::*;
 
-    // Claude Code keeps no keychain on Windows: its file, or Credential Manager.
+    // Claude Code keeps no keychain on Windows: its file, or Credential Manager. On Linux the
+    // file alone.
     #[test]
     fn claude_codes_lost_and_unreadable_logins_are_worded_for_each_system() {
-        let keychain = "the login for `l` needs 9 bytes and `security` reads 4 from stdin, so it \
-                        can only be written on the argument line, which PITBOARD_NO_ARGV \
-                        forbids. Unset it, or sign out of MCP servers you no longer use to make \
-                        the login smaller.";
-        for (os, too_large_said) in [
-            (Os::MacOs, keychain),
-            (Os::Linux, keychain),
+        for (store, too_large_said) in [
             (
-                Os::Windows,
+                SecretStore::Keychain,
+                "the login for `l` needs 9 bytes and `security` reads 4 from stdin, so it can only \
+                 be written on the argument line, which PITBOARD_NO_ARGV forbids. Unset it, or \
+                 sign out of MCP servers you no longer use to make the login smaller.",
+            ),
+            (
+                SecretStore::CredentialManager,
                 "the login for `l` needs 9 bytes, past the 4 Claude Code keeps in Credential \
                  Manager. Sign out of MCP servers you no longer use to make the login smaller.",
             ),
         ] {
-            assert_eq!(too_large(os, ProviderId::Claude, "l", 9, 4), too_large_said);
+            assert_eq!(
+                too_large(store, ProviderId::Claude, "l", 9, 4),
+                too_large_said
+            );
         }
         for (os, places, readable) in [
             (
@@ -1815,8 +1903,8 @@ mod tests {
             ),
             (
                 Os::Linux,
-                "in the keychain or in the file it also reads",
-                "Unlock the keychain",
+                "in .credentials.json",
+                "Make Claude Code's .credentials.json readable to you again",
             ),
             (
                 Os::Windows,
@@ -1833,6 +1921,21 @@ mod tests {
             );
             assert_eq!(make_readable(os, ProviderId::Claude), readable);
         }
+    }
+
+    #[test]
+    fn no_sentence_said_on_linux_names_a_keychain_a_menu_bar_or_activity_monitor() {
+        let linux = Os::Linux;
+        let named: Vec<String> = ProviderId::ALL
+            .iter()
+            .map(|tool| make_readable(linux, *tool).to_owned())
+            .chain([
+                login_elsewhere(linux, "a@example.com"),
+                pitboard_open(linux, std::path::Path::new("/home/x/.pitboard")),
+            ])
+            .filter(|said| crate::words::names_what_linux_has_not(said))
+            .collect();
+        assert!(named.is_empty(), "{named:#?}");
     }
 
     // Word for word what each said before a tool could be an app, with npm's `.cmd` where found.
@@ -2330,6 +2433,9 @@ mod tests {
             Error::StoredLoginChanged { path: "f".into() },
             Error::Usage("u".into()),
             Error::ConfirmationNeeded { command: "stow" },
+            Error::VaultFormUnsupported {
+                form: crate::state::VaultForm::Files,
+            },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();
@@ -2356,10 +2462,10 @@ mod tests {
             Error::Store(crate::store::Error::Locked).exit_code()
         );
         assert!(
-            stopped.to_string().ends_with(
-                "desktop session. Pitboard deleted nothing, having parked the login in the file \
-                 for `work`."
-            ),
+            stopped.to_string().ends_with(&format!(
+                "{}. Pitboard deleted nothing, having parked the login in the file for `work`.",
+                crate::store::locked(crate::host::OS)
+            )),
             "{stopped}"
         );
 

@@ -46,6 +46,7 @@ On Windows, a message names `claude.cmd` or `codex.cmd` where Pitboard found the
 | `renewal_failed` | 1 | Pitboard could not [renew](/guides/renewal) a parked login. | Run `pitboard doctor` if it keeps happening. In the app, open **Diagnostics**. |
 | `credential_too_large` | 3 | On macOS, the login is too large for `security` to read from standard input, and `PITBOARD_NO_ARGV=1` forbids the argument line. | Unset `PITBOARD_NO_ARGV`. Or, for Claude Code, sign out of MCP servers you no longer use. See [Large logins on macOS](/security#large-logins-on-macos). |
 | `credential_too_large` | 3 | On Windows, Claude Code's login is too large for Credential Manager, even in pieces. | Sign out of MCP servers you no longer use. |
+| `vault_form_unsupported` | 1 | `pitboard vault move` ran on macOS or Windows, which keep parked logins one way. Nothing changed. | Nothing. Only Linux keeps them either way. |
 
 ## Switching
 
@@ -156,6 +157,7 @@ An error that stops `pitboard stow` keeps its own code, cause and exit status. T
 | `credential_store_unreadable` | 1 | On Windows, Credential Manager holds pieces of a Claude Code login that no read can join, which Claude Code cannot read either. | See [The Claude Code login in Credential Manager cannot be read](/troubleshooting/accounts#the-claude-code-login-in-credential-manager-cannot-be-read). |
 | `credential_store_locked` | 1 | The keychain is locked, and macOS cannot ask for its password here, as over SSH. | See [macOS says the keychain is locked](/troubleshooting/accounts#macos-says-the-keychain-is-locked). |
 | `credential_store_locked` | 1 | On Windows, Credential Manager cannot be reached from this sign-in, as over SSH with a key. | Run Pitboard from a desktop session. |
+| `credential_store_locked` | 1 | On Linux, the login keyring that holds parked logins is locked and cannot ask to be unlocked here, or no Secret Service answers on this session's bus. | See [Linux says the login keyring is locked](/troubleshooting/accounts#linux-says-the-login-keyring-is-locked). |
 | `credential_sealed` | 1 | On Windows, a parked login sealed to your Windows account does not open in this sign-in: after an administrator reset your password, on a profile restored on another PC, or over SSH with a key. | See [Parked logins do not open on this PC](/troubleshooting/recovery#parked-logins-do-not-open-on-this-pc). |
 | `credential_not_json` | 3 | A stored login is not valid JSON. | Run `pitboard doctor`. In the app, open **Diagnostics**. |
 | `credential_write_failed` | 1 | Writing a login failed. | Fix the reason the message gives, then try again. |
@@ -209,10 +211,12 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 | --- | --- | --- | --- |
 | `schedule_unsupported` | 1 | This system has no scheduler Pitboard writes to. On Linux, systemd did not start the system, as in many containers. | Run `pitboard renew` yourself from time to time. |
 | `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than Pitboard's own, `~/.pitboard` or `%USERPROFILE%\AppData\Local\Pitboard`, and the schedule renews only that one. A link to it counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
-| `schedule_refused` | 1 | `launchctl` on macOS, Task Scheduler on Windows or `systemctl` on Linux refused the schedule. The message gives its answer. | Fix what it names, then turn on daily renewal again. |
+| `schedule_refused` | 1 | `launchctl` on macOS, Task Scheduler on Windows or your user's systemd on Linux refused the schedule, or could not be asked. The message gives its answer. | Fix what it names, then turn on daily renewal again. |
+| `schedule_manager_elsewhere` | 1 | On Linux, your user's systemd does not read units from `systemd/user` in `XDG_CONFIG_HOME`, or runs them with another `HOME`. Nothing changed. | Give your shell and your user's systemd the same `HOME` and `XDG_CONFIG_HOME`, as [systemd reads units from another folder or home](/troubleshooting/renewal#systemd-reads-units-from-another-folder-or-home) says. Then turn on daily renewal again. |
 | `schedule_program_missing` | 1 | The app only: the command line inside the app, which the schedule would run, is not there. | Install the app again. |
 | `schedule_program_temporary` | 1 | On macOS, the app runs from a temporary copy macOS made, which is gone once the app quits. | Move Pitboard to your Applications folder, open it from there and turn on daily renewal again. |
 | `schedule_program_temporary` | 1 | On Windows, `pitboard.exe` runs from the temporary copy Windows made of a zip it opened. | Install Pitboard, or extract the zip, and turn on daily renewal from there. |
+| `schedule_program_temporary` | 1 | On Linux, `pitboard` runs from inside an AppImage, in the folder its runtime mounted or extracted it into, which is gone once it quits. | Install Pitboard as [Install Pitboard](/install) describes, and turn on daily renewal from there. |
 | `schedule_program_unnamed` | 1 | The app only: this copy has no command line inside it for the schedule to run. | Install the app as [Install Pitboard](/install) describes, then open that copy. |
 
 ## Warm-up

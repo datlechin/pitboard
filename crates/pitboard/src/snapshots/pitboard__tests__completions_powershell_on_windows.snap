@@ -40,6 +40,7 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
             [CompletionResult]::new('statusline', 'statusline', [CompletionResultType]::ParameterValue, 'One line for Claude Code''s status bar; reads its session JSON on stdin')
             [CompletionResult]::new('renew', 'renew', [CompletionResultType]::ParameterValue, 'Renew every parked login that is due, and nothing else')
             [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Keep parked logins alive without running anything yourself')
+            [CompletionResult]::new('vault', 'vault', [CompletionResultType]::ParameterValue, 'Where parked logins are kept: in files sealed to your Windows account')
             [CompletionResult]::new('log', 'log', [CompletionResultType]::ParameterValue, 'What Pitboard has changed, and when')
             [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Check that what Pitboard relies on still holds on this machine')
             [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files')
@@ -255,6 +256,42 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
         'pitboard;schedule;help;help' {
             break
         }
+        'pitboard;vault' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;vault;status' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;vault;move' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;vault;help' {
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;vault;help;status' {
+            break
+        }
+        'pitboard;vault;help;move' {
+            break
+        }
+        'pitboard;vault;help;help' {
+            break
+        }
         'pitboard;log' {
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'How many changes to show')
             [CompletionResult]::new('--lines', '--lines', [CompletionResultType]::ParameterName, 'How many changes to show')
@@ -320,6 +357,7 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
             [CompletionResult]::new('statusline', 'statusline', [CompletionResultType]::ParameterValue, 'One line for Claude Code''s status bar; reads its session JSON on stdin')
             [CompletionResult]::new('renew', 'renew', [CompletionResultType]::ParameterValue, 'Renew every parked login that is due, and nothing else')
             [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Keep parked logins alive without running anything yourself')
+            [CompletionResult]::new('vault', 'vault', [CompletionResultType]::ParameterValue, 'Where parked logins are kept: in files sealed to your Windows account')
             [CompletionResult]::new('log', 'log', [CompletionResultType]::ParameterValue, 'What Pitboard has changed, and when')
             [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Check that what Pitboard relies on still holds on this machine')
             [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files')
@@ -399,6 +437,17 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
             break
         }
         'pitboard;help;schedule;uninstall' {
+            break
+        }
+        'pitboard;help;vault' {
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
+            break
+        }
+        'pitboard;help;vault;status' {
+            break
+        }
+        'pitboard;help;vault;move' {
             break
         }
         'pitboard;help;log' {

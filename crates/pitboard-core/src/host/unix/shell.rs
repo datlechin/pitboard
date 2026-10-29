@@ -33,12 +33,21 @@ pub(crate) enum Ran {
     Late,
 }
 
-/// The login shell's `PATH`, asked once. `spawn_flags` are what the system adds to keep the
-/// rest of this process's descriptors from the shell, where it has a way to say so.
-pub(crate) fn login_path(env: &Environment, spawn_flags: libc::c_short) -> LoginPath {
+/// How a system keeps the rest of this process's descriptors from the shell, but the three it
+/// is handed: what `posix_spawn` is told, and a file action that closes every descriptor from 3
+/// on, where the system has one. Each system's face says which (`SPAWN`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Spawn {
+    pub(crate) flags: libc::c_short,
+    // Added after the three are set up, since it closes the pipe they are copied from too.
+    pub(crate) close_the_rest: Option<fn(&mut Actions) -> bool>,
+}
+
+/// The login shell's `PATH`, asked once, with the shell started as `spawn` says.
+pub(crate) fn login_path(env: &Environment, spawn: Spawn) -> LoginPath {
     let marker = marker();
     path(env, &marker, |shell, arguments| {
-        run(shell, arguments, env, PATIENCE, spawn_flags)
+        run(shell, arguments, env, PATIENCE, spawn)
     })
 }
 
@@ -108,19 +117,19 @@ pub(crate) fn path_in(output: &str, marker: &str) -> Option<String> {
 ///
 /// It gets a session of its own, so an interactive shell finds no terminal to take over and
 /// everything it starts is in one process group to stop. Its input is `/dev/null`, its
-/// errors are discarded, and `spawn_flags` keep this process's other descriptors from it
-/// where the system can.
+/// errors are discarded, and `how` keeps this process's other descriptors from it where the
+/// system can.
 pub(crate) fn run(
     shell: &Path,
     arguments: &[String],
     env: &Environment,
     limit: Duration,
-    spawn_flags: libc::c_short,
+    how: Spawn,
 ) -> Ran {
     let Ok((mut reading, writing)) = io::pipe() else {
         return Ran::Failed;
     };
-    let Some(pid) = spawn(shell, arguments, env, writing.as_raw_fd(), spawn_flags) else {
+    let Some(pid) = spawn(shell, arguments, env, writing.as_raw_fd(), how) else {
         return Ran::Failed;
     };
     // Only the shell writes to it now, so it ends when the shell and whatever it started
@@ -171,7 +180,7 @@ fn spawn(
     arguments: &[String],
     env: &Environment,
     output: libc::c_int,
-    spawn_flags: libc::c_short,
+    how: Spawn,
 ) -> Option<libc::pid_t> {
     let program = CString::new(shell.as_os_str().as_bytes()).ok()?;
     let mut argv = vec![program.clone()];
@@ -214,9 +223,9 @@ fn spawn(
                 libc::O_WRONLY,
                 0,
             ) == 0
-            && libc::posix_spawnattr_setflags(attributes.raw(), spawn_flags) == 0
+            && libc::posix_spawnattr_setflags(attributes.raw(), how.flags) == 0
     };
-    if !prepared {
+    if !prepared || !how.close_the_rest.is_none_or(|close| close(&mut actions)) {
         return None;
     }
     let mut pid: libc::pid_t = 0;
@@ -238,7 +247,7 @@ fn spawn(
 
 /// `posix_spawn`'s file actions, boxed so they never move once initialised, and destroyed
 /// when dropped. Only ones whose initialisation succeeded are ever made.
-struct Actions(Box<std::mem::MaybeUninit<libc::posix_spawn_file_actions_t>>);
+pub(crate) struct Actions(Box<std::mem::MaybeUninit<libc::posix_spawn_file_actions_t>>);
 
 impl Actions {
     fn new() -> Option<Actions> {
@@ -248,7 +257,7 @@ impl Actions {
         (made == 0).then(|| Actions(raw))
     }
 
-    fn raw(&mut self) -> *mut libc::posix_spawn_file_actions_t {
+    pub(crate) fn raw(&mut self) -> *mut libc::posix_spawn_file_actions_t {
         self.0.as_mut_ptr()
     }
 }
@@ -344,9 +353,9 @@ mod tests {
         pairs.iter().copied().collect()
     }
 
-    /// The flags this system's host hands this module.
-    fn flags() -> libc::c_short {
-        crate::host::os::SPAWN_FLAGS
+    /// How this system's host has this module start the shell.
+    fn spawning() -> Spawn {
+        crate::host::os::SPAWN
     }
 
     /// Only what stands between the markers is the answer. Startup files print greetings,
@@ -503,12 +512,48 @@ mod tests {
                 ("SHELL", given.to_str().expect("a path in UTF-8")),
                 ("PATH", "/from/the/test/bin:/usr/bin:/bin"),
             ]),
-            flags(),
+            spawning(),
         );
         assert_eq!(
             answer,
             LoginPath::Said("/from/the/test/bin:/usr/bin:/bin".into())
         );
+    }
+
+    // One a library in the app left open on exec, far above the three, which the shell checks
+    // for itself, since a program it starts would open descriptors of its own.
+    #[test]
+    #[cfg_attr(
+        all(target_os = "linux", not(target_env = "gnu")),
+        ignore = "musl has no file action that closes the rest, and only an app, which links \
+                  glibc, asks for the login shell"
+    )]
+    fn a_login_shell_is_handed_only_its_three_descriptors() {
+        let shell = FakeShell::new(
+            "if [ -e \"/dev/fd/$LEFT_OPEN\" ]; then echo handed > fds; else echo kept > fds; fi",
+        );
+        // SAFETY: opens `/dev/null` for this test's own use, and copies it above 63 with no
+        // close-on-exec, as `F_DUPFD` copies one; both are closed again below.
+        let left_open = unsafe {
+            let null = libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY);
+            let copy = libc::fcntl(null, libc::F_DUPFD, 64);
+            libc::close(null);
+            copy
+        };
+        assert!(left_open >= 64, "{}", io::Error::last_os_error());
+        let number = left_open.to_string();
+        let ran = run(
+            &shell.path(),
+            &arguments(MARKER),
+            &env(&[("LEFT_OPEN", number.as_str())]),
+            Duration::from_secs(5),
+            spawning(),
+        );
+        // SAFETY: closes the copy this test made, which nothing else holds.
+        unsafe { libc::close(left_open) };
+        assert!(matches!(ran, Ran::Said(_)), "{ran:?}");
+        let said = std::fs::read_to_string(shell.dir.path().join("fds")).expect("its answer");
+        assert_eq!(said.trim(), "kept");
     }
 
     /// A shell that fails has no answer.
@@ -521,7 +566,7 @@ mod tests {
                 &arguments(MARKER),
                 &env(&[]),
                 Duration::from_secs(5),
-                flags()
+                spawning()
             ),
             Ran::Failed
         );
@@ -531,7 +576,7 @@ mod tests {
                 &arguments(MARKER),
                 &env(&[]),
                 Duration::from_secs(5),
-                flags()
+                spawning()
             ),
             Ran::Failed,
             "a shell that is not there"
@@ -551,7 +596,7 @@ mod tests {
                 &arguments(MARKER),
                 &env(&[]),
                 Duration::from_secs(2),
-                flags()
+                spawning()
             ),
             Ran::Late
         );
@@ -583,7 +628,7 @@ mod tests {
                 ("SHELL", given.to_str().expect("a path in UTF-8")),
                 ("PATH", "/usr/bin:/bin"),
             ]),
-            flags(),
+            spawning(),
         );
         for pid in shell.pids() {
             // SAFETY: signals the stand-in's own sleep, which this test started.

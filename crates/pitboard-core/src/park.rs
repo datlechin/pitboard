@@ -277,6 +277,7 @@ pub(crate) fn parts_of(service: &str) -> Option<(String, i64)> {
 /// Claim a free name before writing to it, so the caller can record it first and recovery
 /// can find a park left by a run that died. Reusing a name would destroy the park there.
 pub(crate) fn reserve(ctx: &Context, permit: Permit, id: &str) -> Result<String> {
+    crate::state::record_vault(ctx, permit)?;
     let service = free_name(ctx, id)?;
     // Written down before anything is written into it, so a run killed between the two
     // leaves a name the next command can resolve rather than a login nothing on the machine
@@ -357,6 +358,7 @@ pub(crate) fn price(
             label: label.to_string(),
             bytes: price.needs,
             limit: price.limit,
+            store: price.store,
         });
     }
     Ok(price

@@ -8,14 +8,21 @@ mod file;
 pub(crate) mod folder;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod memory;
-// macOS parks in the login keychain; Linux in files, and Windows in files sealed to the account.
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg_attr(
+    target_os = "macos",
+    allow(
+        dead_code,
+        reason = "macOS parks in the login keychain; every system's tests read these rules"
+    )
+)]
 pub(crate) mod vault;
 
 pub(crate) use file::PlainFile;
 
 use crate::context::Context;
+use crate::host::SecretStore;
 use crate::permit::Permit;
+use crate::state::VaultForm;
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -32,6 +39,16 @@ pub(crate) enum Backend {
     // Windows' store of generic credentials, where Claude Code keeps its login once its store
     // there is on (`windows_backend_choice`).
     CredentialManager,
+    // Items of the Secret Service's default collection: Pitboard's parks on Linux, where a home
+    // records that form (`state::VaultForm`).
+    #[cfg_attr(
+        not(any(target_os = "linux", test, feature = "test-support")),
+        allow(
+            dead_code,
+            reason = "only Linux and a machine in memory offer the Secret Service"
+        )
+    )]
+    SecretService,
     Absent,
     // A store Pitboard does not read: Claude Code's on Windows where a login sits in Credential
     // Manager though nothing Pitboard reads turns that store on.
@@ -45,8 +62,23 @@ impl Backend {
             Backend::File => "file",
             Backend::SealedFile => "sealed_file",
             Backend::CredentialManager => "credential_manager",
+            Backend::SecretService => "secret_service",
             Backend::Absent => "absent",
             Backend::Unknown => "unknown",
+        }
+    }
+
+    /// The system's store of secrets this is, where it is one.
+    pub(crate) fn secret_store(self) -> Option<SecretStore> {
+        match self {
+            Backend::Keychain => Some(SecretStore::Keychain),
+            Backend::CredentialManager => Some(SecretStore::CredentialManager),
+            // No file is behind a park, and the Secret Service has no ceiling.
+            Backend::File
+            | Backend::SealedFile
+            | Backend::SecretService
+            | Backend::Absent
+            | Backend::Unknown => None,
         }
     }
 }
@@ -100,6 +132,11 @@ pub(crate) const LOCKED: &str = "the keychain is locked and cannot ask to be unl
                                  here; unlock it with `security unlock-keychain`, or run \
                                  Pitboard from a desktop session";
 
+// The Secret Service's collection, on Linux, where a run the schedule started asks nobody.
+const KEYRING_LOCKED: &str = "the login keyring is locked, or nothing answers for it on this \
+                              session's bus, and it cannot ask to be unlocked from here; run \
+                              Pitboard in your desktop session, where signing in unlocks it";
+
 // `ERROR_NO_SUCH_LOGON_SESSION`: a network logon has no credential set
 // (docs/facts/windows-runners.md).
 const UNREACHABLE: &str = "Credential Manager cannot be reached from this logon, as in a sign-in \
@@ -107,7 +144,8 @@ const UNREACHABLE: &str = "Credential Manager cannot be reached from this logon,
 
 pub(crate) fn locked(os: crate::host::Os) -> &'static str {
     match os {
-        crate::host::Os::MacOs | crate::host::Os::Linux => LOCKED,
+        crate::host::Os::MacOs => LOCKED,
+        crate::host::Os::Linux => KEYRING_LOCKED,
         crate::host::Os::Windows => UNREACHABLE,
     }
 }
@@ -118,9 +156,10 @@ pub enum Error {
     /// The store could not be interrogated. Never treat this as "no credential".
     #[error("the credential store could not be read: {0}")]
     Unreadable(String),
-    /// The keychain is locked and cannot ask to be unlocked from where this runs, as over
-    /// SSH, or Credential Manager cannot be reached from this logon. Never "no credential"
-    /// either, and nothing is wrong with what it holds.
+    /// The keychain or the Secret Service's collection is locked and cannot ask to be unlocked
+    /// from where this runs, as over SSH, nothing answers for the Secret Service on this
+    /// session's bus, or Credential Manager cannot be reached from this logon. Never "no
+    /// credential" either, and nothing is wrong with what it holds.
     #[error("the credential store could not be read: {}", locked(crate::host::OS))]
     Locked,
     // Pieces in Credential Manager that no read can join, as Claude Code can leave a login it
@@ -200,6 +239,8 @@ pub(crate) struct Cost {
     pub(crate) limit: usize,
     /// Whether the store has another route above the ceiling, and is allowed to use it.
     pub(crate) second_route: bool,
+    /// The store whose ceiling `limit` is.
+    pub(crate) store: SecretStore,
 }
 
 impl Cost {
@@ -245,8 +286,48 @@ pub(crate) trait RawStore: Send + Sync {
     }
 }
 
+// The vault of the form this home keeps its parks in; one that cannot say which is refused, never
+// guessed at, since a vault of the other form would read as holding none of them.
 fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    ctx.host().vault(ctx)
+    match home_form(ctx) {
+        Ok(form) => ctx.host().vault(ctx, form),
+        Err(why) => Box::new(Refused::new(
+            Backend::Unknown,
+            Error::Unreadable(format!("where this home keeps its parked logins: {why}")),
+        )),
+    }
+}
+
+/// The form this home keeps its parked logins in, where the system offers a choice: the one
+/// its state file records, else the one a new home takes. `None` where the system keeps them
+/// one way, which reads no file.
+pub(crate) fn home_form(ctx: &Context) -> crate::error::Result<Option<VaultForm>> {
+    if ctx.host().vault_forms().is_empty() {
+        return Ok(None);
+    }
+    Ok(crate::state::vault_form(ctx)?.or_else(|| new_home_form(ctx)))
+}
+
+/// The form a home that records none takes, where the system offers a choice, asked again at
+/// each look until its first save records it: files where its `vault/` holds a park, or cannot
+/// be read to tell, as in a home whose state file was lost; else the Secret Service where one
+/// answers; else files. A park in `vault/` is never left unread for a store that holds none.
+pub(crate) fn new_home_form(ctx: &Context) -> Option<VaultForm> {
+    let host = ctx.host();
+    if host.vault_forms().is_empty() {
+        return None;
+    }
+    let files_hold_none = matches!(
+        host.vault(ctx, Some(VaultForm::Files)).list(),
+        Ok(Some(names)) if names.is_empty()
+    );
+    Some(
+        if files_hold_none && host.answers(ctx, VaultForm::SecretService) {
+            VaultForm::SecretService
+        } else {
+            VaultForm::Files
+        },
+    )
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -352,9 +433,9 @@ fn with_live<T>(live: &Live, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
 fn behind_in<'a>(
     chain: &[&'a dyn RawStore],
     service: &str,
-) -> Result<Option<&'a dyn RawStore>, Error> {
+) -> Result<Option<(&'a dyn RawStore, &'a dyn RawStore)>, Error> {
     match resolve_in(chain, service)? {
-        Some(holder) => after_in(chain, holder, service),
+        Some(holder) => Ok(after_in(chain, holder, service)?.map(|behind| (holder, behind))),
         None => Ok(None),
     }
 }
@@ -377,8 +458,11 @@ fn after_in<'a>(
 /// and what no write to it reaches. A backend is behind wherever its own look says it is
 /// there, so a file is behind holding `{}`, nothing at all, or what cannot be read, as a file
 /// that is not text or that this user may not read: reading it then gives the error. `None`
-/// where the login in use is in the last backend, or nowhere.
-pub(crate) fn behind<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawStore>, Error> {
+/// where the login in use is in the last backend, or nowhere. With the backend holding it.
+pub(crate) fn behind<'a>(
+    live: &'a Live,
+    service: &str,
+) -> Result<Option<(&'a dyn RawStore, &'a dyn RawStore)>, Error> {
     behind_in(&live.refs(), service)
 }
 
@@ -475,12 +559,26 @@ pub(crate) fn vault_list(ctx: &Context) -> Result<Option<Vec<String>>, Error> {
 }
 
 /// Whether another `PITBOARD_HOME` could have parked a login where this one parks its own.
+// One whose form cannot be read is taken for shared: what another home may hold is left alone.
 pub(crate) fn vault_is_shared(ctx: &Context) -> bool {
-    ctx.host().vault_is_shared()
+    home_form(ctx).map_or(true, |form| ctx.host().vault_is_shared(form))
 }
 
 pub(crate) fn vault_kind(ctx: &Context) -> Backend {
     vault(ctx).kind()
+}
+
+/// Where this home's parks are, as a person looks for them. `None` where its state file cannot
+/// say which form it keeps them in.
+pub(crate) fn vault_place(ctx: &Context) -> Option<crate::host::Vault> {
+    use crate::host::Vault;
+    match vault_kind(ctx) {
+        Backend::Keychain => Some(Vault::Keychain),
+        Backend::SecretService => Some(Vault::SecretService),
+        Backend::File => Some(Vault::Files),
+        Backend::SealedFile => Some(Vault::SealedFiles),
+        Backend::CredentialManager | Backend::Absent | Backend::Unknown => None,
+    }
 }
 
 /// What writing the live credential would cost, asked of the backend that would take the
@@ -545,7 +643,7 @@ mod tests {
         let held = |chain: &[&dyn RawStore]| -> Option<String> {
             behind_in(chain, "svc")
                 .unwrap()
-                .map(|behind| behind.read("svc").unwrap().expect("there"))
+                .map(|(_, behind)| behind.read("svc").unwrap().expect("there"))
         };
         assert_eq!(held(&chain), None);
 
@@ -582,10 +680,10 @@ mod tests {
         let file = PlainFile::at(path);
         let chain: [&dyn RawStore; 2] = [&keychain, &file];
 
-        let behind = behind_in(&chain, "svc")
+        let (_, behind) = behind_in(&chain, "svc")
             .expect("which backend is in use is told")
-            .expect("the file is behind")
-            .read("svc");
+            .expect("the file is behind");
+        let behind = behind.read("svc");
         assert!(matches!(behind, Err(Error::Unreadable(_))), "{behind:?}");
     }
 
@@ -654,7 +752,8 @@ mod tests {
             Some(Cost {
                 needs: 1,
                 limit: 2560,
-                second_route: true
+                second_route: true,
+                store: SecretStore::Keychain,
             }),
             "the first store's ceiling, while the file holds the login"
         );
@@ -764,7 +863,8 @@ mod tests {
         use crate::host::Os;
         assert_eq!(Error::Locked.code(), "credential_store_locked");
         assert_eq!(locked(Os::MacOs), LOCKED);
-        assert_eq!(locked(Os::Linux), LOCKED);
+        assert!(locked(Os::Linux).starts_with("the login keyring is locked"));
+        assert!(!crate::words::names_what_linux_has_not(locked(Os::Linux)));
         assert!(
             locked(Os::Windows).starts_with("Credential Manager cannot be reached from this logon")
         );

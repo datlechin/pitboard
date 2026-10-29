@@ -373,6 +373,15 @@ pub(crate) fn clear(ctx: &Context, permit: Permit) {
     let _ = crate::host::fs::remove_file(permit, &path(ctx));
 }
 
+// Every name written down for a vault item, which a move of the parks takes to the new form.
+pub(crate) fn vault_names(ctx: &Context) -> Vec<String> {
+    read(ctx)
+        .into_iter()
+        .filter(|(kind, _)| *kind == ParkKind::Vault)
+        .map(|(_, service)| service)
+        .collect()
+}
+
 /// Every name still outstanding, for `doctor` to report: written down, and named by nothing
 /// in `state`. A change records its park in `state.json` once the login is written, and the
 /// name stays on the list until the next change's sweep drops it; until then it is
@@ -759,7 +768,7 @@ mod tests {
     #[test]
     fn a_sealed_park_that_will_not_open_is_never_deleted() {
         let (ctx, mem, _root) = machine_on(MemoryHost::sealed());
-        assert_eq!(ctx.host().vault(&ctx).kind(), store::Backend::SealedFile);
+        assert_eq!(store::vault_kind(&ctx), store::Backend::SealedFile);
         assert!(!store::vault_is_shared(&ctx));
         let ours = "pitboard-park-acc-1760000000000";
         let stranger = "pitboard-park-other-1760000000001";

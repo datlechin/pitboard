@@ -21,7 +21,7 @@ use super::{
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::task::{Drift, Task};
-use crate::host::{Access, Kind, Os};
+use crate::host::{Access, Kind, Os, SecretStore};
 use crate::in_use::Stored;
 use crate::permit::Permit;
 use crate::provider::ProviderId;
@@ -122,6 +122,8 @@ pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> Schedule
         program_found: true,
         network,
         network_differs,
+        outdated: false,
+        refused: None,
     }
 }
 
@@ -253,10 +255,11 @@ pub(super) fn everything_said(os: Os) -> Facts {
     f.floor = crate::host::Floor::Below { build: 22631 };
     f.elevation = crate::host::Elevation::Elevated { why: "with sudo" };
     f.no_argv = true;
-    f.fallback_login = Some(FallbackLogin {
+    let fallback = |store| FallbackLogin {
         path: PathBuf::from("/home/x/.claude/.credentials.json"),
+        store,
         fingerprint: Ok(None),
-    });
+    };
     f.machine_id_known = os == Os::Windows;
     f.interrupted = true;
     f.pending_parks = vec!["pitboard-park-y-1".into()];
@@ -267,6 +270,8 @@ pub(super) fn everything_said(os: Os) -> Facts {
         program_found: true,
         at: None,
         task: None,
+        outdated: false,
+        refused: None,
     });
     f.login_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
     f.parks = vec![
@@ -286,6 +291,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         Os::Windows => {
             f.backend = Ok(store::Backend::CredentialManager);
             f.vault = store::Backend::SealedFile;
+            f.fallback_login = Some(fallback(SecretStore::CredentialManager));
             f.codex.stored_elsewhere = (1, 1);
             f.windows = Some(WindowsHomes {
                 home: PathBuf::from(r"C:\Users\dana"),
@@ -314,14 +320,40 @@ pub(super) fn everything_said(os: Os) -> Facts {
                 runs_pitboard: true,
             });
         }
+        // Claude Code's file is its only store, with no ceiling, and parks are in a locked
+        // login keyring.
         Os::Linux => {
+            // Only systemd's units are read as an earlier Pitboard wrote them.
+            f.schedule.as_mut().expect("set above").outdated = true;
+            f.watch_service.as_mut().expect("set above").outdated = true;
+            f.backend = Ok(store::Backend::File);
+            f.hover_rest_env = true;
+            f.vault = store::Backend::SecretService;
+            f.vault_form = Some(FormFact {
+                kept: switch::Keeping {
+                    place: Some(crate::host::Vault::SecretService),
+                    shared: true,
+                    folder: Some(PathBuf::from("/home/x/.pitboard/vault")),
+                    secret_service: Some(true),
+                    moving_to: None,
+                    leaving: None,
+                },
+                locked: true,
+            });
+            f.parks[0].unreadable = Some(Unreadable::Locked(store::Backend::SecretService));
+            f.credential_cost = None;
+            f.readable_by_others = vec![(
+                "/home/x/.claude/.credentials.json".into(),
+                Kind::File,
+                mode(0o644),
+            )];
             f.wsl = Some(WslFact {
                 distribution: Some("Ubuntu".into()),
                 codex_home_on_windows: None,
             });
             f.desktop = None;
         }
-        Os::MacOs => {}
+        Os::MacOs => f.fallback_login = Some(fallback(SecretStore::Keychain)),
     }
     f
 }

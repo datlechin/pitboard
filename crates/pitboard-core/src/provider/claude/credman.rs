@@ -4,7 +4,7 @@
 use super::pieces::{self, Items};
 use super::{paths as claude, slot};
 use crate::context::Context;
-use crate::host::Administered;
+use crate::host::{Administered, SecretStore};
 use crate::permit::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use serde_json::Value;
@@ -218,6 +218,7 @@ impl RawStore for Store {
             needs: contents.len(),
             limit: pieces::MOST_BYTES,
             second_route: false,
+            store: SecretStore::CredentialManager,
         })
     }
 }

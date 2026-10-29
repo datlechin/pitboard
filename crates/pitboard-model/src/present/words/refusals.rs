@@ -722,6 +722,7 @@ fn in_app_any_warning(front: Front, warning: &CoreWarning) -> Option<String> {
             tool,
             path,
             held: Held::Login,
+            ..
         } => format!(
             "{} holds another {} sign-in, which sessions already running keep after a switch.",
             path.display(),
@@ -731,6 +732,7 @@ fn in_app_any_warning(front: Front, warning: &CoreWarning) -> Option<String> {
             tool,
             path,
             held: Held::NoLogin,
+            ..
         } => format!(
             "{} holds no {} sign-in, and sessions already running don’t follow a switch while it’s \
              there.",
@@ -877,6 +879,7 @@ pub(crate) fn in_app_given_up(given_up: &pitboard_core::switch::GivenUp) -> Stri
 mod tests {
     use super::*;
     use crate::present::words::used_then;
+    use pitboard_core::host::SecretStore;
 
     // The sheet asks for a name, so its refusal says name where the command line says label.
     #[test]
@@ -1713,6 +1716,7 @@ mod tests {
         let fallback = |held| CoreWarning::FallbackLogin {
             tool: ProviderId::Claude,
             path: std::path::PathBuf::from("/h/.claude/.credentials.json"),
+            store: SecretStore::Keychain,
             held,
         };
         assert_eq!(

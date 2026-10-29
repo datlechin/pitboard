@@ -2,7 +2,7 @@
 //! and never the Security framework in process (docs/facts/macos.md).
 
 use crate::context::Context;
-use crate::host::{Input, SECURITY};
+use crate::host::{Input, SECURITY, SecretStore};
 use crate::permit::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::process::{Command, Output};
@@ -138,6 +138,7 @@ impl Keychain {
             needs: command_for(&self.account, service, contents).len(),
             limit: MAX_COMMAND_BYTES,
             second_route: self.argv_fallback,
+            store: SecretStore::Keychain,
         }
     }
 

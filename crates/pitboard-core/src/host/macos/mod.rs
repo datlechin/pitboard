@@ -15,8 +15,10 @@ pub(crate) use sqlite::write_jar;
 
 use super::administered::{self, Administered};
 use super::unix::service;
+use super::unix::shell::Spawn;
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Scheduler};
 use crate::context::{Context, Environment};
+use crate::state::VaultForm;
 use crate::store::{PlainFile, RawStore};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,16 +28,18 @@ pub(super) const OS: Os = Os::MacOs;
 // No build for tests reads an app installed on the machine running it.
 const READS_APPS: bool = !cfg!(any(test, feature = "test-support"));
 
-/// What `posix_spawn` is told when Pitboard starts the person's login shell: a session of its
-/// own, and none of this process's descriptors but the three it is handed, whatever in the
-/// app opened the rest. `POSIX_SPAWN_SETSID` is 0x0400 in `<sys/spawn.h>` of the macOS 27
-/// SDK, and the libc crate does not name it.
-pub(super) const SPAWN_FLAGS: libc::c_short =
-    0x0400 | libc::POSIX_SPAWN_CLOEXEC_DEFAULT as libc::c_short;
+/// How `posix_spawn` starts the person's login shell: in a session of its own, and with none of
+/// this process's descriptors but the three it is handed, whatever in the app opened the rest,
+/// by a flag. `POSIX_SPAWN_SETSID` is 0x0400 in `<sys/spawn.h>` of the macOS 27 SDK, and the
+/// libc crate does not name it.
+pub(super) const SPAWN: Spawn = Spawn {
+    flags: 0x0400 | libc::POSIX_SPAWN_CLOEXEC_DEFAULT as libc::c_short,
+    close_the_rest: None,
+};
 
 /// macOS has a login shell to ask.
 pub(super) fn login_path(env: &Environment) -> LoginPath {
-    super::unix::shell::login_path(env, SPAWN_FLAGS)
+    super::unix::shell::login_path(env, SPAWN)
 }
 
 pub(super) fn rename_exclusive(from: &std::ffi::CStr, to: &std::ffi::CStr) -> libc::c_int {
@@ -71,11 +75,11 @@ impl Host for MacOs {
         Box::new(PlainFile::at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+    fn vault(&self, ctx: &Context, _form: Option<VaultForm>) -> Box<dyn RawStore> {
         Box::new(keychain::Keychain::vault(ctx))
     }
 
-    fn vault_is_shared(&self) -> bool {
+    fn vault_is_shared(&self, _form: Option<VaultForm>) -> bool {
         true
     }
 

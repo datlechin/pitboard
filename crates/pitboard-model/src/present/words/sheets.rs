@@ -2,7 +2,7 @@
 //! naming and renaming an account, cleaning up a leftover sign-in file, and quitting an app to
 //! go on.
 
-use super::titled;
+use super::{store_in_front, titled};
 use crate::Front;
 use crate::model::state::Recording;
 use pitboard_core::label::Unusable;
@@ -254,7 +254,7 @@ pub(crate) fn clean_up_message(front: Front) -> String {
         "{} deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
          account needs.",
         clean_up(front, false),
-        pitboard_core::words::store_in_front(front.os())
+        store_in_front(front)
     )
 }
 
@@ -302,10 +302,11 @@ pub(crate) fn clean_up_found(front: Front, left: &pitboard_core::switch::Left) -
 }
 
 pub(crate) fn nothing_to_clean_up(front: Front) -> String {
-    format!(
-        "No sign-in file is left behind {}, so there’s nothing to clean up.",
-        pitboard_core::words::store_in_front(front.os())
-    )
+    let store = match front {
+        Front::Gnome => "the store Claude Code keeps its sign-in in",
+        Front::MacMenuBar | Front::WindowsNotificationArea => store_in_front(front),
+    };
+    format!("No sign-in file is left behind {store}, so there’s nothing to clean up.")
 }
 
 pub(crate) fn quit_to_switch(name: &str) -> String {
@@ -414,6 +415,7 @@ pub(crate) fn quit_and_add(front: Front, name: &str) -> String {
 mod tests {
     use super::*;
     use crate::present::words::{CANCEL, CONTINUE, cleaned_up, sign_in_asking};
+    use pitboard_core::host::SecretStore;
 
     // A sheet's words, by what it does, pinned once: the sheets' and the model's tests compare
     // with these functions.
@@ -505,6 +507,17 @@ mod tests {
             clean_up_message(Front::WindowsNotificationArea),
             "Clean up deletes the sign-in file Claude Code left behind Credential Manager, and \
              keeps any sign-in an account needs."
+        );
+        // On Linux the file is Claude Code's store, with no keychain in front of it.
+        assert_eq!(
+            clean_up_message(Front::Gnome),
+            "Clean Up deletes the sign-in file Claude Code left behind the store it keeps its \
+             sign-in in, and keeps any sign-in an account needs."
+        );
+        assert_eq!(
+            nothing_to_clean_up(Front::Gnome),
+            "No sign-in file is left behind the store Claude Code keeps its sign-in in, so \
+             there’s nothing to clean up."
         );
         assert_eq!(
             finish_in_browser(Some("work")),
@@ -722,6 +735,7 @@ mod tests {
         let label = || "work".to_owned();
         let left = |login| Left {
             path: "/h/.claude/.credentials.json".into(),
+            store: SecretStore::Keychain,
             seen: String::new(),
             login,
             dropped: vec!["mcpOAuth".into()],
@@ -835,6 +849,7 @@ mod tests {
         for (kept, said) in did {
             let stowed = Stowed {
                 path: "/h/.claude/.credentials.json".into(),
+                store: SecretStore::Keychain,
                 kept,
                 dropped: Vec::new(),
             };

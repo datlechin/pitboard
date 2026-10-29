@@ -1,0 +1,22 @@
+---
+source: crates/pitboard/tests/cli/vault.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "vault",
+    "ok": true,
+    "data": {
+      "kept": "files",
+      "shared": false,
+      "path": "[path]",
+      "secret_service": false,
+      "moving_to": null,
+      "leaving": null
+    },
+    "warnings": [],
+    "error": null
+  }
+}

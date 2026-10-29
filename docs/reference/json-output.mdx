@@ -33,7 +33,7 @@ It prints this on one line:
 </ResponseField>
 
 <ResponseField name="command" type="string | null" required>
-  The command that ran, such as `rename`. `pitboard` alone gives `status`, the three `schedule` commands give `schedule`, `watch install`, `status` and `uninstall` give `watch`, and `completions` and `manpage` give `generate`.
+  The command that ran, such as `rename`. `pitboard` alone gives `status`, the three `schedule` commands give `schedule`, `vault` and its commands give `vault`, `watch install`, `status` and `uninstall` give `watch`, and `completions` and `manpage` give `generate`.
 </ResponseField>
 
 <ResponseField name="ok" type="boolean" required>
@@ -122,6 +122,8 @@ In the order of `pitboard --help`:
 | `schedule install` | `installed` (`true`) and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
 | `schedule status` | `installed`. When `true`, also `every_seconds` (`86400`) and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `schedule uninstall` | `installed` (`false`) and `removed`, `false` when nothing was scheduled. |
+| `vault` | `kept`, where parked logins are kept: `keychain`, `secret_service`, `files`, `sealed_files`, or `null` where Pitboard cannot tell. `shared`, `true` where every Pitboard directory on the Mac or of your Linux session parks there. `path`, their folder where they are files, and `null` otherwise. `secret_service`, on Linux whether a Secret Service answers on your session's bus, and `null` elsewhere. `moving_to`, the form a move cut short goes to, or `null`. `leaving`, `null`, or `from`, the form a move left, and `parks`, how many parked logins wait to be deleted there. |
+| `vault move` | `kept`, the form the parked logins are kept in now: `secret_service` or `files`. `changed`, `false` when they were kept there already. `moved`, how many parked logins are there now from the other form. `leaving`, how many wait to be deleted from the other form. |
 | `log` | `entries`, oldest first, each with `at`, `caller` (`cli`, `app` or `unknown`), `verb`, `subject` and `outcome`, as [`log`](/reference/maintenance-commands#log) explains. |
 | `doctor` | `environment`, the paths, login stores and versions Pitboard found, as [Doctor environment](/reference/json-output#doctor-environment) lists. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [`doctor`](/reference/maintenance-commands#doctor) lists. |
 | `uninstall` | The counts `parks_removed`, `parks_pending` (could not be deleted, or a renewal of Claude Code's login not saved yet), `parks_left` (left because another Pitboard may own them) and `set_aside_removed` (folders set aside it deleted), the booleans `home_removed`, `warming_up` (a warm-up running kept the directory), `schedule_removed` and `watch_service_removed`, and `home_kept_by`, the paths of the files that could not be removed, which kept the directory. |

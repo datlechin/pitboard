@@ -7,6 +7,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::permit::Permit;
 use crate::provider::{LoginKind, Provider};
+use crate::schedule::{Job, StoreAnswer};
 use crate::state::{Key, Park, ParkKind, State};
 use crate::{park, state};
 use serde_json::Value;
@@ -78,12 +79,15 @@ impl Due {
 
 /// Renew every parked login whose access token has expired or is about to. Nothing is done
 /// while another Pitboard run holds the lock or a switch waits to be finished: a renewal
-/// replaces the refresh token, and nothing may install the old copy meanwhile.
+/// replaces the refresh token, and nothing may install the old copy meanwhile. A move of the
+/// parks cut short is finished first, as a change finishes it, so no park is written into the
+/// form it is leaving, and nothing is renewed where the store refuses that.
 pub(crate) fn renew_parked(ctx: &Context, permit: Permit) -> Vec<(Key, Renewal)> {
     renew_due(ctx, permit, Due::ToBeAsked)
 }
 
-/// The same, for whichever reason.
+/// The same, for whichever reason. A run the schedule started keeps what the store refused it,
+/// the move's finish among it, under the lock ([`crate::schedule::ran`]).
 pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Renewal)> {
     let Some(_exclusive) = try_exclusive(ctx, permit) else {
         return Vec::new();
@@ -94,6 +98,16 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
     let Ok(mut state) = state::load(ctx) else {
         return Vec::new();
     };
+    // Where only the schedule runs, no change comes to finish it, and the parks would lapse.
+    if state
+        .vault
+        .as_ref()
+        .is_some_and(|vault| vault.moving_to.is_some())
+        && let Err(refused) = super::vault::finish(ctx, permit, &mut state)
+    {
+        crate::schedule::ran(ctx, permit, Job::Renew, StoreAnswer::of(&refused));
+        return Vec::new();
+    }
     let now = ctx.now();
     let covered = |state: &State| -> Vec<(Key, &'static dyn Provider, Park)> {
         state
@@ -150,7 +164,7 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
                 })
                 .collect()
         });
-    let outcomes = asked
+    let outcomes: Vec<(Key, Renewal)> = asked
         .into_iter()
         .map(|(key, tool, held, answer)| {
             let outcome = apply(ctx, permit, &mut state, tool, &key, &held, answer)
@@ -159,6 +173,7 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
         })
         .collect();
     purge(ctx, permit, &mut state);
+    crate::schedule::ran(ctx, permit, Job::Renew, StoreAnswer::renewing(&outcomes));
     outcomes
 }
 
@@ -649,10 +664,9 @@ mod tests {
         let job = match OS {
             Os::MacOs => "com.datlechin.pitboard.renew".to_string(),
             Os::Linux => "pitboard-renew.service".to_string(),
-            Os::Windows => crate::host::task::path(
-                crate::schedule::Job::Renew,
-                &crate::host::user::sid().expect("a SID"),
-            ),
+            Os::Windows => {
+                crate::host::task::path(Job::Renew, &crate::host::user::sid().expect("a SID"))
+            }
         };
         let job = job.as_str();
         type Told = fn(Context, &str) -> Context;
@@ -761,7 +775,7 @@ mod tests {
         let ctx = Context::new(own)
             .with_memory_stores(MemoryHost::new())
             .started_by_the_schedule();
-        let _ = crate::schedule::for_its_run(&ctx, crate::schedule::Job::Renew);
+        let _ = crate::schedule::for_its_run(&ctx, Job::Renew);
     }
 
     /// The failure this module's comments describe and no test could reach: Anthropic has

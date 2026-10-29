@@ -4,6 +4,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
+use pitboard_core::host::{Os, Vault};
 use pitboard_core::provider::{Adoption, SignsIn};
 use pitboard_core::schedule::{Job, Location};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
@@ -17,6 +18,7 @@ mod json;
 mod manpage;
 mod render;
 mod ui;
+mod vault;
 mod warm;
 mod watch;
 
@@ -45,13 +47,16 @@ struct Cli {
     command: Option<Command>,
 }
 
-// Pitboard switches Claude Desktop on macOS alone, so Windows' help never names it.
-const ABOUT: &str = if cfg!(windows) {
-    "Switch Claude Code and Codex between your own accounts without signing out, and see what \
-     each account has left"
-} else {
-    "Switch Claude Code, Codex and Claude Desktop between your own accounts without signing \
-     out, and see what each Claude Code and Codex account has left"
+// Pitboard switches Claude Desktop on macOS alone, so no other system's help names it.
+const ABOUT: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "Switch Claude Code, Codex and Claude Desktop between your own accounts without signing \
+         out, and see what each Claude Code and Codex account has left"
+    }
+    Os::Linux | Os::Windows => {
+        "Switch Claude Code and Codex between your own accounts without signing out, and see \
+         what each account has left"
+    }
 };
 
 // Styled as clap styles `Commands:` and the commands under it.
@@ -75,24 +80,46 @@ fn examples() -> String {
     said
 }
 
-const LABEL_TO_ENROLL: &str = if cfg!(windows) {
-    "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
-     account; a bare name means Claude Code"
-} else {
-    "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
-     account, `desktop/work` a Claude Desktop one; a bare name means Claude Code"
+const LABEL_TO_ENROLL: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
+         account, `desktop/work` a Claude Desktop one; a bare name means Claude Code"
+    }
+    Os::Linux | Os::Windows => {
+        "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
+         account; a bare name means Claude Code"
+    }
 };
 
-const LABEL_TO_USE: &str = if cfg!(windows) {
-    "The label the account was enrolled under, such as `work` or `codex/work`"
-} else {
-    "The label the account was enrolled under, such as `work`, `codex/work` or `desktop/work`"
+const LABEL_TO_USE: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "The label the account was enrolled under, such as `work`, `codex/work` or `desktop/work`"
+    }
+    Os::Linux | Os::Windows => {
+        "The label the account was enrolled under, such as `work` or `codex/work`"
+    }
 };
 
-const STOW: &str = if cfg!(windows) {
-    "Put away the login Claude Code left in a file behind Credential Manager, then delete the file"
-} else {
-    "Put away the login Claude Code left in a file behind the keychain, then delete the file"
+// Claude Code keeps its login in the file alone on Linux, so nothing is left behind there.
+const STOW: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "Put away the login Claude Code left in a file behind the keychain, then delete the file"
+    }
+    Os::Linux => {
+        "Put away the login Claude Code left in a file behind the store it keeps its login in, \
+         then delete the file"
+    }
+    Os::Windows => {
+        "Put away the login Claude Code left in a file behind Credential Manager, then delete \
+         the file"
+    }
+};
+
+// One way of keeping them on macOS and Windows, two on Linux.
+const VAULT: &str = match pitboard_core::host::OS {
+    Os::MacOs => "Where parked logins are kept: in the login keychain",
+    Os::Linux => "Where parked logins are kept: in the login keyring, or in 0600 files",
+    Os::Windows => "Where parked logins are kept: in files sealed to your Windows account",
 };
 
 #[derive(Subcommand)]
@@ -172,6 +199,11 @@ enum Command {
         #[command(subcommand)]
         what: ScheduleCommand,
     },
+    #[command(about = VAULT)]
+    Vault {
+        #[command(subcommand)]
+        what: Option<vault::VaultCommand>,
+    },
     /// What Pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -220,6 +252,7 @@ impl Command {
             Command::Adopt => "adopt",
             Command::Renew { .. } => "renew",
             Command::Schedule { .. } => "schedule",
+            Command::Vault { .. } => "vault",
             Command::Log { .. } => "log",
             Command::Uninstall { .. } => "uninstall",
             Command::Rename { .. } => "rename",
@@ -712,7 +745,7 @@ fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> Result<bool, Error>) 
     if let Some(refused) = left.refusal() {
         return Some(Report::failed(Some("stow"), refused));
     }
-    match confirm(&left_question(pitboard_core::host::OS, &left)) {
+    match confirm(&left_question(&left)) {
         Ok(true) => {}
         Ok(false) => return None,
         Err(refused) => return Some(Report::failed(Some("stow"), refused)),
@@ -726,18 +759,18 @@ fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> Result<bool, Error>) 
                 "account": stowed.kept.account(),
                 "dropped": stowed.dropped,
             }),
-            stowed_lines(pitboard_core::host::OS, &stowed),
+            stowed_lines(&stowed),
         )
     }))
 }
 
-fn left_question(os: pitboard_core::host::Os, left: &pitboard_core::switch::Left) -> String {
-    let lines = pitboard_core::words::left_lines(os, left);
+fn left_question(left: &pitboard_core::switch::Left) -> String {
+    let lines = pitboard_core::words::left_lines(left);
     format!("{}\nPut it away? [y/N] ", lines.join("\n"))
 }
 
-fn stowed_lines(os: pitboard_core::host::Os, stowed: &pitboard_core::switch::Stowed) -> String {
-    pitboard_core::words::stowed_lines(os, stowed)
+fn stowed_lines(stowed: &pitboard_core::switch::Stowed) -> String {
+    pitboard_core::words::stowed_lines(stowed)
         .into_iter()
         .map(|line| format!("{line}\n"))
         .collect()
@@ -979,7 +1012,8 @@ fn adopt(pitboard: &Pitboard) -> Report {
 
 fn repair(pitboard: &Pitboard) -> Report {
     changed("repair", pitboard.repair(), |r| {
-        let human = repaired(pitboard_core::host::OS, &r, &pitboard.parks_folder());
+        let place = pitboard.vault().ok().and_then(|kept| kept.place);
+        let human = repaired(place, &r, &pitboard.parks_folder());
         (
             json!({
                 "given_back": r.given_back.iter().map(|(label, service)| json!({
@@ -996,14 +1030,13 @@ fn repair(pitboard: &Pitboard) -> Report {
     })
 }
 
-// Parked logins are keychain items the whole Mac shares, and on Linux and Windows files in the
-// vault of this Pitboard directory.
+// A park nobody can account for may be another Pitboard's in a vault every home shares, and a
+// vault of files is this Pitboard directory's alone.
 fn repaired(
-    os: pitboard_core::host::Os,
+    vault: Option<Vault>,
     r: &pitboard_core::switch::Reclaimed,
     parks: &std::path::Path,
 ) -> String {
-    use pitboard_core::host::Os;
     if r.is_empty() {
         return "Every parked login here is accounted for.\n".to_string();
     }
@@ -1022,11 +1055,17 @@ fn repaired(
         ));
     }
     if !r.strangers.is_empty() {
-        let why = match os {
-            Os::MacOs => {
+        let why = match vault {
+            Some(Vault::Keychain) => {
                 "the keychain is shared by the whole machine, and they may be another Pitboard's"
             }
-            Os::Linux | Os::Windows => "Pitboard deletes only a parked login it wrote down",
+            Some(Vault::SecretService) => {
+                "the login keyring is shared by every Pitboard directory of your session, and \
+                 they may be another Pitboard's"
+            }
+            Some(Vault::Files | Vault::SealedFiles) | None => {
+                "Pitboard deletes only a parked login it wrote down"
+            }
         };
         said.push_str(&format!(
             "{} parked login(s) here belong to no account Pitboard knows and were \
@@ -1035,11 +1074,15 @@ fn repaired(
         ));
     }
     if !r.unreadable.is_empty() {
-        let next = match os {
-            Os::MacOs => " Unlock the keychain and run this again.",
+        let next = match vault {
+            Some(Vault::Keychain) => " Unlock the keychain and run this again.",
+            Some(Vault::SecretService) => {
+                " Run this again in your desktop session, where signing in unlocks the login \
+                 keyring."
+            }
             // A sealed park does not open in a logon without this account's key, as over SSH.
-            Os::Windows => " Run this again from a desktop session.",
-            Os::Linux => "",
+            Some(Vault::SealedFiles) => " Run this again from a desktop session.",
+            Some(Vault::Files) | None => "",
         };
         said.push_str(&format!(
             "{} could not be read this time and were left alone.{next}\n",
@@ -1103,7 +1146,7 @@ fn uninstall_question(pitboard: &Pitboard) -> String {
     )
 }
 
-fn uninstall(pitboard: &Pitboard, os: pitboard_core::host::Os) -> Report {
+fn uninstall(pitboard: &Pitboard, os: Os) -> Report {
     let folder = pitboard.shown(&pitboard.directory());
     changed("uninstall", pitboard.uninstall(), |removed| {
         let mut human = format!(
@@ -1411,6 +1454,7 @@ fn main() -> ExitCode {
         Command::Adopt => adopt(&pitboard),
         Command::Renew { .. } => renew(&pitboard),
         Command::Schedule { ref what } => schedule(&pitboard, what),
+        Command::Vault { ref what } => vault::run(&pitboard, what.as_ref()),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             let question = uninstall_question(&pitboard);
@@ -1624,7 +1668,7 @@ mod tests {
     /// Once it has, it says the same of what it did.
     #[test]
     fn stow_asks_saying_what_the_file_holds_and_says_what_it_did() {
-        use pitboard_core::host::Os;
+        use pitboard_core::host::SecretStore;
         use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
         let path = std::path::PathBuf::from("/Users/x/.claude/.credentials.json");
         let parked = Kept::ParkedNow {
@@ -1632,11 +1676,12 @@ mod tests {
         };
         let left = Left {
             path: path.clone(),
+            store: SecretStore::Keychain,
             seen: "0123456789abcdef".into(),
             login: Foreseen::Kept(parked),
             dropped: vec!["mcpOAuth".into()],
         };
-        let question = left_question(Os::MacOs, &left);
+        let question = left_question(&left);
         assert_eq!(
             question,
             "/Users/x/.claude/.credentials.json holds `work`'s login, and Pitboard holds no \
@@ -1649,20 +1694,21 @@ mod tests {
              signed out.\n\
              Put it away? [y/N] "
         );
-        let on_windows = left_question(Os::Windows, &left);
+        let on_windows = left_question(&Left {
+            store: SecretStore::CredentialManager,
+            ..left
+        });
         assert!(
             on_windows.contains("Claude Code's document in Credential Manager keeps its own.")
                 && on_windows.contains("such as one in a sign-in over SSH with a key, is signed"),
             "{on_windows}"
         );
-        let said = stowed_lines(
-            Os::MacOs,
-            &Stowed {
-                path,
-                kept: Kept::NoLogin,
-                dropped: vec!["mcpOAuth".into(), "coworkRemoteDevice".into()],
-            },
-        );
+        let said = stowed_lines(&Stowed {
+            path,
+            store: SecretStore::Keychain,
+            kept: Kept::NoLogin,
+            dropped: vec!["mcpOAuth".into(), "coworkRemoteDevice".into()],
+        });
         assert_eq!(
             said,
             "Deleted /Users/x/.claude/.credentials.json, which held no Claude Code login.\n\
@@ -1680,21 +1726,20 @@ mod tests {
         ));
     }
 
-    // Parked logins are keychain items the whole Mac shares, and on Linux and Windows files in
-    // the vault of this Pitboard directory, which no keychain locks.
+    // Keychain items the whole Mac shares, Secret Service items every home of a Linux session
+    // shares, and files in the vault of this Pitboard directory, which nothing locks.
     #[test]
-    fn repair_says_why_it_left_parked_logins_alone_in_the_words_of_its_system() {
-        use pitboard_core::host::Os;
+    fn repair_says_why_it_left_parked_logins_alone_in_the_words_of_its_vault() {
         let left = pitboard_core::switch::Reclaimed {
             strangers: vec!["pitboard-park-a-1".into()],
             unreadable: vec!["pitboard-park-b-1".into()],
             ..Default::default()
         };
-        let said = |os| repaired(os, &left, std::path::Path::new("/x/parks"));
+        let said = |vault| repaired(Some(vault), &left, std::path::Path::new("/x/parks"));
         let stranger = "1 parked login(s) here belong to no account Pitboard knows and were not \
                         written down by this one. Left alone:";
         assert_eq!(
-            said(Os::MacOs),
+            said(Vault::Keychain),
             format!(
                 "{stranger} the keychain is shared by the whole machine, and they may be another \
                  Pitboard's.\n\
@@ -1703,7 +1748,16 @@ mod tests {
             )
         );
         assert_eq!(
-            said(Os::Windows),
+            said(Vault::SecretService),
+            format!(
+                "{stranger} the login keyring is shared by every Pitboard directory of your \
+                 session, and they may be another Pitboard's.\n\
+                 1 could not be read this time and were left alone. Run this again in your \
+                 desktop session, where signing in unlocks the login keyring.\n"
+            )
+        );
+        assert_eq!(
+            said(Vault::SealedFiles),
             format!(
                 "{stranger} Pitboard deletes only a parked login it wrote down.\n\
                  1 could not be read this time and were left alone. Run this again from a \
@@ -1711,7 +1765,7 @@ mod tests {
             )
         );
         assert_eq!(
-            said(Os::Linux),
+            said(Vault::Files),
             format!(
                 "{stranger} Pitboard deletes only a parked login it wrote down.\n\
                  1 could not be read this time and were left alone.\n"
@@ -1775,13 +1829,12 @@ mod tests {
                 .with_pitboard_home(elsewhere.clone())
                 .with_memory_stores(MemoryHost::new()),
         );
-        let named = if cfg!(windows) {
-            elsewhere.display().to_string()
-        } else {
-            std::path::Path::new("~")
+        let named = match pitboard_core::host::OS {
+            Os::Windows => elsewhere.display().to_string(),
+            Os::MacOs | Os::Linux => std::path::Path::new("~")
                 .join("elsewhere")
                 .display()
-                .to_string()
+                .to_string(),
         };
         let asked = uninstall_question(&pitboard);
         assert!(
@@ -1804,7 +1857,6 @@ mod tests {
     // A warm-up's tool runs in a home inside Pitboard's directory while it holds `warm.lock`.
     #[test]
     fn uninstall_keeps_the_folder_a_warm_up_runs_in_and_says_so() {
-        use pitboard_core::host::Os;
         use pitboard_core::testing::MemoryHost;
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().join("home");
@@ -2161,9 +2213,16 @@ mod tests {
 
     #[test]
     // windows: macOS and Linux print this help; Windows' has the tests below
-    #[cfg(not(windows))]
-    fn the_help_reads_as_it_did_off_windows() {
+    #[cfg(target_os = "macos")]
+    fn the_help_reads_as_it_did_on_macos() {
         insta::assert_snapshot!("help", every_help());
+    }
+
+    #[test]
+    // windows: macOS and Linux print this help; Windows' has the tests below
+    #[cfg(target_os = "linux")]
+    fn the_help_reads_as_it_did_on_linux() {
+        insta::assert_snapshot!("help_on_linux", every_help());
     }
 
     // Claude Code's login file on Windows sits behind Credential Manager.
@@ -2354,14 +2413,34 @@ mod tests {
 
     #[test]
     // windows: macOS and Linux print this help, tree and these scripts; Windows' are the test below
-    #[cfg(not(windows))]
-    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_off_windows() {
+    #[cfg(target_os = "macos")]
+    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_on_macos() {
         insta::assert_json_snapshot!("command_tree", command_tree());
         insta::assert_snapshot!("help_in_80_columns", every_help_typed());
         insta::assert_snapshot!("completions_zsh", completions(clap_complete::Shell::Zsh));
         insta::assert_snapshot!("completions_fish", completions(clap_complete::Shell::Fish));
         insta::assert_snapshot!(
             "completions_elvish",
+            completions(clap_complete::Shell::Elvish)
+        );
+    }
+
+    #[test]
+    // windows: macOS and Linux print this help, tree and these scripts; Windows' are the test below
+    #[cfg(target_os = "linux")]
+    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_on_linux() {
+        insta::assert_json_snapshot!("command_tree_on_linux", command_tree());
+        insta::assert_snapshot!("help_in_80_columns_on_linux", every_help_typed());
+        insta::assert_snapshot!(
+            "completions_zsh_on_linux",
+            completions(clap_complete::Shell::Zsh)
+        );
+        insta::assert_snapshot!(
+            "completions_fish_on_linux",
+            completions(clap_complete::Shell::Fish)
+        );
+        insta::assert_snapshot!(
+            "completions_elvish_on_linux",
             completions(clap_complete::Shell::Elvish)
         );
     }
@@ -2377,9 +2456,9 @@ mod tests {
         );
     }
 
-    // Pitboard switches Claude Desktop on macOS alone; Linux's help keeps the words it had.
+    // Pitboard switches Claude Desktop on macOS alone, and only macOS keeps a login in a keychain.
     #[test]
-    fn the_help_names_claude_desktop_only_off_windows() {
+    fn the_help_names_claude_desktop_only_on_macos() {
         let help = |command: Option<&str>| {
             let mut cli = Cli::command();
             let said = match command {
@@ -2395,37 +2474,45 @@ mod tests {
                 .join(" ")
         };
         let enroll = help(Some("enroll"));
-        if cfg!(windows) {
-            let every = every_help();
-            assert!(!every.contains("Desktop"), "{every}");
-            assert!(!every.contains("desktop/"), "{every}");
-            assert!(
-                enroll
-                    .contains("`codex/work` names a Codex account; a bare name means Claude Code"),
-                "{enroll}"
-            );
-            assert!(help(Some("use")).contains("such as `work` or `codex/work`"));
-            assert!(help(None).contains(
-                "Switch Claude Code and Codex between your own accounts without signing out, \
-                 and see what each account has left"
-            ));
-            return;
+        match pitboard_core::host::OS {
+            Os::MacOs => {
+                assert!(
+                    enroll.contains(
+                        "`codex/work` names a Codex account, `desktop/work` a Claude Desktop \
+                         one; a bare name means Claude Code"
+                    ),
+                    "{enroll}"
+                );
+                assert!(help(Some("use")).contains("`desktop/work`"));
+                assert!(help(None).contains(
+                    "Switch Claude Code, Codex and Claude Desktop between your own accounts \
+                     without signing out, and see what each Claude Code and Codex account has \
+                     left"
+                ));
+                assert!(
+                    help(Some("status"))
+                        .contains("how much each Claude Code and Codex account has left")
+                );
+                assert!(help(Some("stow")).contains("in a file behind the keychain"));
+            }
+            Os::Linux | Os::Windows => {
+                let every = every_help();
+                for named in ["Desktop", "desktop/", "keychain"] {
+                    assert!(!every.contains(named), "{named}: {every}");
+                }
+                assert!(
+                    enroll.contains(
+                        "`codex/work` names a Codex account; a bare name means Claude Code"
+                    ),
+                    "{enroll}"
+                );
+                assert!(help(Some("use")).contains("such as `work` or `codex/work`"));
+                assert!(help(None).contains(
+                    "Switch Claude Code and Codex between your own accounts without signing out, \
+                     and see what each account has left"
+                ));
+            }
         }
-        assert!(
-            enroll.contains(
-                "`codex/work` names a Codex account, `desktop/work` a Claude Desktop one; a bare \
-                 name means Claude Code"
-            ),
-            "{enroll}"
-        );
-        assert!(help(Some("use")).contains("`desktop/work`"));
-        assert!(help(None).contains(
-            "Switch Claude Code, Codex and Claude Desktop between your own accounts without \
-                 signing out, and see what each Claude Code and Codex account has left"
-        ));
-        assert!(
-            help(Some("status")).contains("how much each Claude Code and Codex account has left")
-        );
     }
 
     #[test]
@@ -2457,6 +2544,8 @@ mod tests {
             "pitboard schedule install",
             "pitboard schedule status",
             "pitboard schedule uninstall",
+            "pitboard vault status",
+            "pitboard vault move",
             "pitboard log",
             "pitboard uninstall",
             "pitboard rename",
@@ -2473,6 +2562,10 @@ mod tests {
             assert!(page.contains(option), "{option} missing:\n{page}");
         }
         assert!(page.contains("[possible values: bash"), "{page}");
+        assert!(
+            page.contains("[possible values: secret\\-service, files]"),
+            "{page}"
+        );
         assert!(page.contains("[default: 20]"), "{page}");
         assert!(
             !page.contains("pitboard manpage"),

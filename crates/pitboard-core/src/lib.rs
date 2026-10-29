@@ -69,6 +69,15 @@ pub mod provider;
 pub mod redact;
 pub mod release;
 pub mod schedule;
+// The Secret Service the tests start on Linux, reached as `testing::SecretService`.
+// windows: the Secret Service is Linux's own
+#[cfg(all(target_os = "linux", any(test, feature = "test-support")))]
+#[doc(hidden)]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "it writes the bus's config and the daemons' logs in a test's own folder"
+)]
+pub mod secret_service_testing;
 pub mod service;
 pub(crate) mod settings;
 pub mod state;
@@ -128,6 +137,8 @@ pub mod testing {
     pub use crate::provider::claude::paths::live_service;
     pub use crate::provider::claude::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
     pub use crate::provider::jwt::unsigned as unsigned_token;
+    #[cfg(target_os = "linux")]
+    pub use crate::secret_service_testing::SecretService;
     /// The program the integration tests, the model's tests and the fixtures' tests start in
     /// place of `claude`, `codex` and every other program they run, on every system.
     pub use crate::stand_in;

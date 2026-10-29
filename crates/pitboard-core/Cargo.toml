@@ -2,7 +2,7 @@
 name = "pitboard-core"
 description = "The engine behind Pitboard: switches Claude Code, Codex and Claude Desktop between accounts by parking and restoring their logins. Its API serves Pitboard's own front ends."
 # Its own line, apart from Pitboard's: it follows the core's API.
-version = "0.17.0"
+version = "0.18.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -33,6 +33,10 @@ toml.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+secret-service.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation.workspace = true

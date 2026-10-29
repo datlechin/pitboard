@@ -1,9 +1,13 @@
-//! Linux: files, a vault of files, `/proc` and systemd.
+//! Linux: files, the Secret Service, `/proc`, systemd and the D-Bus both are asked over.
 //!
 //! Claude Code has no keyring backend on Linux, so its login is a plaintext file it sets to
-//! 0600, and Pitboard's parked logins are 0600 files in a 0700 directory beside it.
+//! 0600. Pitboard parks each login as an item of the Secret Service, or as a 0600 file in a 0700
+//! directory beside it where a home recorded files: one where no Secret Service answered, as
+//! over SSH or in a container, and one an earlier Pitboard kept.
 
+mod bus;
 mod procfs;
+mod secret_service;
 mod systemd;
 
 pub(super) use super::unix::awake;
@@ -12,8 +16,10 @@ pub(crate) use super::unix::{fs, proc, user};
 
 use super::administered::Administered;
 use super::unix::service;
+use super::unix::shell::Spawn;
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
+use crate::state::VaultForm;
 use crate::store::vault::FileVault;
 use crate::store::{PlainFile, RawStore};
 use std::path::{Path, PathBuf};
@@ -21,14 +27,28 @@ use std::sync::Arc;
 
 pub(super) const OS: Os = Os::Linux;
 
-/// What `posix_spawn` is told when Pitboard starts the person's login shell: a session of its
-/// own. Linux has no flag that keeps the rest of this process's descriptors from it; every
-/// one Rust opens is closed on exec already, and no app on Linux asks yet.
-pub(super) const SPAWN_FLAGS: libc::c_short = libc::POSIX_SPAWN_SETSID;
+/// How `posix_spawn` starts the person's login shell: in a session of its own, and on glibc
+/// with none of this process's descriptors but the three it is handed, whatever a library in
+/// the app opened without close-on-exec. Linux has no flag that does it, so it is glibc 2.34's
+/// file action. musl has none, and only an app asks for the login shell: the Linux app links
+/// glibc, and the musl command line never asks.
+pub(super) const SPAWN: Spawn = Spawn {
+    flags: libc::POSIX_SPAWN_SETSID,
+    #[cfg(target_env = "gnu")]
+    close_the_rest: Some(close_from_three),
+    #[cfg(not(target_env = "gnu"))]
+    close_the_rest: None,
+};
+
+#[cfg(target_env = "gnu")]
+fn close_from_three(actions: &mut super::unix::shell::Actions) -> bool {
+    // SAFETY: the actions are initialised, and stay where they are until they are destroyed.
+    unsafe { libc::posix_spawn_file_actions_addclosefrom_np(actions.raw(), 3) == 0 }
+}
 
 /// Linux has a login shell to ask, as macOS does.
 pub(super) fn login_path(env: &Environment) -> LoginPath {
-    super::unix::shell::login_path(env, SPAWN_FLAGS)
+    super::unix::shell::login_path(env, SPAWN)
 }
 
 pub(super) fn rename_exclusive(from: &std::ffi::CStr, to: &std::ffi::CStr) -> libc::c_int {
@@ -61,12 +81,27 @@ impl Host for Linux {
         Box::new(PlainFile::at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
-        Box::new(FileVault::new(ctx))
+    fn vault_forms(&self) -> &'static [VaultForm] {
+        &[VaultForm::SecretService, VaultForm::Files]
     }
 
-    fn vault_is_shared(&self) -> bool {
-        false
+    fn answers(&self, ctx: &Context, form: VaultForm) -> bool {
+        match form {
+            VaultForm::SecretService => secret_service::answers(ctx),
+            VaultForm::Files => true,
+        }
+    }
+
+    fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {
+        match form {
+            Some(VaultForm::SecretService) => Box::new(secret_service::Vault::of(ctx)),
+            Some(VaultForm::Files) | None => Box::new(FileVault::new(ctx)),
+        }
+    }
+
+    // A collection belongs to the session, a vault of files to its home.
+    fn vault_is_shared(&self, form: Option<VaultForm>) -> bool {
+        form == Some(VaultForm::SecretService)
     }
 
     // Nothing asks: Claude Desktop's data folder is refused here first.
@@ -173,7 +208,7 @@ pub(crate) fn write_jar(_path: &Path, _cookies: &[super::Cookie]) -> std::io::Re
 
 pub(super) fn host() -> Arc<dyn Host> {
     Arc::new(Linux {
-        scheduler: systemd::Systemd::new(service::system()),
+        scheduler: systemd::Systemd::new(service::system(), Arc::new(systemd::UserManager)),
     })
 }
 
@@ -211,15 +246,16 @@ fn started_as(
         .unwrap_or(running)
 }
 
-/// systemd as a machine in memory has it: real unit files in the test's own home, and a
-/// service manager that asks nobody.
+/// systemd as a machine in memory has it: real unit files in the test's own home, a user
+/// manager that reads them there for that home, and a service manager that asks nobody.
 #[cfg(any(test, feature = "test-support"))]
 pub(super) fn pretend_scheduler(
     refuse_start: Arc<std::sync::atomic::AtomicBool>,
 ) -> Option<Box<dyn Scheduler>> {
-    Some(Box::new(systemd::Systemd::new(Arc::new(
-        service::Pretend { refuse_start },
-    ))))
+    Some(Box::new(systemd::Systemd::new(
+        Arc::new(service::Pretend { refuse_start }),
+        Arc::new(systemd::Pretend),
+    )))
 }
 
 #[cfg(test)]
@@ -274,6 +310,38 @@ mod tests {
             ("F2FS_SUPER_MAGIC", 0xF2F5_2010),
         ] {
             assert!(!written_elsewhere(magic), "{name}");
+        }
+    }
+
+    // The account's own are the spec's defaults in its passwd home; the test's own may be others.
+    #[test]
+    fn a_build_for_tests_on_linux_refuses_the_apps_folders_and_names_no_mac_library() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let (data, cache) = (scratch.path().join("data"), scratch.path().join("cache"));
+        let named = |path: &Path| path.to_string_lossy().into_owned();
+        let env: Environment = [
+            ("HOME", named(&scratch.path().join("home"))),
+            ("XDG_DATA_HOME", named(&data)),
+            ("XDG_CACHE_HOME", named(&cache)),
+        ]
+        .into_iter()
+        .collect();
+        let places = super::super::real_login_places(Some(&Context::for_command_line(&env)))
+            .expect("this account's places");
+        let own = user::accounts_own_home().expect("this account has a home");
+        for folder in [own.join(".local/share"), own.join(".cache"), data, cache] {
+            for app in ["com.usepitboard.Pitboard", "com.usepitboard.Pitboard.Devel"] {
+                let place = folder.join(app);
+                assert!(places.contains(&place), "{} in {places:?}", place.display());
+            }
+        }
+        for place in &places {
+            let mac = place.components().any(|part| {
+                ["Library", "Applications"]
+                    .map(std::ffi::OsStr::new)
+                    .contains(&part.as_os_str())
+            });
+            assert!(!mac, "{}", place.display());
         }
     }
 

@@ -541,8 +541,11 @@ mod tests {
             );
             assert_eq!(
                 places(Os::Linux, &[("HOME", "/home/x")], tool),
-                [under("/home/x", &[".local", "bin"])],
-                "{tool}"
+                [
+                    under("/home/x", &[".local", "bin"]),
+                    "/home/linuxbrew/.linuxbrew/bin".into()
+                ],
+                "Homebrew's default prefix on Linux: {tool}"
             );
         }
 
@@ -727,25 +730,38 @@ mod tests {
                 .map(Path::to_path_buf)
         };
         let mac = |app: &str| Some(Path::new(app).join("Contents/Helpers/pitboard"));
+        let linux = |bin: &str| Some(Path::new(bin).join("pitboard"));
         let windows = |install: &str| Some(full(install).join("bin").join("pitboard.exe"));
-        for (app, on_a_mac, on_windows) in [
+        for (app, on_a_mac, on_linux, on_windows) in [
             (
                 full("/Applications/Pitboard.app"),
                 mac("/Applications/Pitboard.app"),
+                None,
                 None,
             ),
             (
                 full("/Users/x/My Apps/Pitboard.app"),
                 mac("/Users/x/My Apps/Pitboard.app"),
                 None,
+                None,
             ),
+            (full("/usr/bin/pitboard-app"), None, linux("/usr/bin"), None),
+            (
+                full("/Users/x/My Tools/bin/pitboard-app"),
+                None,
+                linux("/Users/x/My Tools/bin"),
+                None,
+            ),
+            (full("/usr/bin/pitboard"), None, None, None),
             (
                 full("/Program Files/Pitboard/Pitboard.exe"),
+                None,
                 None,
                 windows("/Program Files/Pitboard"),
             ),
             (
                 full("/Users/x/Programs/My Pitboard/PITBOARD.EXE"),
+                None,
                 None,
                 windows("/Users/x/Programs/My Pitboard"),
             ),
@@ -753,16 +769,18 @@ mod tests {
                 full("/Users/x/Programs/Pitboard/pitboard.exe.lnk"),
                 None,
                 None,
+                None,
             ),
             (
                 full("/Users/x/pitboard/apps/macos/.build/debug"),
+                None,
                 None,
                 None,
             ),
         ] {
             let inside = match OS {
                 Os::MacOs => on_a_mac,
-                Os::Linux => None,
+                Os::Linux => on_linux,
                 Os::Windows => on_windows,
             };
             assert_eq!(scheduled(Some(&app)), inside, "{}", app.display());
@@ -928,7 +946,8 @@ mod tests {
             places(Os::Linux, &[("HOME", "/home/x")], None),
             [
                 under("/home/x", &[".cargo", "bin"]),
-                under("/home/x", &[".local", "bin"])
+                under("/home/x", &[".local", "bin"]),
+                "/home/linuxbrew/.linuxbrew/bin".into()
             ]
         );
         let windows = [

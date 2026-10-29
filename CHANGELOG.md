@@ -7,15 +7,55 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `pitboard vault` says where parked logins are kept, and on Linux `pitboard vault move` moves
+  them between the login keyring and files.
+- On Linux, `pitboard doctor` says where parked logins are kept, and warns where they are files
+  though a Secret Service answers.
+- On Linux, `pitboard doctor` warns of a renewal or watch unit an earlier Pitboard wrote, and
+  says to install it again.
+- `pitboard doctor` warns when a run of daily renewal, or a switch or warm-up of the watch
+  service, could not open the parked logins, such as in a locked keychain or login keyring, until
+  a later one opens them.
+- On Linux, daily renewal also runs at each sign-in to GNOME or KDE Plasma, so a run that found
+  the login keyring locked catches up once you sign in.
+
 ### Changed
 
+- **Breaking:** On Linux, `pitboard schedule install` and `pitboard watch install` refuse with
+  `schedule_manager_elsewhere` where your user's systemd would not read the unit or would run it
+  in another home, and their `uninstall` and `pitboard uninstall` where it runs another home.
+  Give the shell and systemd the same `HOME` and `XDG_CONFIG_HOME`.
+- **Breaking:** The public API of `pitboard-core` changes; [its
+  documentation](https://docs.rs/pitboard-core/0.18.0/pitboard_core/) shows the new one.
 - The app and `pitboard watch` see a switch or a reading another Pitboard recorded as soon as it
   is written, instead of looking for one every 2 seconds, which they still do on a network drive.
+- On Linux, Pitboard writes its units in `$XDG_CONFIG_HOME/systemd/user`.
+- The account index is schema 9, which earlier versions cannot read, so update the command line
+  and the app together.
+- On Linux, a new Pitboard directory keeps its parked logins in the Secret Service's default
+  keyring, and in 0600 files only where no Secret Service answers; one that kept them in files
+  keeps them there.
+- On Linux, a change stops with `credential_store_locked` while the login keyring is locked,
+  and only a command run in your desktop session asks to unlock it, never daily renewal, the
+  watch service or a run over SSH.
 
 ### Fixed
 
 - Where Codex has an account of the same name, the app keeps what a switch to a Claude Code
   account said once you sign in to that account again or rename it, where it put the notice away.
+- On Linux, daily renewal runs once each calendar day and catches up after the computer slept or
+  was off, where it counted only time awake.
+- On Linux, a renewal or watch unit whose Pitboard was removed is skipped rather than failing
+  each day or at each sign-in.
+- On Linux, daily renewal and the watch service run a `pitboard` whose path holds a space or a
+  `%`.
+- On Linux, Pitboard's messages, `pitboard doctor` and `pitboard --help` no longer name the
+  keychain, a fallback store, the menu bar, Activity Monitor or Claude Desktop.
+- On Windows, `pitboard doctor` says Credential Manager still holds Claude Code's login under
+  storage v5, and no longer says to unlock a keychain for parked logins it has yet to delete or
+  account for.
 
 ## [1.0.0-beta.7] - 2026-10-28
 

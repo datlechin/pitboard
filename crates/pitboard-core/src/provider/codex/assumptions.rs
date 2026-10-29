@@ -66,10 +66,9 @@ const fn later_on_windows(
 /// on a Mac, or of the builds an entry names, and the conformance run reads the facts from
 /// the macOS, Linux and Windows builds alike.
 ///
-/// Two facts were read on a Mac alone: the app server's parent and the keychain stores. They
-/// stay read on Linux, since the code that stands on them, `holders` and the refusal of a
-/// keychain store, runs there as it does on macOS. A Linux reading of each of its own is no
-/// part of the Windows work.
+/// One fact was read on a Mac alone, the app server's parent. It stays read on Linux, since
+/// `holders`, which stands on it, runs there as it does on macOS. Linux's keyring stores are
+/// a fact of their own, `codex_keyring_store_on_linux`.
 pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     PerSystem {
         name: "codex_login_location",
@@ -145,7 +144,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     PerSystem {
         name: "codex_keychain_stores_are_its_own",
         macos: Read(VERIFIED_AGAINST),
-        linux: Read(VERIFIED_AGAINST),
+        linux: NotRead("Linux's are codex_keyring_store_on_linux's"),
         windows: NotRead(
             "Windows has no keychain; what Codex's other stores keep there is codex_windows_stores'",
         ),
@@ -153,8 +152,14 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     PerSystem {
         name: "codex_windows_stores",
         macos: NotRead("macOS's are codex_keychain_stores_are_its_own's"),
-        linux: NotRead("Linux's are codex_keychain_stores_are_its_own's"),
+        linux: NotRead("Linux's are codex_keyring_store_on_linux's"),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
+    },
+    PerSystem {
+        name: "codex_keyring_store_on_linux",
+        macos: NotRead("macOS's are codex_keychain_stores_are_its_own's"),
+        linux: Read("0.165.0"),
+        windows: NotRead("Windows' are codex_windows_stores'"),
     },
     everywhere("codex_identity_is_the_person", VERIFIED_AGAINST),
     everywhere("codex_refusal_is_invalid_grant", VERIFIED_AGAINST),
@@ -631,6 +636,43 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         depends: "provider::codex::layers and Codex::live's refusal",
         probe: &["Codex Auth", "secret_auth_storage", "codex_auth.age"],
         absent: &[],
+    },
+    Assumption {
+        name: "codex_keyring_store_on_linux",
+        fact: "on Linux `keyring` keeps the login as one Secret Service item and deletes \
+               `auth.json` once it saved there. It goes through keyring 3.6.3 with \
+               `linux-native-async-persistent`, whose store builds a Secret Service credential \
+               alone and never writes the kernel keyring: an item in the default collection \
+               with the attributes `service` `Codex Auth`, `username` `cli|<16 hex>`, `target` \
+               `default` and `application` `rust-keyring`, labelled `cli|<16 hex>@Codex \
+               Auth:default (keyring v3.6.3)`, found in any collection by its service, username \
+               and target, and unlocked, as its collection is, where it is locked. `auto` saves \
+               there too, and keeps the login in `auth.json` only where that fails. \
+               `secret_auth_storage`, off by default there, keeps it in \
+               `secrets/codex_auth.age` instead, under a passphrase kept the same way as \
+               `codex`, `secrets|<16 hex>`. The 16 hex begin the SHA-256 of the home \
+               canonicalised, or of the home as given where that fails",
+        read_from: "DirectKeyringAuthStorage, AutoAuthStorage and compute_store_key in \
+                    codex-rs/login/src/auth/storage.rs, compute_keyring_account and \
+                    KEYRING_SERVICE in codex-rs/secrets/src/lib.rs, `secret_auth_storage`'s \
+                    `default_enabled` in codex-rs/features/src/lib.rs, and \
+                    codex-rs/keyring-store's Cargo.toml and src/lib.rs, at tag rust-v0.165.0; \
+                    and the default store, KeyutilsPersistentCredentialBuilder::build and \
+                    SsCredential in src/lib.rs, src/keyutils_persistent.rs and \
+                    src/secret_service.rs of keyring 3.6.3, the version Codex's Cargo.lock \
+                    pins; read on 2026-10-28. Both linux builds of 0.165.0 hold SsCredential \
+                    and the label's version, and neither KeyutilsCredential nor linux-keyutils. \
+                    `rust-keyring` is no printable run in the linux-x64 build",
+        verified_against: "0.165.0",
+        depends: "provider::codex::engine's refusal of `keyring`, `auto` and the secret store \
+                  on Linux, and the words that say where Codex keeps its login there",
+        probe: &[
+            "SsCredential",
+            "(keyring v3.6.3)",
+            "Codex Auth",
+            "failed to deserialize CLI auth from keyring",
+        ],
+        absent: &["KeyutilsCredential", "linux-keyutils"],
     },
     Assumption {
         name: "codex_identity_is_the_person",
@@ -1216,7 +1258,11 @@ mod tests {
             "codex_windows_system_proxy",
             "codex_windows_sandbox_token",
         ];
-        let linux = ["codex_wsl", "codex_linux_app"];
+        let linux = [
+            "codex_wsl",
+            "codex_linux_app",
+            "codex_keyring_store_on_linux",
+        ];
         for line in PER_SYSTEM
             .iter()
             .filter(|l| !windows.contains(&l.name) && !linux.contains(&l.name))
@@ -1226,7 +1272,8 @@ mod tests {
                 matches!(line.on(Platform::Linux), Read(_)),
                 ![
                     "codex_managed_preferences",
-                    "codex_runs_inside_the_chatgpt_app"
+                    "codex_runs_inside_the_chatgpt_app",
+                    "codex_keychain_stores_are_its_own",
                 ]
                 .contains(&line.name),
                 "{} on linux",
@@ -1236,6 +1283,24 @@ mod tests {
         let wsl = PER_SYSTEM.iter().find(|l| l.name == "codex_wsl").unwrap();
         assert_eq!(wsl.on(Platform::Linux), Read("0.164.0"));
         assert!(matches!(wsl.on(Platform::MacOs), NotRead(_)));
+    }
+
+    // keyring 3.6.3's Linux store is not macOS's keychain or Windows' Credential Manager.
+    #[test]
+    fn linux_reads_its_keyring_store_as_a_fact_of_its_own() {
+        let line = |name: &str| PER_SYSTEM.iter().find(|l| l.name == name).expect(name);
+        let linux = line("codex_keyring_store_on_linux");
+        assert_eq!(linux.on(Platform::Linux), Read("0.165.0"));
+        for platform in [Platform::MacOs, Platform::Windows] {
+            assert!(matches!(linux.on(platform), NotRead(_)), "{platform:?}");
+        }
+        for name in ["codex_keychain_stores_are_its_own", "codex_windows_stores"] {
+            assert_eq!(
+                line(name).on(Platform::Linux),
+                NotRead("Linux's are codex_keyring_store_on_linux's"),
+                "{name}"
+            );
+        }
     }
 
     /// Each fact read for which store Codex keeps its login in names the build it was last

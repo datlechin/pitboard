@@ -1,6 +1,6 @@
 use super::network::ProxyFact;
 use crate::host::task::Drift;
-use crate::host::{Access, Os};
+use crate::host::{Access, Os, SecretStore, Vault};
 use crate::words as said;
 use std::fmt::Display;
 
@@ -53,9 +53,14 @@ pub(super) const NOTHING_READABLE_BY_OTHERS: &str =
 
 pub(super) fn others_can_read(os: Os, commands: &[String]) -> String {
     let these = match os {
-        Os::MacOs | Os::Linux => {
+        Os::MacOs => {
             "These hold usable OAuth tokens in plain text, which is how Claude Code stores them \
              where there is no keychain. Anyone else on this machine can read them"
+        }
+        // Claude Code's file, and parks Pitboard keeps in files.
+        Os::Linux => {
+            "These hold usable OAuth tokens in plain text. Anyone else on this machine can read \
+             them"
         }
         Os::Windows => {
             "These hold a login: Claude Code's file in plain text, a sealed park only this \
@@ -88,6 +93,10 @@ pub(super) const A_SWITCH_DID_NOT_FINISH: &str = "a switch did not finish";
 pub(super) const THE_NEXT_CHANGE_FINISHES_IT: &str =
     "The next `pitboard use`, `enroll` or `forget` finishes it before anything else.";
 
+// A renewal finishes a move of the parks too, and `pitboard status` renews first.
+pub(super) const THE_NEXT_RENEWAL_FINISHES_IT: &str = "The next `pitboard status`, `use`, \
+     `enroll` or `forget`, or daily renewal, finishes it before anything else.";
+
 pub(super) fn waiting_to_be_deleted(vault: usize, folders: usize) -> String {
     match (vault, folders) {
         (vault, 0) => format!("{vault} waiting to be deleted"),
@@ -100,6 +109,10 @@ pub(super) const DELETED_ON_THE_NEXT_CHANGE: &str = "Pitboard deletes them on it
 
 pub(super) const DELETED_ONCE_THE_KEYCHAIN_OPENS: &str = "Pitboard deletes them on its next \
      change; if they stay, check the keychain is unlocked.";
+
+pub(super) const DELETED_ONCE_THE_LOGIN_KEYRING_OPENS: &str = "Pitboard deletes them on its next \
+     change; if they stay, make that change in your desktop session, where signing in unlocks \
+     the login keyring.";
 
 pub(super) const NO_STABLE_IDENTIFIER: &str = "this machine has no stable identifier";
 
@@ -143,6 +156,14 @@ pub(super) fn could_not_be_read_this_time(names: usize) -> String {
 pub(super) const UNLOCK_AND_RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before \
      creating a login in them and cannot read them back to find out what is there. Unlock the \
      keychain and run any Pitboard command; it resolves them before doing anything else.";
+
+pub(super) const RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before creating a \
+     login in them. Run any Pitboard command; it resolves them before doing anything else.";
+
+pub(super) const RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION: &str = "Pitboard wrote these names down \
+     before creating a login in them and cannot read them back to find out what is there. Run \
+     any Pitboard command in your desktop session, where signing in unlocks the login keyring; \
+     it resolves them before doing anything else.";
 
 pub(super) fn not_switched_to_for(seconds: i64) -> String {
     format!(
@@ -198,6 +219,48 @@ pub(super) const NOTHING_PARKED: &str = "nothing parked to switch to";
 pub(super) const NOT_READ_THE_KEYCHAIN_IS_LOCKED: &str = "not read: the keychain is locked";
 
 pub(super) const UNLOCK_IT_THEN_DOCTOR: &str = "Unlock it, then run `pitboard doctor` again.";
+
+pub(super) const NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED: &str =
+    "not read: the login keyring is locked, or nothing answers for it on this session's bus";
+
+pub(super) const IN_THE_DESKTOP_SESSION_THEN_DOCTOR: &str =
+    "Run `pitboard doctor` again in your desktop session, where signing in unlocks it.";
+
+pub(super) const IN_THE_LOGIN_KEYRING: &str =
+    "in the login keyring, which every Pitboard directory of your session shares";
+
+pub(super) const IN_A_KEYRING_THAT_DOES_NOT_ANSWER: &str = "in the login keyring, which is locked \
+                                                          or which nothing answers for on this \
+                                                          session's bus";
+
+pub(super) fn in_files(folder: &str) -> String {
+    format!("in 0600 files in {folder}; no Secret Service answers on this session's bus")
+}
+
+pub(super) fn in_files_though_a_secret_service_answers(folder: &str) -> String {
+    format!("in 0600 files in {folder}, though a Secret Service answers on this session's bus")
+}
+
+pub(super) const MOVE_INTO_THE_LOGIN_KEYRING: &str =
+    "Run `pitboard vault move secret-service` to keep them in the login keyring instead.";
+
+pub(super) fn moving_into(form: &str) -> String {
+    format!("a move into {form} is under way")
+}
+
+pub(super) fn left_in(parks: usize, form: &str) -> String {
+    format!("{parks} parked login(s) wait to be deleted from {form}")
+}
+
+pub(super) const THE_NEXT_CHANGE_DELETES_THEM: &str = "The next change deletes them.";
+
+// A form in a sentence, its folder named where it is files.
+pub(super) fn form(form: crate::state::VaultForm, folder: &str) -> String {
+    match form {
+        crate::state::VaultForm::SecretService => "the login keyring".to_string(),
+        crate::state::VaultForm::Files => format!("0600 files in {folder}"),
+    }
+}
 
 pub(super) const PARK_DOES_NOT_OPEN: &str = "its parked login does not open in this logon";
 
@@ -493,15 +556,15 @@ pub(super) fn file_refresh(path: impl Display, fingerprint: &str) -> String {
     format!("{path}  ·  refresh {fingerprint}")
 }
 
-pub(super) fn the_file_signs_sessions_in(os: Os) -> String {
-    let cannot = said::out_of_reach(os);
-    let (could_not, such_as, as_login) = match os {
-        Os::MacOs | Os::Linux => (
+pub(super) fn the_file_signs_sessions_in(store: SecretStore) -> String {
+    let cannot = said::out_of_reach(store);
+    let (could_not, such_as, as_login) = match store {
+        SecretStore::Keychain => (
             "the keychain could not be read",
             "in a session started over SSH".to_owned(),
             "`/login` over SSH does".to_owned(),
         ),
-        Os::Windows => (
+        SecretStore::CredentialManager => (
             "Credential Manager could not be reached",
             format!("in {}", said::SSH_SIGN_IN),
             format!("`/login` does in {}", said::SSH_SIGN_IN),
@@ -532,12 +595,12 @@ pub(super) fn file_not_read(path: impl Display, why: impl Display) -> String {
     format!("{path}  ·  not read: {why}")
 }
 
-pub(super) fn delete_it_yourself(os: Os, command: &str) -> String {
+pub(super) fn delete_it_yourself(store: SecretStore, command: &str) -> String {
     format!(
         "Pitboard could not read it, so whether it holds a login, which a session that {} signs \
          in with, cannot be told, and `pitboard stow` cannot put it away. {} Deleting it lets \
          them follow a switch, and takes whatever it holds with it: `{command}`.",
-        said::out_of_reach(os),
+        said::out_of_reach(store),
         while_it_is_there()
     )
 }
@@ -551,7 +614,25 @@ pub(super) const MAYBE_NOT_THE_SAME_FILE: &str = "Pitboard reads the plaintext f
      Code was given a backend of its own, that is not the same file. Check for an update before \
      switching.";
 
-pub(super) const ON_IN_THE_KEYCHAIN: &str = "switched on; the keychain is still where the login is";
+pub(super) fn on_in(store: SecretStore) -> String {
+    format!(
+        "switched on; {} is still where the login is",
+        said::store_in_front(store)
+    )
+}
+
+pub(super) const SWITCHED_ON: &str = "switched on";
+
+pub(super) const ON_IN_ITS_ONE_STORE: &str =
+    "switched on, and this login is in the plaintext file, Claude Code's one store on Linux";
+
+// The file a login is in with the flag on: on Linux it is no fallback (`live_chain_order`).
+pub(super) fn on_in_the_file(os: Os) -> &'static str {
+    match os {
+        Os::MacOs | Os::Windows => ON_IN_THE_FALLBACK_STORE,
+        Os::Linux => ON_IN_ITS_ONE_STORE,
+    }
+}
 
 pub(super) fn refused_as_a_session_starts(accounts: &str) -> String {
     format!(
@@ -1203,6 +1284,20 @@ pub(super) fn runs_daily(program: impl Display) -> String {
     format!("daily  ·  runs {program}")
 }
 
+pub(super) fn renews_by_time_awake(runs: &str) -> String {
+    format!(
+        "{runs}, as an earlier Pitboard wrote it: it counts only time awake, and fails each day \
+         once that Pitboard is gone"
+    )
+}
+
+pub(super) fn fails_once_its_pitboard_is_gone(runs: &str) -> String {
+    format!(
+        "{runs}, as an earlier Pitboard wrote it: it fails at each sign-in once that Pitboard is \
+         gone"
+    )
+}
+
 pub(super) fn drifted_in_task_scheduler(runs: &str, drifted: &[String]) -> String {
     format!("{runs}, but in Task Scheduler it {}", said::listed(drifted))
 }
@@ -1246,6 +1341,56 @@ pub(super) fn last_ran(runs: &str, ago: i64) -> String {
 
 pub(super) fn not_run_yet(runs: &str) -> String {
     format!("{runs}  ·  not run yet")
+}
+
+// Renewal's, as each run of it is one process.
+pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked: bool) -> String {
+    format!(
+        "{runs}, but a run of it, {} ago, could not open {}",
+        said::span(ago),
+        unopened(vault, locked)
+    )
+}
+
+pub(super) fn switch_could_not_open(
+    runs: &str,
+    ago: i64,
+    vault: Option<Vault>,
+    locked: bool,
+) -> String {
+    format!(
+        "{runs}, but a switch or warm-up of it, {} ago, could not open {}",
+        said::span(ago),
+        unopened(vault, locked)
+    )
+}
+
+pub(super) const TRIES_AGAIN_AT_ITS_NEXT_SWITCH: &str =
+    "It tries again at its next switch or warm-up.";
+
+// Where the parked logins a run could not open are kept, and why where the store was locked.
+fn unopened(vault: Option<Vault>, locked: bool) -> &'static str {
+    match (vault, locked) {
+        (Some(Vault::SecretService), true) => {
+            "the login keyring: it was locked, or nothing answered for it"
+        }
+        (Some(Vault::SecretService), false) => "the login keyring",
+        (Some(Vault::Keychain), true) => "the keychain: it was locked",
+        (Some(Vault::Keychain), false) => "the keychain",
+        (Some(Vault::Files | Vault::SealedFiles) | None, _) => "its parked logins",
+    }
+}
+
+// On Linux renewal's service also starts with `graphical-session.target`, which GNOME's and
+// Plasma's session targets start (docs/facts/linux.md).
+pub(super) fn runs_again(os: Os) -> &'static str {
+    match os {
+        Os::Linux => {
+            "Renewal runs again at your next sign-in to GNOME or KDE Plasma, and at its next \
+             daily run."
+        }
+        Os::MacOs | Os::Windows => "Renewal runs again at its next daily run.",
+    }
 }
 
 pub(super) const AGAIN_IN_THE_APP_OR_A_TERMINAL: &str = "Turn daily renewal off and on again: in \
@@ -1434,6 +1579,14 @@ mod tests {
              /home/x/.claude/.credentials.json`."
         );
         assert_eq!(
+            others_can_read(
+                Os::Linux,
+                &["chmod go-rwx /home/x/.claude/.credentials.json".into()]
+            ),
+            "These hold usable OAuth tokens in plain text. Anyone else on this machine can read \
+             them: `chmod go-rwx /home/x/.claude/.credentials.json`."
+        );
+        assert_eq!(
             others_can_read(Os::Windows, &[]),
             "These hold a login: Claude Code's file in plain text, a sealed park only this account \
              opens. Claude Code's file takes the access list of the folder it is in, and a seal \
@@ -1477,6 +1630,27 @@ mod tests {
         assert_eq!(
             not_a_full_path("CODEX_HOME", std::path::Path::new("codex")),
             "CODEX_HOME is `codex`, which is not a full path"
+        );
+    }
+
+    #[test]
+    fn storage_v5_says_where_the_login_is() {
+        assert_eq!(
+            on_in(SecretStore::Keychain),
+            "switched on; the keychain is still where the login is"
+        );
+        assert_eq!(
+            on_in(SecretStore::CredentialManager),
+            "switched on; Credential Manager is still where the login is"
+        );
+        assert_eq!(
+            on_in_the_file(Os::MacOs),
+            "switched on, and this login is in the fallback store"
+        );
+        assert_eq!(on_in_the_file(Os::Windows), on_in_the_file(Os::MacOs));
+        assert_eq!(
+            on_in_the_file(Os::Linux),
+            "switched on, and this login is in the plaintext file, Claude Code's one store on Linux"
         );
     }
 
@@ -1723,7 +1897,7 @@ mod tests {
             "/home/x/.claude/.credentials.json  ·  refresh 0123456789abcdef"
         );
         assert_eq!(
-            the_file_signs_sessions_in(Os::MacOs),
+            the_file_signs_sessions_in(SecretStore::Keychain),
             "Claude Code signs in with this wherever it cannot read the keychain, such as in a \
              session started over SSH, and no switch reaches it. A sign-in made where the keychain \
              could not be read leaves one, as `/login` over SSH does. While it is there, Claude \
@@ -1733,7 +1907,7 @@ mod tests {
              the file, which leaves one login for every session."
         );
         assert_eq!(
-            the_file_signs_sessions_in(Os::Windows),
+            the_file_signs_sessions_in(SecretStore::CredentialManager),
             "Claude Code signs in with this wherever it cannot reach Credential Manager, such as \
              in a sign-in over SSH with a key, and no switch reaches it. A sign-in made where \
              Credential Manager could not be reached leaves one, as `/login` does in a sign-in \
@@ -1759,7 +1933,10 @@ mod tests {
             "/home/x/.claude/.credentials.json  ·  not read: Permission denied"
         );
         assert_eq!(
-            delete_it_yourself(Os::MacOs, "rm '/home/x/.claude/.credentials.json'"),
+            delete_it_yourself(
+                SecretStore::Keychain,
+                "rm '/home/x/.claude/.credentials.json'"
+            ),
             "Pitboard could not read it, so whether it holds a login, which a session that cannot \
              read the keychain signs in with, cannot be told, and `pitboard stow` cannot put it \
              away. While it is there, Claude Code sessions already running at a switch keep the \
@@ -1769,7 +1946,7 @@ mod tests {
         );
         assert_eq!(
             delete_it_yourself(
-                Os::Windows,
+                SecretStore::CredentialManager,
                 r"Remove-Item -LiteralPath 'C:\Users\dana\.claude\.credentials.json'"
             ),
             "Pitboard could not read it, so whether it holds a login, which a session that cannot \
@@ -2351,6 +2528,41 @@ mod tests {
         assert_eq!(
             not_run_yet("daily  ·  runs C:\\pitboard.exe"),
             "daily  ·  runs C:\\pitboard.exe  ·  not run yet"
+        );
+        let runs = "daily  ·  runs /usr/bin/pitboard";
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::SecretService), true),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
+             login keyring: it was locked, or nothing answered for it"
+        );
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::Keychain), true),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
+             keychain: it was locked"
+        );
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::SealedFiles), false),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open its \
+             parked logins"
+        );
+        assert_eq!(
+            switch_could_not_open(
+                "from sign-in  ·  runs /usr/bin/pitboard",
+                600,
+                Some(Vault::SecretService),
+                true
+            ),
+            "from sign-in  ·  runs /usr/bin/pitboard, but a switch or warm-up of it, 10m ago, \
+             could not open the login keyring: it was locked, or nothing answered for it"
+        );
+        assert_eq!(
+            runs_again(Os::Linux),
+            "Renewal runs again at your next sign-in to GNOME or KDE Plasma, and at its next \
+             daily run."
+        );
+        assert_eq!(
+            runs_again(Os::MacOs),
+            "Renewal runs again at its next daily run."
         );
         assert_eq!(
             runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard"),

@@ -72,7 +72,8 @@ test("pitboard watch install prints what watch.rs writes, and where each system 
   assert.equal(where("macos"), "/Users/me/Library/LaunchAgents/com.datlechin.pitboard.watch.plist");
   const systemd = repo("crates/pitboard-core/src/host/linux/systemd.rs");
   assert.ok(systemd.includes('const WATCH: &str = "pitboard-watch.service";'));
-  assert.ok(systemd.includes('ctx.home().join(".config/systemd/user")'));
+  assert.ok(systemd.includes('.map_or_else(|| ctx.home().join(".config"), Path::to_path_buf)'));
+  assert.ok(systemd.includes('.join("systemd/user")'));
   assert.equal(where("linux"), "/home/me/.config/systemd/user/pitboard-watch.service");
   const task = repo("crates/pitboard-core/src/host/task.rs");
   const sid = /const SID: &str = "(S-[\d-]+)";/.exec(task)![1];

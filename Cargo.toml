@@ -22,7 +22,7 @@ repository = "https://github.com/datlechin/pitboard"
 homepage = "https://usepitboard.com"
 
 [workspace.dependencies]
-pitboard-core = { path = "crates/pitboard-core", version = "=0.17.0" }
+pitboard-core = { path = "crates/pitboard-core", version = "=0.18.0" }
 pitboard-sites = { path = "crates/pitboard-sites" }
 pitboard-model = { path = "crates/pitboard-model" }
 anstream = "1"
@@ -83,6 +83,14 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 url = "2.5"
 # The account windows' store ids, version 5 UUIDs. Nothing secret is hashed.
 uuid = { version = "1.27", default-features = false, features = ["v5"] }
+# D-Bus on Linux: the user's systemd, which its private socket serves peer to peer. 5, since
+# 6.0.0 removed the blocking API (its CHANGELOG) and the Linux crates Pitboard takes, such as
+# secret-service 5.2, are on 5. async-io runs zbus's own executor, so no tokio.
+zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api", "p2p"] }
+# The Secret Service, where Linux parks a login: blocking over the zbus above, a DH session in
+# pure Rust, so the static musl command line links it. Not oo7, which needs Rust 1.92 and an
+# executor, nor keyring, whose docs tell a program that chooses its store not to link it.
+secret-service = { version = "5.2", default-features = false, features = ["rt-async-io-crypto-rust"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
