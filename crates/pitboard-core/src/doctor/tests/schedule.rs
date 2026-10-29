@@ -111,6 +111,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
         at: crate::duty::autoswitch::Threshold::new(90),
         task,
         outdated: false,
+        refused: None,
     };
 
     f.watch_service = Some(service(Some("/opt/homebrew/bin/pitboard"), None));
@@ -249,6 +250,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
         at: None,
         task: None,
         outdated: true,
+        refused: None,
     });
     let checks = evaluate(&f);
     let renewal = check(&checks, "schedule");
@@ -643,4 +645,54 @@ fn a_run_that_could_not_open_the_store_is_said_with_when() {
     let schedule = f.schedule.as_mut().expect("set above");
     schedule.program_found = false;
     assert_eq!(check(&evaluate(&f), "schedule").level, Level::Fail);
+}
+
+// The watch service never asks to unlock the store either, and runs for days: what one of its
+// switches or warm-ups could not open is said, with when, until one opens it.
+#[test]
+fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when() {
+    let mut f = facts();
+    let program = "/usr/local/bin/pitboard";
+    f.watch_service = Some(WatchServiceFact {
+        location: Location::File(PathBuf::from(
+            "/home/x/.config/systemd/user/pitboard-watch.service",
+        )),
+        program: Some(PathBuf::from(program)),
+        program_found: true,
+        at: crate::duty::autoswitch::Threshold::new(90),
+        task: None,
+        outdated: false,
+        refused: Some(crate::schedule::Refused {
+            at: NOW - 600,
+            vault: Some(crate::host::Vault::SecretService),
+            codes: ["credential_store_locked".to_string()].into(),
+        }),
+    });
+    for os in [Os::Linux, Os::MacOs, Os::Windows] {
+        f.os = os;
+        let checks = evaluate(&f);
+        let refused = check(&checks, "watch_service");
+        assert_eq!(refused.level, Level::Warn, "{os:?}");
+        assert_eq!(
+            (refused.detail.as_str(), refused.advice.as_str()),
+            (
+                words::switch_could_not_open(
+                    &words::runs_from_sign_in(Some(90), program),
+                    600,
+                    Some(crate::host::Vault::SecretService),
+                    true
+                )
+                .as_str(),
+                words::TRIES_AGAIN_AT_ITS_NEXT_SWITCH
+            ),
+            "{os:?}"
+        );
+    }
+
+    let service = f.watch_service.as_mut().expect("set above");
+    service.outdated = true;
+    assert_eq!(
+        check(&evaluate(&f), "watch_service").detail,
+        words::fails_once_its_pitboard_is_gone(&words::runs_from_sign_in(Some(90), program))
+    );
 }

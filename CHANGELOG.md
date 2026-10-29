@@ -15,8 +15,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   though a Secret Service answers.
 - On Linux, `pitboard doctor` warns of a renewal or watch unit an earlier Pitboard wrote, and
   says to install it again.
-- `pitboard doctor` warns when a run of daily renewal could not open the parked logins, such as
-  in a locked keychain or login keyring, until a run of it opens them.
+- `pitboard doctor` warns when a run of daily renewal, or a switch or warm-up of the watch
+  service, could not open the parked logins, such as in a locked keychain or login keyring, until
+  a later one opens them.
 - On Linux, daily renewal also runs at each sign-in to GNOME or KDE Plasma, so a run that found
   the login keyring locked catches up once you sign in.
 

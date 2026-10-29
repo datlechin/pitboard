@@ -202,9 +202,18 @@ impl Pitboard {
         })
     }
 
-    /// Switches Claude Code where a limit of the account in use has reached `threshold`.
+    /// Switches Claude Code where a limit of the account in use has reached `threshold`. A run
+    /// of the watch service keeps what the store refused it ([`Pitboard::kept_for_doctor`]).
     pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
         let permit = self.permitted()?;
+        let switched = self.switching_by_itself(permit, threshold);
+        self.kept_for_doctor(permit, &switched, |value| {
+            matches!(value, Auto::Switched { .. })
+        });
+        switched
+    }
+
+    fn switching_by_itself(&self, permit: Permit, threshold: Threshold) -> Changing<Auto> {
         let looked = self.auto_look(threshold).map_err(Failed::refused)?;
         if let Look::Stands(value) = looked {
             return Ok(Done {
@@ -736,9 +745,35 @@ impl Pitboard {
         Self::warming(settled, switch::warm::Target::Account(key))
     }
 
-    /// Warms up the first account turned on that is due, as [`crate::duty::warm`] says.
+    /// Warms up the first account turned on that is due, as [`crate::duty::warm`] says. A run of
+    /// the watch service keeps what the store refused it ([`Pitboard::kept_for_doctor`]).
     pub fn warm_up(&self) -> Changing<switch::warm::WarmUp> {
         let permit = self.permitted()?;
+        let warmed = self.warming_up(permit);
+        self.kept_for_doctor(permit, &warmed, |value| {
+            matches!(value, switch::warm::WarmUp::Started { .. })
+        });
+        warmed
+    }
+
+    // The watch service never asks to unlock the store its parked logins are in, so what the
+    // store answered one of its switches or warm-ups is kept for doctor, until one opens it. A
+    // switch or a warm-up that started reads a parked login; anything else asks the store nothing.
+    fn kept_for_doctor<T>(
+        &self,
+        permit: Permit,
+        outcome: &Changing<T>,
+        opened: impl FnOnce(&T) -> bool,
+    ) {
+        let answer = match outcome {
+            Err(failed) => schedule::StoreAnswer::of(&failed.error),
+            Ok(done) if opened(&done.value) => schedule::StoreAnswer::Opened,
+            Ok(_) => schedule::StoreAnswer::NotAsked,
+        };
+        schedule::ran(&self.ctx, permit, schedule::Job::Watch, answer);
+    }
+
+    fn warming_up(&self, permit: Permit) -> Changing<switch::warm::WarmUp> {
         let looked = self.warm_look().map_err(Failed::refused)?;
         if let crate::duty::Look::Stands(overview) = looked {
             return Ok(Done {

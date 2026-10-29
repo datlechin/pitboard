@@ -20,6 +20,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `journal.json` | The record of a Claude Code or Codex switch until it is done. One left behind marks an [interrupted switch](/concepts/switching#interrupted-switches). | A switch |
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. A line for a folder in `parks/` starts with `folder `. Absent when empty. | Anything that parks a login |
 | `renewal.json` | Where a run of [daily renewal](/reference/files#renewal-schedule) could not open the parked logins, when, and why, as error codes, until a run of it opens them. Absent otherwise. | Daily renewal |
+| `watch.json` | Where a switch or warm-up of the [watch service](/reference/files#watch-service) could not open the parked logins, when, and why, as error codes, until one of them opens them. Absent otherwise. | The watch service |
 | `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. When it last failed to identify Claude Code's login. | The automatic switch |
 | `signin.lock` | The lock that allows one sign-in at a time | A sign-in |
 | `warm.json` | The accounts turned on for warm-ups, by id, and the hours they are made in | `pitboard warm on`, `off` and `range`, and the app's **Warm-Up** |

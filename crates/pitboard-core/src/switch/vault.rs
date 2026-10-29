@@ -717,7 +717,10 @@ mod tests {
                 &parked_services(&m),
                 "renewed in files",
             );
-            assert_eq!(crate::schedule::refused(&m.ctx), None);
+            assert_eq!(
+                crate::schedule::refused(&m.ctx, crate::schedule::Job::Renew),
+                None
+            );
         }
     }
 
@@ -732,12 +735,17 @@ mod tests {
         let before = (state_file(&m), in_files(&m));
 
         assert!(renew_parked(&m.ctx, Permit::for_a_test()).is_empty());
-        assert_eq!(crate::schedule::refused(&m.ctx), None, "by hand");
+        assert_eq!(
+            crate::schedule::refused(&m.ctx, crate::schedule::Job::Renew),
+            None,
+            "by hand"
+        );
         let scheduled = m.ctx.clone().started_by_the_schedule();
         assert!(renew_due(&scheduled, Permit::for_a_test(), Due::ToStayAlive).is_empty());
 
         assert_eq!((state_file(&m), in_files(&m)), before);
-        let kept = crate::schedule::refused(&m.ctx).expect("kept for doctor");
+        let kept =
+            crate::schedule::refused(&m.ctx, crate::schedule::Job::Renew).expect("kept for doctor");
         assert_eq!(
             kept.codes.into_iter().collect::<Vec<_>>(),
             ["credential_store_locked"]

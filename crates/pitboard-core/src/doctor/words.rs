@@ -1343,9 +1343,34 @@ pub(super) fn not_run_yet(runs: &str) -> String {
     format!("{runs}  ·  not run yet")
 }
 
-// Where the parked logins a run could not open are kept, and why where the store was locked.
+// Renewal's, as each run of it is one process.
 pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked: bool) -> String {
-    let what = match (vault, locked) {
+    format!(
+        "{runs}, but a run of it, {} ago, could not open {}",
+        said::span(ago),
+        unopened(vault, locked)
+    )
+}
+
+pub(super) fn switch_could_not_open(
+    runs: &str,
+    ago: i64,
+    vault: Option<Vault>,
+    locked: bool,
+) -> String {
+    format!(
+        "{runs}, but a switch or warm-up of it, {} ago, could not open {}",
+        said::span(ago),
+        unopened(vault, locked)
+    )
+}
+
+pub(super) const TRIES_AGAIN_AT_ITS_NEXT_SWITCH: &str =
+    "It tries again at its next switch or warm-up.";
+
+// Where the parked logins a run could not open are kept, and why where the store was locked.
+fn unopened(vault: Option<Vault>, locked: bool) -> &'static str {
+    match (vault, locked) {
         (Some(Vault::SecretService), true) => {
             "the login keyring: it was locked, or nothing answered for it"
         }
@@ -1353,11 +1378,7 @@ pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked:
         (Some(Vault::Keychain), true) => "the keychain: it was locked",
         (Some(Vault::Keychain), false) => "the keychain",
         (Some(Vault::Files | Vault::SealedFiles) | None, _) => "its parked logins",
-    };
-    format!(
-        "{runs}, but a run of it, {} ago, could not open {what}",
-        said::span(ago)
-    )
+    }
 }
 
 // On Linux renewal's service also starts with `graphical-session.target`, which GNOME's and
@@ -2523,6 +2544,16 @@ mod tests {
             could_not_open(runs, 33_120, Some(Vault::SealedFiles), false),
             "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open its \
              parked logins"
+        );
+        assert_eq!(
+            switch_could_not_open(
+                "from sign-in  ·  runs /usr/bin/pitboard",
+                600,
+                Some(Vault::SecretService),
+                true
+            ),
+            "from sign-in  ·  runs /usr/bin/pitboard, but a switch or warm-up of it, 10m ago, \
+             could not open the login keyring: it was locked, or nothing answered for it"
         );
         assert_eq!(
             runs_again(Os::Linux),

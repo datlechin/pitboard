@@ -30,6 +30,8 @@ pub(crate) struct WatchServiceFact {
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
     pub(crate) outdated: bool,
+    // What the store refused one of its switches or warm-ups, until one opens it.
+    pub(crate) refused: Option<crate::schedule::Refused>,
 }
 
 pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
@@ -49,7 +51,7 @@ pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
         network: network_fact(&proxies),
         network_differs: !proxies.same_way(&ctx.proxy),
         outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Renew),
-        refused: crate::schedule::refused(ctx),
+        refused: crate::schedule::refused(ctx, crate::schedule::Job::Renew),
     })
 }
 
@@ -69,6 +71,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
         at,
         task: crate::watch_service::task(ctx),
         outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Watch),
+        refused: crate::schedule::refused(ctx, crate::schedule::Job::Watch),
     })
 }
 
@@ -182,6 +185,20 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
             "watch service",
             words::fails_once_its_pitboard_is_gone(&runs),
             again,
+        ));
+    }
+    // It never asks to unlock the store, and one of its switches at boot can find it locked.
+    if let Some(refused) = &service.refused {
+        return Some(warn(
+            "watch_service",
+            "watch service",
+            words::switch_could_not_open(
+                &runs,
+                facts.now - refused.at,
+                refused.vault,
+                refused.locked(),
+            ),
+            words::TRIES_AGAIN_AT_ITS_NEXT_SWITCH,
         ));
     }
     Some(match service.task.as_ref().and_then(Task::failed) {

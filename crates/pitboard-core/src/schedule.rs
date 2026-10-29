@@ -195,10 +195,11 @@ pub(crate) fn for_its_run(ctx: &Context, job: Job) -> Context {
     }
 }
 
-/// What the store refused a run of renewal the schedule started, kept in `renewal.json` in
-/// Pitboard's directory until a run it starts opens the store ([`ran`]). A run at boot can find
-/// the store locked that is open again by the time anybody looks, so doctor says it from here.
-/// Nothing kept is secret: a time, where the parked logins are kept, and codes.
+/// What the store refused a run of a job, kept in Pitboard's directory until a run of it opens
+/// the store ([`ran`]): `renewal.json` for daily renewal, `watch.json` for the watch service. A
+/// run at boot can find the store locked that is open again by the time anybody looks, so
+/// doctor says it from here. Nothing kept is secret: a time, where the parked logins are kept,
+/// and codes.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Refused {
@@ -217,14 +218,17 @@ impl Refused {
     }
 }
 
-fn refused_path(ctx: &Context) -> PathBuf {
-    crate::home::dir(ctx).join("renewal.json")
+fn refused_path(ctx: &Context, job: Job) -> PathBuf {
+    crate::home::dir(ctx).join(match job {
+        Job::Renew => "renewal.json",
+        Job::Watch => "watch.json",
+    })
 }
 
-/// What the store last refused a run the schedule started, where no run it started has opened
-/// the store since.
-pub(crate) fn refused(ctx: &Context) -> Option<Refused> {
-    let kept: Refused = ledger::load(&refused_path(ctx));
+/// What the store last refused a run `job` started, where no run of it has opened the store
+/// since.
+pub(crate) fn refused(ctx: &Context, job: Job) -> Option<Refused> {
+    let kept: Refused = ledger::load(&refused_path(ctx, job));
     (!kept.codes.is_empty()).then_some(kept)
 }
 
@@ -273,15 +277,16 @@ impl StoreAnswer {
     }
 }
 
-/// A run of renewal met `answer` from the store, under the lock renewal takes. A run the schedule
+/// A run of `job` met `answer` from the store: renewal's under the lock it takes, the watch
+/// service's, which the system runs one of, after each decision and warm-up. A run the job
 /// started keeps the codes it was refused with, and forgets them once the store opened for every
 /// parked login it asked about. A run that asked about none keeps what was kept, and a run
-/// somebody started keeps nothing: it says nothing of what the schedule's runs meet.
-pub(crate) fn ran(ctx: &Context, permit: Permit, answer: StoreAnswer) {
-    if !started_this_run(ctx, Job::Renew) {
+/// somebody started keeps nothing: it says nothing of what the job's runs meet.
+pub(crate) fn ran(ctx: &Context, permit: Permit, job: Job, answer: StoreAnswer) {
+    if !started_this_run(ctx, job) {
         return;
     }
-    let path = refused_path(ctx);
+    let path = refused_path(ctx, job);
     // What the run renewed stands whether or not this is kept.
     let _ = match answer {
         StoreAnswer::NotAsked => return,
@@ -1594,7 +1599,7 @@ mod tests {
 
         assert_eq!(codes(&run), ["credential_store_locked"]);
         assert_eq!(
-            refused(&m.ctx),
+            refused(&m.ctx, Job::Renew),
             Some(Refused {
                 at: RUN,
                 vault: Some(Vault::SecretService),
@@ -1623,7 +1628,7 @@ mod tests {
             r#"{"at":1760000000,"vault":"secret_service","codes":["credential_store_locked"]}"#,
         )
         .expect("kept by an earlier run");
-        let kept = refused(&m.ctx).expect("read back");
+        let kept = refused(&m.ctx, Job::Renew).expect("read back");
         assert_eq!(
             (kept.at, kept.vault, kept.locked()),
             (1_760_000_000, Some(Vault::SecretService), true)
@@ -1631,12 +1636,16 @@ mod tests {
 
         let nothing_due = renewed(&m.ctx.clone().started_by_the_schedule());
         assert!(codes(&nothing_due).is_empty());
-        assert_eq!(refused(&m.ctx), Some(kept), "the store was asked nothing");
+        assert_eq!(
+            refused(&m.ctx, Job::Renew),
+            Some(kept),
+            "the store was asked nothing"
+        );
 
         let run = renewed(&at.clone().started_by_the_schedule());
 
         assert_eq!(codes(&run), ["renewed"]);
-        assert_eq!(refused(&m.ctx), None);
+        assert_eq!(refused(&m.ctx, Job::Renew), None);
         assert!(!path.exists(), "no file, rather than an empty record");
         assert_eq!(doctor_says(&at).level, crate::doctor::Level::Ok);
     }
@@ -1651,13 +1660,13 @@ mod tests {
         let by_hand = renewed(&at);
 
         assert_eq!(codes(&by_hand), ["credential_store_locked"]);
-        assert_eq!(refused(&m.ctx), None);
+        assert_eq!(refused(&m.ctx, Job::Renew), None);
         assert!(!crate::home::dir(&m.ctx).join("renewal.json").exists());
 
         renewed(&at.clone().started_by_the_schedule());
-        let kept = refused(&m.ctx).expect("kept by the schedule's run");
+        let kept = refused(&m.ctx, Job::Renew).expect("kept by the schedule's run");
         m.mem.vault().heal_all();
         assert_eq!(codes(&renewed(&at)), ["renewed"]);
-        assert_eq!(refused(&m.ctx), Some(kept));
+        assert_eq!(refused(&m.ctx, Job::Renew), Some(kept));
     }
 }

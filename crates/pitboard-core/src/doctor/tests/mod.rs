@@ -271,6 +271,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         at: None,
         task: None,
         outdated: false,
+        refused: None,
     });
     f.login_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
     f.parks = vec![

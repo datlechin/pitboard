@@ -277,7 +277,10 @@ mod tests {
 
     /// `here` in use at `session` of its five-hour limit, `there` parked with room.
     fn nearly_out(name: &str, session: f64) -> (Rig, Arc<FixedClock>) {
-        let mut m = machine(name);
+        nearly_out_on(machine(name), session)
+    }
+
+    fn nearly_out_on(mut m: Rig, session: f64) -> (Rig, Arc<FixedClock>) {
         let clock = Arc::new(FixedClock::at(NOW));
         m.ctx = m
             .ctx
@@ -328,6 +331,49 @@ mod tests {
             .filter(|entry| entry.verb == "auto-switch")
             .map(|entry| (entry.verb, entry.subject, entry.outcome))
             .collect()
+    }
+
+    /// The watch service never asks to unlock a store, so a switch the store refused it is kept
+    /// in `watch.json` for doctor until a switch of the service opens the store. A switch somebody
+    /// started keeps nothing, and forgets nothing.
+    #[test]
+    fn a_switch_the_store_refuses_the_watch_service_is_kept_until_one_opens_it() {
+        let (m, clock) = nearly_out_on(machine("auto-watch-refused").in_the_default_home(), 96.0);
+        let service = m.ctx.clone().started_by_the_watch_service();
+        let kept = || crate::schedule::refused(&m.ctx, crate::schedule::Job::Watch);
+        m.mem.lock_keychain();
+
+        let by_hand = auto(&m).expect_err("locked");
+        assert_eq!(by_hand.error.code(), "credential_store_locked");
+        assert_eq!(kept(), None, "by hand");
+        clock.advance(RETRY_SECONDS);
+        let refused = Pitboard::new(service.clone())
+            .auto_switch(Threshold::DEFAULT)
+            .expect_err("locked");
+        assert_eq!(refused.error.code(), "credential_store_locked");
+        let record = kept().expect("kept for doctor");
+        assert_eq!((record.at, record.locked()), (NOW + RETRY_SECONDS, true));
+
+        m.mem.unlock_keychain();
+        clock.advance(RETRY_SECONDS);
+        assert!(matches!(
+            auto(&m).expect("a switch").value,
+            Auto::Switched { .. }
+        ));
+        assert_eq!(kept(), Some(record), "by hand");
+        clock.advance(crate::duty::autoswitch::SETTLING_SECONDS);
+        measured(&m, "there", 96.0, 20.0);
+        measured(&m, "here", 10.0, 30.0);
+        let switched = Pitboard::new(service)
+            .auto_switch(Threshold::DEFAULT)
+            .expect("a switch");
+        assert!(
+            matches!(switched.value, Auto::Switched { .. }),
+            "{:?}",
+            switched.value
+        );
+        assert_eq!(kept(), None);
+        assert!(!home::dir(&m.ctx).join("watch.json").exists());
     }
 
     #[test]
