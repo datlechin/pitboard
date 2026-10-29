@@ -414,6 +414,8 @@ After you update Pitboard, the service runs the updated `pitboard` from your nex
 - It gives the service each proxy variable it was started with. Run `install` again after your proxy changes.
 - Where Pitboard may change nothing, it refuses with `elevated` or `system_too_old`.
 
+On Linux, `uninstall` takes the service away only once `systemctl` has stopped it, even where nothing answers for your user's systemd, as in a shell from `su`: one left running would write Pitboard's directory again. It refuses with `schedule_manager_elsewhere` while systemd runs another `HOME`.
+
 The app and the service can both switch Claude Code: as with `pitboard watch` in a terminal, they never make two switches from one reading.
 
 ```sh

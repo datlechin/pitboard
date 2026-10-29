@@ -391,7 +391,9 @@ keeps it is in the header of the module named.
   this home, asked before anything is written or taken away, and each service is skipped where
   its Pitboard is gone (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
   `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`,
-  `a_service_whose_pitboard_is_gone_is_skipped`).
+  `a_service_whose_pitboard_is_gone_is_skipped`). Where nothing reaches the user's systemd to
+  ask, a job is still taken away, the watch service only once `systemctl` stopped it
+  (`a_job_is_taken_away_where_nothing_reaches_the_user_manager`).
 - A renewal the schedule started records what the store refused it in `renewal.json`, under
   `state.lock`, and doctor says it until a run the schedule started opens the store. A renewal
   by hand records nothing (`schedule::ran`,

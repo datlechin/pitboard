@@ -24,7 +24,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Breaking:** On Linux, `pitboard schedule install` and `pitboard watch install` refuse with
   `schedule_manager_elsewhere` where your user's systemd would not read the unit or would run it
-  in another home. Give the shell and systemd the same `HOME` and `XDG_CONFIG_HOME`.
+  in another home, and their `uninstall` and `pitboard uninstall` where it runs another home.
+  Give the shell and systemd the same `HOME` and `XDG_CONFIG_HOME`.
 - **Breaking:** The public API of `pitboard-core` changes; [its
   documentation](https://docs.rs/pitboard-core/0.18.0/pitboard_core/) shows the new one.
 - The app and `pitboard watch` see a switch or a reading another Pitboard recorded as soon as it
