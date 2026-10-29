@@ -358,7 +358,7 @@ impl Window {
     }
 
     fn kept_size(&self) -> Option<Size> {
-        let file = self.host().data().file(SIZE).ok()?;
+        let file = self.host().data().file(SIZE);
         serde_json::from_slice(&std::fs::read(file).ok()?).ok()
     }
 
@@ -376,7 +376,7 @@ impl Window {
             height,
             maximized: self.is_maximized(),
         };
-        if let Ok(file) = self.host().data().file(SIZE) {
+        if let Ok(file) = self.host().data().file_to_write(SIZE) {
             // A size not kept is the default size next time, which says nothing to the person.
             let _ = std::fs::write(file, serde_json::to_vec(&size).expect("a size is JSON"));
         }
@@ -459,6 +459,23 @@ mod tests {
         let _ = crate::dialogs::welcome::Welcome::new(host);
         let _ = crate::dialogs::shortcuts::Shortcuts::default();
         let _ = crate::dialogs::about::about();
+        window.destroy();
+    }
+
+    // Nothing is kept until the window closes, so showing it makes no folder.
+    #[gtk::test]
+    fn a_window_reads_its_size_without_making_the_apps_folder() {
+        adw::init().unwrap();
+        crate::resources::register();
+        let scratch = tempfile::tempdir().unwrap();
+        let folder = scratch.path().join("data").join(crate::config::APP_ID);
+        let host = Rc::new(Shows(DataFolder::at(&folder)));
+
+        let window = Window::new(None, &Shown::new(crate::testing::snapshot(1)), host);
+
+        assert!(!folder.exists(), "made by reading the size");
+        window.keep_size();
+        assert!(folder.join(SIZE).is_file());
         window.destroy();
     }
 

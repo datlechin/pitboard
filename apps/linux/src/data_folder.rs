@@ -34,9 +34,14 @@ impl DataFolder {
         &self.0
     }
 
-    /// The file `name` in the folder, which is made first where it is not there: 0700, as XDG
-    /// Base Directory 0.8 has a folder of the person's data made.
-    pub fn file(&self, name: &str) -> Result<PathBuf, Failed> {
+    /// Where the file `name` is kept, which reading it makes nothing for.
+    pub fn file(&self, name: &str) -> PathBuf {
+        self.0.join(name)
+    }
+
+    /// The file `name`, to be written, in the folder made first where it is not there: 0700, as
+    /// XDG Base Directory 0.8 has a folder of the person's data made.
+    pub fn file_to_write(&self, name: &str) -> Result<PathBuf, Failed> {
         std::fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
@@ -52,11 +57,16 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
-    fn a_file_is_kept_in_a_folder_made_for_the_person_alone() {
+    fn a_file_is_kept_in_a_folder_made_for_the_person_alone_once_it_is_written() {
         let scratch = tempfile::tempdir().unwrap();
         let folder = DataFolder::at(&scratch.path().join("data").join(config::APP_ID));
+        assert_eq!(
+            folder.file("window.json"),
+            folder.path().join("window.json")
+        );
+        assert!(!folder.path().exists(), "made to read a file");
 
-        let file = folder.file("window.json").unwrap();
+        let file = folder.file_to_write("window.json").unwrap();
 
         assert_eq!(file, folder.path().join("window.json"));
         let mode = std::fs::metadata(folder.path())
