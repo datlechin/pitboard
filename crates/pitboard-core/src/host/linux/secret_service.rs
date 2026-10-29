@@ -255,8 +255,14 @@ mod tests {
             .with_test_bus(on.address().to_owned())
     }
 
-    fn park(at: i64) -> String {
-        crate::park::service_name("acc", 1_789_935_600_000 + at)
+    // A park named after the test that writes it, through the guard every test's names pass, as
+    // AGENTS.md asks of a test that writes a Secret Service item: `test` is its tag.
+    fn park(test: &str, at: i64) -> String {
+        let name = crate::park::service_name(test, 1_789_935_600_000 + at);
+        if let Some(why) = crate::provider::names::refusal(&name, &[]) {
+            panic!("{why}");
+        }
+        name
     }
 
     fn unlocks(service: &Started) -> usize {
@@ -277,7 +283,7 @@ mod tests {
             crate::store::new_home_form(&ctx),
             Some(crate::state::VaultForm::SecretService)
         );
-        let (vault, park, permit) = (Vault::of(&ctx), park(0), Permit::for_a_test());
+        let (vault, park, permit) = (Vault::of(&ctx), park("round-trip", 0), Permit::for_a_test());
         assert_eq!(vault.kind(), Backend::SecretService);
         assert_eq!(vault.read(&park).expect("read"), None);
         assert!(!vault.contains(&park).expect("looked for"));
@@ -315,18 +321,41 @@ mod tests {
         let there = Vault::of(&home(scratch.path(), "there", &service));
         let permit = Permit::for_a_test();
         assert_eq!(here.list().expect("listed"), Some(Vec::new()));
-        here.write(permit, &park(1), LOGIN).expect("written");
-        there.write(permit, &park(0), LOGIN).expect("written");
+        here.write(permit, &park("listed", 1), LOGIN)
+            .expect("written");
+        there
+            .write(permit, &park("listed", 0), LOGIN)
+            .expect("written");
         service.plant(
             "Another program's",
-            &[("xdg:schema", "org.example.Other"), ("service", &park(2))],
+            &[
+                ("xdg:schema", "org.example.Other"),
+                ("service", &park("listed", 2)),
+            ],
             "theirs",
         );
         service.plant("Not a park", &[SCHEMA, (SERVICE, "pitboard-park-")], "x");
 
         for vault in [&here, &there] {
-            assert_eq!(vault.list().expect("listed"), Some(vec![park(0), park(1)]));
+            assert_eq!(
+                vault.list().expect("listed"),
+                Some(vec![park("listed", 0), park("listed", 1)])
+            );
         }
+    }
+
+    // The names guard every test's writes pass, on a bus of the test's own too.
+    #[test]
+    #[should_panic(expected = "a test must never address")]
+    fn a_test_never_plants_a_name_a_real_login_may_be_kept_under() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let nobody = Started::without_a_provider(&scratch.path().join("nobody"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+        nobody.plant(
+            "A real login",
+            &[("service", "Claude Code-credentials")],
+            "x",
+        );
     }
 
     // Every question, whoever asks: a person's run is refused once its prompt is dismissed.
@@ -353,12 +382,12 @@ mod tests {
         let service = started(scratch.path());
         let ctx = home(scratch.path(), "home", &service);
         Vault::of(&ctx)
-            .write(Permit::for_a_test(), &park(0), LOGIN)
+            .write(Permit::for_a_test(), &park("locked", 0), LOGIN)
             .expect("written");
         service.lock();
 
         for ctx in [ctx.clone(), ctx.clone().started_by_the_schedule()] {
-            refused_every_way(&Vault::of(&ctx), &park(0));
+            refused_every_way(&Vault::of(&ctx), &park("locked", 0));
         }
         assert!(answers(&ctx), "a locked collection is one to park in");
     }
@@ -375,7 +404,7 @@ mod tests {
             ctx.clone().started_by_the_schedule(),
             ctx.clone().started_by_the_watch_service(),
         ] {
-            refused_every_way(&Vault::of(&job), &park(0));
+            refused_every_way(&Vault::of(&job), &park("job", 0));
         }
         let asked = service.asked();
         assert!(
@@ -413,12 +442,12 @@ mod tests {
             ]),
             read(&[("WAYLAND_DISPLAY", ""), ("DISPLAY", "")]),
         ] {
-            refused_every_way(&Vault::of(&away), &park(0));
+            refused_every_way(&Vault::of(&away), &park("away", 0));
         }
         assert_eq!(unlocks(&service), 0, "{:?}", service.asked());
 
         let at_the_desktop = read(&[("DISPLAY", ":0")]);
-        let read = Vault::of(&at_the_desktop).read(&park(0));
+        let read = Vault::of(&at_the_desktop).read(&park("away", 0));
         assert!(matches!(read, Err(Error::Locked)), "{read:?}");
         assert_eq!(unlocks(&service), 1, "{:?}", service.asked());
     }
@@ -432,12 +461,12 @@ mod tests {
         let ctx = at_the_desktop(scratch.path(), "home", &service);
         service.lock();
 
-        refused_every_way(&Vault::of(&ctx), &park(0));
-        refused_every_way(&Vault::of(&ctx.clone()), &park(1));
+        refused_every_way(&Vault::of(&ctx), &park("dismissed", 0));
+        refused_every_way(&Vault::of(&ctx.clone()), &park("dismissed", 1));
         assert_eq!(unlocks(&service), 1, "{:?}", service.asked());
 
         let another_run = at_the_desktop(scratch.path(), "home", &service);
-        let read = Vault::of(&another_run).read(&park(0));
+        let read = Vault::of(&another_run).read(&park("dismissed", 0));
         assert!(matches!(read, Err(Error::Locked)), "{read:?}");
         assert_eq!(unlocks(&service), 2, "{:?}", service.asked());
     }
@@ -452,7 +481,7 @@ mod tests {
         service.lock();
 
         let asking = std::time::Instant::now();
-        let read = vault.read(&park(0));
+        let read = vault.read(&park("nobody", 0));
         let took = asking.elapsed();
 
         assert!(matches!(read, Err(Error::Locked)), "{read:?}");
@@ -474,14 +503,14 @@ mod tests {
         let mut stopped = started(scratch.path());
         let ctx = home(scratch.path(), "home", &stopped);
         Vault::of(&ctx)
-            .write(Permit::for_a_test(), &park(0), LOGIN)
+            .write(Permit::for_a_test(), &park("no-provider", 0), LOGIN)
             .expect("written");
         stopped.stop();
 
         let without_a_bus =
             Context::for_unit_test().with_pitboard_home(scratch.path().join("bare"));
         for ctx in [home(scratch.path(), "nobody", &nobody), ctx, without_a_bus] {
-            refused_every_way(&Vault::of(&ctx), &park(0));
+            refused_every_way(&Vault::of(&ctx), &park("no-provider", 0));
             assert!(!answers(&ctx));
             assert_eq!(
                 crate::store::new_home_form(&ctx),

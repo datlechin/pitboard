@@ -190,6 +190,11 @@ impl SecretService {
 
     /// An item another program keeps in the default collection.
     pub fn plant(&self, label: &str, attributes: &[(&str, &str)], secret: &str) {
+        for (_, value) in attributes {
+            if let Some(why) = crate::provider::names::refusal(value, &[]) {
+                panic!("{why}");
+            }
+        }
         let client = self.client();
         let collection = client
             .get_default_collection()

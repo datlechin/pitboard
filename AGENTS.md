@@ -230,9 +230,10 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never write to, overwrite or delete a Secret Service item that holds a real login, Pitboard's
   parked logins among them, and never run `secret-tool store` or `secret-tool clear` with
   Pitboard's attributes on an account that holds logins. A test writes items only on a bus it
-  started, names them after itself and calls `common::guard_not_live` before its first write. A
-  build for tests reaches no bus but the one `PITBOARD_TEST_BUS` or `Context::with_test_bus`
-  names.
+  started, names them after itself, and runs each name through the names guard before its first
+  write: `common::guard_not_live`, or `provider::names::refusal` in the core, which
+  `testing::SecretService::plant` also asks. A build for tests reaches no bus but the one
+  `PITBOARD_TEST_BUS` or `Context::with_test_bus` names.
   [The Linux session machines](#the-linux-session-machines) are the exception.
 - From a test or a script, never start `gnome-keyring-daemon`, `ksecretd`, `kwalletd6` or
   `oo7-daemon` with a real `HOME` or on the session's bus, and never lock, unlock, create or
