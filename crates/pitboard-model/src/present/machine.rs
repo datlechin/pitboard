@@ -346,11 +346,14 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .iter()
             .any(|warning| warning.code == "fallback_login"),
         pitboard_core::switch::ADOPTION_CEILING_SECONDS,
-    )
-    .map(|note| match once_closed(seen).filter(|_| switching) {
-        Some(watched) => format!("{note} {}", words::switching_once_closed(watched)),
-        None => note,
+    );
+    let closed = once_closed(seen).and_then(|watched| match (switching, watched) {
+        (true, watched) => Some(words::switching_once_closed(watched)),
+        (false, true) => Some(words::still_switching_once_closed(at)),
+        (false, false) => None,
     });
+    let said: Vec<String> = note.into_iter().chain(closed).collect();
+    let note = (!said.is_empty()).then(|| said.join(" "));
     AtLimitShown {
         title: words::BEFORE_RUNNING_OUT.into(),
         choice,

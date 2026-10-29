@@ -447,10 +447,12 @@ keeps it is in the header of the module named.
   (`the_services_run_is_ended_only_between_changes`,
   `uninstalling_takes_the_watch_service_with_it`).
 - Where its front has no status item, closing the window quits the app, so the app offers to
-  run the automatic switch and the warm-ups in the watch service, at the share its settings
-  have, reads it on each visit to them and installs it only when asked
+  run the automatic switch and the warm-ups in the watch service, reads it on each visit to
+  them and installs it only when asked. Installed, it is installed again at each share the
+  settings take, and the settings say it switches where their choice does not
   (`without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs_it`,
-  `with_a_status_item_it_is_not_offered`, `the_watch_service_is_read_on_each_visit`).
+  `with_a_status_item_it_is_not_offered`, `the_watch_service_is_read_on_each_visit`,
+  `the_watch_service_follows_the_share_and_limits_says_what_it_does`).
 - Nothing rewrites a task changed in Task Scheduler, which `doctor` warns of
   (`task::drifted`), and the app's start-up repair points a schedule at the command line
   inside the app only where its Pitboard is gone or it runs an app's own program, macOS's

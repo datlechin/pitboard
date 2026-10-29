@@ -8,14 +8,16 @@
 //! times in UTC. Opening at login and linking the command line with an administrator's password
 //! are the app's own, and so are their tests.
 
+use super::advice::Told;
 use super::lanes::{Watching, Worker};
 use super::machine::ScheduleFailure;
-use super::state::Job;
+use super::preferences::Preferences;
+use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::platform::Posted;
 use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::testing::world::World;
-use super::{Intent, Pane};
+use super::{AtLimit, Intent, Pane};
 use crate::Front;
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, WatchServiceShown, present_on, words};
@@ -1176,6 +1178,97 @@ fn with_a_status_item_it_is_not_offered() {
         assert_eq!(machine.watch_service, None, "{front:?}");
         assert_eq!(machine.warm.note, words::warm_up_note(None));
     }
+}
+
+/// The watch service switches at the share Limits has: a new share installs it again at that
+/// one, a share set while a change to it is under way once that change has been read back, and
+/// a choice that does not switch says the service still does.
+#[test]
+fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
+    let world = service_machine("watch-service-share");
+    let lanes = worker(world.core_on(Front::Gnome));
+    let mut model = Hand::on(Front::Gnome);
+    let preferences = Preferences {
+        auto_switch: true,
+        has_been_seen: true,
+        ..Preferences::default()
+    };
+    model.give(Answer::Kept {
+        told: Told::new(),
+        preferences: Some((preferences, true)),
+        windows: None,
+    });
+    model.send(Intent::SetWatchService { on: true });
+    model.run_by(|job| lanes.work(job));
+    let installed_at = || match world.elsewhere().watch_service() {
+        Installed::Yes { at, .. } => at.map(Threshold::percent),
+        Installed::No | Installed::Unsupported => None,
+    };
+    assert_eq!(installed_at(), Some(95));
+    let share = |percent| Threshold::new(percent).expect("a share");
+    let reinstalls = |jobs: &[Job]| {
+        (jobs.iter())
+            .filter(|job| matches!(job, Job::SetWatchService { .. }))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 80,
+    });
+    assert_eq!(
+        reinstalls(&jobs),
+        [Job::SetWatchService {
+            on: true,
+            at: share(80),
+        }]
+    );
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 85,
+    });
+    assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(installed_at(), Some(85));
+    assert_eq!(
+        watch_service(&model).map(|shown| shown.about),
+        Some(words::watch_service_about(Front::Gnome, 85))
+    );
+
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Notify,
+        at: 85,
+    });
+    assert_eq!(reinstalls(&jobs), [], "the share is the one installed");
+    let note = |model: &Hand| {
+        present_on(Front::Gnome, &model.state, 0, &Utc)
+            .machine
+            .at_limit
+            .note
+            .unwrap_or_default()
+    };
+    assert!(
+        note(&model).ends_with(&words::still_switching_once_closed(85)),
+        "{}",
+        note(&model)
+    );
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 70,
+    });
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(installed_at(), Some(70));
+    assert_eq!(note(&model), words::still_switching_once_closed(70));
+
+    model.send(Intent::SetWatchService { on: false });
+    model.run_by(|job| lanes.work(job));
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 90,
+    });
+    assert_eq!(reinstalls(&jobs), [], "nothing is installed to follow it");
+    assert_eq!(world.elsewhere().watch_service(), Installed::No);
 }
 
 /// A terminal can install or take away the watch service while the app runs, so each visit to

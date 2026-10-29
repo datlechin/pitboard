@@ -2615,6 +2615,26 @@ impl State {
             self.advise(&status, jobs);
         }
         self.look_to_switch(jobs);
+        self.watch_at_the_share(jobs);
+    }
+
+    // `pitboard watch` switches at the share it was installed with, so the service is installed
+    // again at the one Limits has: once a change to it under way has been read back, and not
+    // after one that failed, which says so beside its switch until the next is asked for.
+    fn watch_at_the_share(&mut self, jobs: &mut Vec<Job>) {
+        let at = self.preferences.threshold();
+        let elsewhere = matches!(
+            self.machine.watch_service,
+            Some(WatchService::Installed { at: Some(installed) }) if installed != at.percent()
+        );
+        if self.offers_watch_service()
+            && self.preferences_read
+            && elsewhere
+            && self.machine.watch_failed.is_none()
+            && self.machine.watch(true)
+        {
+            jobs.push(Job::SetWatchService { on: true, at });
+        }
     }
 
     fn switches(&self) -> bool {
@@ -3209,9 +3229,13 @@ impl State {
                 service,
                 own,
                 after_change,
-            } => self
-                .machine
-                .watch_service_read(service, Some(own), after_change),
+            } => {
+                self.machine
+                    .watch_service_read(service, Some(own), after_change);
+                if after_change {
+                    self.watch_at_the_share(jobs);
+                }
+            }
             Answer::WatchServiceSet { own, outcome } => {
                 if self.machine.watched(own, outcome) {
                     jobs.push(Job::ReadWatchService { after_change: true });

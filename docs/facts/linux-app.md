@@ -103,7 +103,9 @@ program on the session's homes is the Linux session's to measure (Documented, no
   stock GNOME has no StatusNotifierItem host, and Background Apps lists no host app (synthesis
   1). The model offers it while the app reports no status item, reads it on each visit to
   Preferences and installs it, at the share Limits has, through the core's watch service, which
-  on Linux the core's systemd host writes as a user service.
+  on Linux the core's systemd host writes as a user service. `pitboard watch` switches at its
+  `--at` whatever the app's choice, so the model installs it again at each new share, and Limits
+  says it switches where the choice is Notify or Do Nothing.
 - **Ctrl+? is an `AdwDialog` of `AdwActionRow`s.** `AdwShortcutsDialog` is libadwaita 1.8, and
   GTK 4.18.6 deprecates `GtkShortcutsWindow` and `GtkShortcutLabel` ("Deprecated: 4.18",
   `gtk/deprecated/gtkshortcutswindow.c:119`, `gtk/deprecated/gtkshortcutlabel.c:36`). It becomes

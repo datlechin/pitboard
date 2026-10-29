@@ -110,6 +110,15 @@ pub(crate) fn switching_once_closed(watched: bool) -> String {
     }
 }
 
+// The at-limit note, or alone, where the choice does not switch but the watch service, which
+// always does, is on.
+pub(crate) fn still_switching_once_closed(at: u8) -> String {
+    format!(
+        "Once Pitboard’s window is closed, the watch service still switches Claude Code at {at}% \
+         until {WATCH_IN_THE_BACKGROUND} is off."
+    )
+}
+
 pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
     format!("From {lowest}% to {highest}%")
 }
@@ -768,6 +777,11 @@ mod tests {
             switching_once_closed(false),
             "Once its window is closed, nothing switches it unless Watch in the Background is \
              on."
+        );
+        assert_eq!(
+            still_switching_once_closed(80),
+            "Once Pitboard’s window is closed, the watch service still switches Claude Code at \
+             80% until Watch in the Background is off."
         );
         assert_eq!(
             watch_service_about(Front::Gnome, 95),
