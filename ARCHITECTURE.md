@@ -198,7 +198,7 @@ The apps:
     (`listener.rs`, `shown.rs`), the window, its accounts page and the keys it answers
     (`window/`), its Diagnostics and Activity (`pages/`), its dialogs (`dialogs/`) and
     Preferences (`preferences/`), the status item's face and menu and the searches' results
-    (`presence.rs`),
+    (`presence.rs`), the widget feed a Plasma widget reads (`widget_feed.rs`),
     the app's only actions on the bus (`outside.rs`), the model's notices, clock and the app's
     own folder (`notices.rs`, `local_time.rs`, `data_folder.rs`), what the program carries in
     its GResource (`resources.rs`), and the desktop's services the app speaks for the model, the
@@ -210,8 +210,10 @@ The apps:
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
-    the D-Bus interfaces the app serves, each written from its published definition (`dbus/`),
-    and the views' GtkBuilder templates (`ui/`).
+    the D-Bus interfaces the app serves, each written from its published definition but the
+    widget feed, Pitboard's own (`dbus/`), and the views' GtkBuilder templates (`ui/`).
+  - `plasmoid/`: the Plasma widget in QML, which Meson installs where `plasma_widget` is on,
+    and its tests, which run it over a stand-in for the app on a private bus.
   - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display
     the tests run in, the packages an image or CI's container takes, and the run of the
     checks in a container.
@@ -667,13 +669,21 @@ keeps it is in the header of the module named.
   Pitboard running and quits Pitboard where none does (`with_one_closing_hides_it`,
   `without_a_tray_closing_the_window_quits`).
 - The Linux app's only entry points on the bus are its `app.` actions, each taking an id the
-  model issued or none: a notification's click, a switch from outside, and the launcher's Add
-  Account and Refresh, each sending what a click in the app sends. Its window is an `AdwWindow`
+  model issued or none: a notification's click, a switch from outside, which a search, KRunner
+  and the Plasma widget ask for, and the launcher's Add Account and Refresh, each sending what a
+  click in the app sends. Its window is an `AdwWindow`
   whose intents are its class's widget actions, which GTK exports nowhere
   (`the_app_exports_only_its_outside_actions`,
   `each_launcher_action_is_one_the_app_exports_and_says_its_words`). A switch from outside that
   is refused is said in a notification
   (`a_switch_from_outside_that_is_refused_is_said_in_a_notification`).
+- The Plasma widget reads only the widget feed, over a read-only interface, and switches only
+  through `app.switch-from-outside`, each asked of the connection that owns the app's name, by
+  its unique name, which the bus never starts: it asks nothing of a Pitboard not running and
+  starts none (`the_feed_interface_offers_nothing_to_call`, `tst_widget`). The feed is the model's, said
+  only as `widget_revision` moves, and empty once Pitboard is removed
+  (`the_feed_is_the_models_and_changes_only_with_its_revision`,
+  `after_uninstall_the_feed_is_empty`).
 - The Linux app's `Shown` keeps a snapshot by part by the same rule, compares none, and keeps a
   row's object while its id is shown (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
   `a_snapshot_not_newer_is_dropped`, `a_row_keeps_its_object_across_snapshots`).

@@ -9,8 +9,9 @@
 //!
 //! The model's snapshots reach the main loop through [`listener`] and are kept by part in
 //! [`shown`], which [`window`], its [`pages`] and its [`dialogs`], [`preferences`] among them,
-//! and [`presence`], the status item and the searches, follow. The app's only actions on the bus are [`outside`]'s. The model's notices
-//! are posted by [`notices`], its clock is [`local_time`]'s, and the app's own folder is
+//! [`presence`], the status item and the searches, and [`widget_feed`], what a Plasma widget
+//! reads, follow. The app's only actions on the bus are [`outside`]'s. The model's notices are
+//! posted by [`notices`], its clock is [`local_time`]'s, and the app's own folder is
 //! [`data_folder`]'s.
 #![cfg(target_os = "linux")]
 
@@ -31,6 +32,7 @@ pub mod resources;
 pub mod shown;
 #[cfg(test)]
 mod testing;
+pub mod widget_feed;
 pub mod window;
 
 pub use launch::run;

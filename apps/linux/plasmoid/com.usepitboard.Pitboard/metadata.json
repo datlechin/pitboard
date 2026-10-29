@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Pitboard"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Shows the account in use and its limits, and switches accounts through Pitboard",
+        "EnabledByDefault": true,
+        "Icon": "com.usepitboard.Pitboard",
+        "Id": "com.usepitboard.Pitboard",
+        "License": "Apache-2.0",
+        "Name": "Pitboard",
+        "Website": "https://usepitboard.com"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

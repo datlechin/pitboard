@@ -17,8 +17,8 @@ path = "src/lib.rs"
 name = "pitboard-app"
 path = "src/main.rs"
 
-# A fixture's stand-ins, the UI tests, which launch the program into a fixture, and the pictures
-# of each surface, drawn over a fixture's model.
+# A fixture's stand-ins, the UI tests, which launch the program into a fixture, the pictures of
+# each surface, drawn over a fixture's model, and the widget feed, which follows one.
 [[test]]
 name = "stand_ins"
 required-features = ["fixture"]
@@ -31,6 +31,10 @@ required-features = ["fixture"]
 [[test]]
 name = "pictures"
 path = "tests/pictures/main.rs"
+required-features = ["fixture"]
+
+[[test]]
+name = "widget_feed"
 required-features = ["fixture"]
 
 [features]

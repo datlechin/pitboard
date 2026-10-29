@@ -1,6 +1,6 @@
 # The Linux app's build scripts, run on changelogs and templates written for each case, and the
-# release's check of its install tree, run on a tree laid out as Meson installs it and on copies
-# broken for each rule.
+# release's check of its install tree, run on a tree laid out as Meson installs it, with the
+# Plasma widget and without, and on copies broken for each rule.
 import os
 import shutil
 import subprocess
@@ -178,9 +178,11 @@ SERVICE = f"usr/share/dbus-1/services/{APP_ID}.service"
 METAINFO = f"usr/share/metainfo/{APP_ID}.metainfo.xml"
 SEARCH = f"usr/share/gnome-shell/search-providers/{APP_ID}.search-provider.ini"
 RUNNER = f"usr/share/krunner/dbusplugins/{APP_ID}.desktop"
+WIDGET = f"usr/share/plasma/plasmoids/{APP_ID}"
+PLASMOID = REPO / "apps" / "linux" / "plasmoid" / APP_ID
 
 
-def release_tree(root):
+def release_tree(root, widget=True):
     def put(path, text):
         (root / path).parent.mkdir(parents=True, exist_ok=True)
         (root / path).write_text(text, encoding="utf-8")
@@ -203,6 +205,10 @@ def release_tree(root):
         if ".Devel." not in icon.name:
             path = Path("usr/share/icons/hicolor") / icon.relative_to(DATA / "icons")
             put(path, icon.read_text(encoding="utf-8"))
+    # Meson's plasma_widget, which a package can leave off.
+    if widget:
+        for source in sorted(path for path in PLASMOID.rglob("*") if path.is_file()):
+            put(Path(WIDGET) / source.relative_to(PLASMOID), source.read_text(encoding="utf-8"))
 
 
 class InstallTreeCheck(unittest.TestCase):
@@ -216,11 +222,11 @@ class InstallTreeCheck(unittest.TestCase):
         if absent:
             raise unittest.SkipTest(f"no {' or '.join(absent)} on PATH")
 
-    def tree(self):
+    def tree(self, widget=True):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         root = Path(folder.name) / "destdir"
-        release_tree(root)
+        release_tree(root, widget)
         return root
 
     def check(self, *arguments):
@@ -240,6 +246,10 @@ class InstallTreeCheck(unittest.TestCase):
 
     def test_the_tree_meson_installs_passes(self):
         result = self.check(self.tree())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_tree_that_leaves_the_widget_to_a_package_of_its_own_passes(self):
+        result = self.check(self.tree(widget=False))
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_a_program_built_with_the_fixtures_is_refused(self):
@@ -262,6 +272,7 @@ class InstallTreeCheck(unittest.TestCase):
             "usr/share/doc/pitboard-app/copyright",
             f"usr/share/icons/hicolor/scalable/apps/{APP_ID}.Devel.svg",
             "etc/xdg/autostart/com.usepitboard.Pitboard.desktop",
+            f"{WIDGET}/contents/ui/CompactRepresentation.qml",
         ):
             with self.subTest(path=path):
                 root = self.tree()
@@ -270,7 +281,7 @@ class InstallTreeCheck(unittest.TestCase):
                 self.assertRefused(root, f"{path} is not in the release's layout")
 
     def test_a_file_of_the_layout_left_out_is_refused(self):
-        for path in (RUNNER, PROGRAM):
+        for path in (RUNNER, PROGRAM, f"{WIDGET}/contents/ui/Feed.qml"):
             with self.subTest(path=path):
                 root = self.tree()
                 (root / path).unlink()
@@ -314,6 +325,17 @@ class InstallTreeCheck(unittest.TestCase):
         self.assertRefused(
             self.edited(RUNNER, f"Service={APP_ID}*", f"Service={APP_ID}"),
             f"{RUNNER} has KRunner start Pitboard",
+        )
+
+    def test_a_widget_of_another_id_is_refused(self):
+        metadata = f"{WIDGET}/metadata.json"
+        self.assertRefused(
+            self.edited(metadata, f'"Id": "{APP_ID}"', '"Id": "com.example.Other"'),
+            f"{metadata} is the widget com.example.Other, not {APP_ID}",
+        )
+        self.assertRefused(
+            self.edited(metadata, f'"Id": "{APP_ID}",', ""),
+            f"{metadata} is the widget of no id, not {APP_ID}",
         )
 
     def test_no_tree_is_refused(self):

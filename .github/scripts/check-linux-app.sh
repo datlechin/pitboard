@@ -2,10 +2,11 @@
 # check-linux-app.sh <destdir>: fails the Linux app's install tree, as Meson installs it under
 # /usr for a package, unless it is the release's and claims com.usepitboard.Pitboard and
 # pitboard:// alone. Its program holds no fixture, no file names the debug build, and it holds
-# the layout docs/facts/linux-app.md names and nothing else. The launcher and KRunner's runner
-# pass desktop-file-validate and the metainfo appstreamcli, the D-Bus service starts the program
-# as a service, and neither GNOME's search nor KRunner starts Pitboard. test-linux-app.py tests
-# each rule.
+# the layout docs/facts/linux-app.md names and nothing else, the Plasma widget's files included
+# where the tree has the widget. The launcher and KRunner's runner pass desktop-file-validate and
+# the metainfo appstreamcli, the D-Bus service starts the program as a service, neither GNOME's
+# search nor KRunner starts Pitboard, and the widget is com.usepitboard.Pitboard's.
+# test-linux-app.py tests each rule.
 set -eu
 
 if [ "$#" -ne 1 ]; then
@@ -26,6 +27,7 @@ metainfo=usr/share/metainfo/$id.metainfo.xml
 search=usr/share/gnome-shell/search-providers/$id.search-provider.ini
 runner=usr/share/krunner/dbusplugins/$id.desktop
 icons=usr/share/icons/hicolor
+widget=usr/share/plasma/plasmoids/$id
 
 failed=0
 refuse() {
@@ -52,6 +54,13 @@ layout() {
       echo "$icons/symbolic/status/$id-$level$attention-symbolic.svg"
     done
   done
+  # Meson's plasma_widget, on unless a package leaves the widget to a package of its own.
+  if [ -d "$tree/$widget" ]; then
+    echo "$widget/metadata.json"
+    for view in main Feed FullRepresentation AccountRow; do
+      echo "$widget/contents/ui/$view.qml"
+    done
+  fi
 }
 
 listed=$(mktemp)
@@ -105,6 +114,14 @@ fi
 if [ -f "$tree/$search" ] &&
   [ "$(value "$search" 'Shell Search Provider' AutoStart)" != false ]; then
   refuse "$search has GNOME Shell start Pitboard: its AutoStart is not false"
+fi
+# Plasma loads a widget only from the folder its id names.
+if [ -f "$tree/$widget/metadata.json" ]; then
+  named=$(python3 -I -c 'import json, sys; print(json.load(sys.stdin)["KPlugin"]["Id"])' \
+    <"$tree/$widget/metadata.json") || named=
+  if [ "$named" != "$id" ]; then
+    refuse "$widget/metadata.json is the widget ${named:-of no id}, not $id"
+  fi
 fi
 # KRunner starts a service named in full, and asks only the running ones a trailing * matches.
 if [ -f "$tree/$runner" ] &&

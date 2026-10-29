@@ -5,3 +5,9 @@ option(
   value: 'none',
   description: 'The package manager that installs this build, whose command Uninstall names',
 )
+option(
+  'plasma_widget',
+  type: 'boolean',
+  value: true,
+  description: 'Install the Plasma widget, which needs Plasma 6.4 or later',
+)

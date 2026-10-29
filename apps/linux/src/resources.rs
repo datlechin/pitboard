@@ -1,6 +1,7 @@
 //! The program's GResource, which `build.rs` compiles in: its icons, its views, its metainfo, and
-//! the D-Bus interfaces it serves, each written from its published definition in `data/dbus`;
-//! and the debug build's own icon, in the debug build alone.
+//! the D-Bus interfaces it serves in `data/dbus`, each written from its published definition but
+//! the widget feed, which is Pitboard's own; and the debug build's own icon, in the debug build
+//! alone.
 
 use std::sync::Once;
 

@@ -246,6 +246,26 @@ pub(crate) fn activate(bus: &gio::DBusConnection, name: &str, parameter: Option<
     .unwrap_or_else(|e| panic!("ActivateAction {name}: {e}"));
 }
 
+/// What the app's widget feed says, as a Plasma widget reads it: the feed and its revision.
+pub(crate) fn fed(bus: &gio::DBusConnection) -> (String, u64) {
+    let all = call(
+        bus,
+        APP_ID,
+        &pitboard_linux::widget_feed::path(OBJECT_PATH),
+        "org.freedesktop.DBus.Properties",
+        "GetAll",
+        Some(&(pitboard_linux::widget_feed::INTERFACE,).to_variant()),
+    )
+    .unwrap_or_else(|e| panic!("the widget feed: {e}"));
+    let (properties,) = all
+        .get::<(BTreeMap<String, glib::Variant>,)>()
+        .expect("a{sv}");
+    (
+        properties["Feed"].get().expect("Feed is a string"),
+        properties["Revision"].get().expect("Revision is a u64"),
+    )
+}
+
 /// Every object path under the app's own that exports `interface`, its own included.
 pub(crate) fn exporting(bus: &gio::DBusConnection, interface: &str) -> Vec<String> {
     let mut found = Vec::new();

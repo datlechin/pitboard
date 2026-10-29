@@ -38,7 +38,7 @@ impl Build {
     }
 
     // The path GApplication exports the app at, its id with each dot a slash, under which the
-    // search provider and the runner are served.
+    // search provider, the runner and the widget feed are served.
     pub const fn object_path(self) -> &'static str {
         match self {
             Build::Release => "/com/usepitboard/Pitboard",

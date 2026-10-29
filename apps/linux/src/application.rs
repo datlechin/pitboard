@@ -5,9 +5,9 @@
 //!
 //! What it asks of the desktop is the desktop's own services in a live launch, and a fixture's
 //! stand-ins in a fixture, which write in the fixture's folder alone. The model's snapshots go
-//! to the store the window and the presence follow; the window is made as the model first asks
-//! for it, and answers each request itself. The model is told at the start whether the app
-//! starts at sign-in, as the desktop has it.
+//! to the store the window, the presence and the widget feed follow; the window is made as the
+//! model first asks for it, and answers each request itself. The model is told at the start
+//! whether the app starts at sign-in, as the desktop has it.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
@@ -39,6 +39,7 @@ use crate::platform::{krunner, logind, search};
 use crate::presence::{self, Picked, Presence};
 use crate::resources;
 use crate::shown::Shown;
+use crate::widget_feed::{self, WidgetFeed};
 use crate::window::{Host, Window};
 
 /// Starts the app held with no window, as start at sign-in does.
@@ -84,7 +85,7 @@ mod imp {
         pub(super) held_at_sign_in: Cell<bool>,
         pub(super) running: OnceCell<Rc<Running>>,
         pub(super) window: RefCell<Option<Window>>,
-        pub(super) served: RefCell<Option<(search::Provider, krunner::Runner)>>,
+        pub(super) served: RefCell<Option<Served>>,
         // the fixture's world could not be made, so the launch failed
         pub(super) failed: Cell<bool>,
     }
@@ -214,7 +215,12 @@ mod imp {
                     }
                 },
             )?;
-            self.served.replace(Some((provider, runner)));
+            let feed = Rc::new(WidgetFeed::serve(connection, object_path)?);
+            self.served.replace(Some(Served {
+                _provider: provider,
+                _runner: runner,
+                feed,
+            }));
             Ok(())
         }
 
@@ -298,6 +304,13 @@ impl Application {
             Asked::Open => running.send(Intent::Show { place: None }),
         }
     }
+}
+
+// What the app serves on its connection beside GApplication's own, from its registration on.
+struct Served {
+    _provider: search::Provider,
+    _runner: krunner::Runner,
+    feed: Rc<WidgetFeed>,
 }
 
 fn found_by(app: &glib::WeakRef<Application>, terms: &[String]) -> Vec<search::Found> {
@@ -522,6 +535,13 @@ impl Running {
             running.presence.follow_quick_actions(&shown.snapshot());
         });
         self.show_item(&self.shown);
+        let feed = self.app.upgrade().and_then(|app| {
+            let served = app.imp().served.borrow();
+            served.as_ref().map(|served| served.feed.clone())
+        });
+        if let Some(feed) = feed {
+            widget_feed::follow(&feed, &self.shown, &self.model);
+        }
     }
 
     fn show_item(&self, shown: &Shown) {

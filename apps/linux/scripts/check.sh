@@ -15,6 +15,8 @@
 #                             check-linux-app.sh on that tree
 #   floor                     the app on the Rust its manifest names
 #   scripts                   test-linux-app.py, check-linux-app.sh's cases included
+#   widget                    the Plasma widget: qmllint, then its tests under headless.sh, which
+#                             need Plasma 6.4's QML modules, the pictures kept as ui keeps its own
 #
 # Meson's build folder and its install tree are `meson` and `destdir` in Cargo's target folder.
 # The build folder holds Cargo's release target, so a run sets it up again and never removes it.
@@ -26,7 +28,7 @@ target=${CARGO_TARGET_DIR:-$repo/target}
 
 usage() {
   echo "usage: check.sh <lint | test [<archive> <folder>] | ui [<archive> <folder>] |" \
-    "archive <file> | release | floor | scripts>" >&2
+    "archive <file> | release | floor | scripts | widget>" >&2
   exit 2
 }
 
@@ -86,6 +88,15 @@ case $step in
     [ "$#" -eq 0 ] || usage
     TEST_LINUX_APP_TOOLS='desktop-file-validate appstreamcli' \
       python3 .github/scripts/test-linux-app.py
+    ;;
+  widget)
+    [ "$#" -eq 0 ] || usage
+    plasmoid=apps/linux/plasmoid
+    "$(qtpaths6 --query QT_INSTALL_BINS)/qmllint" --max-warnings 0 \
+      "$plasmoid"/com.usepitboard.Pitboard/contents/ui/*.qml "$plasmoid/tests/tst_widget.qml"
+    PITBOARD_LINUX_PICTURES=${PITBOARD_LINUX_PICTURES:-$target/linux-pictures}
+    export PITBOARD_LINUX_PICTURES
+    apps/linux/scripts/headless.sh sh "$plasmoid/tests/run-tests.sh"
     ;;
   *) usage ;;
 esac

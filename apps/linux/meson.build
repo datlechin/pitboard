@@ -1,6 +1,7 @@
 # The Linux app's release: Cargo builds the program, and Meson installs it with its launcher,
-# D-Bus service, metainfo, icons, search provider and KRunner runner. Nothing else installs
-# them: a build Cargo makes alone is the debug build (src/config.rs).
+# D-Bus service, metainfo, icons, search provider and KRunner runner, and with the Plasma widget
+# unless plasma_widget is off. Nothing else installs them: a build Cargo makes alone is the debug
+# build (src/config.rs).
 project('pitboard-linux', license: 'Apache-2.0', meson_version: '>= 1.7.0')
 
 fs = import('fs')
@@ -65,6 +66,11 @@ install_data(
 )
 runner = files('data/krunner' / app_id + '.desktop')
 install_data(runner, install_dir: datadir / 'krunner' / 'dbusplugins')
+
+# A package of its own, since it needs Plasma 6.4, which Debian 13 does not ship.
+if get_option('plasma_widget')
+  install_subdir('plasmoid' / app_id, install_dir: datadir / 'plasma' / 'plasmoids')
+endif
 
 app_icon = files('data/icons/scalable/apps' / app_id + '.svg')
 symbolic_icon = files('data/icons/symbolic/apps' / app_id + '-symbolic.svg')

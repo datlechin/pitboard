@@ -1,11 +1,13 @@
 //! What the app exports on the bus: its outside actions and nothing of its window's, each as the
-//! launcher and a notification ask for it.
+//! launcher, a notification and a Plasma widget ask for it, and the feed the widget reads.
 
 use std::collections::BTreeMap;
 
 use glib::prelude::*;
 
-use super::harness::{App, Screen, activate, described, eventually, exporting, owned, session};
+use super::harness::{
+    App, Screen, activate, described, eventually, exporting, fed, owned, session,
+};
 use super::launch::read;
 use super::words;
 use pitboard_linux::config::OBJECT_PATH;
@@ -101,6 +103,35 @@ fn a_switch_from_outside_that_is_refused_is_said_in_a_notification() {
     assert_eq!(said["title"], refused.title);
     assert_eq!(said["clicked"], refused.clicked);
     assert!(!refused.body.is_empty());
+}
+
+// What a Plasma widget reads, and its Switch, which names an account by the feed's id.
+#[test]
+fn the_app_feeds_the_widget_and_a_switch_by_the_feeds_id_moves_it() {
+    let bus = session();
+    let _app = App::launch("oneTool", &["--sign-in"]);
+    owned(&bus);
+    let glance = eventually("the accounts fed", || {
+        let (feed, revision) = fed(&bus);
+        (revision > 0).then(|| serde_json::from_str::<serde_json::Value>(&feed).unwrap())
+    });
+    assert_eq!(glance["schema"], 1);
+    let id = (glance["accounts"].as_array().unwrap().iter())
+        .find(|account| account["in_use"] == false)
+        .expect("an account not in use")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    activate(&bus, outside::SWITCH_FROM_OUTSIDE, Some(id.to_variant()));
+
+    eventually("the switch fed", || {
+        let (feed, _) = fed(&bus);
+        let glance: serde_json::Value = serde_json::from_str(&feed).unwrap();
+        (glance["accounts"].as_array().unwrap().iter())
+            .any(|account| account["id"] == id.as_str() && account["in_use"] == true)
+            .then_some(())
+    });
 }
 
 // GTK's popover menu, which an AT-SPI client opens and chooses from as a person would (M12).

@@ -32,6 +32,7 @@ installs it.
 | Object path | `/com/usepitboard/Pitboard` | `/com/usepitboard/Pitboard/Devel` |
 | Search provider | `/com/usepitboard/Pitboard/SearchProvider` | none installed |
 | KRunner runner | `/com/usepitboard/Pitboard/Runner` | none installed |
+| Widget feed | `/com/usepitboard/Pitboard/WidgetFeed` | `/com/usepitboard/Pitboard/Devel/WidgetFeed`, which no widget reads |
 | App icon | `com.usepitboard.Pitboard` | `com.usepitboard.Pitboard.Devel`, in the debug build's GResource alone |
 
 `.Devel` is GNOME's suffix for a development build's id, and the object path is the id with
@@ -91,11 +92,12 @@ program on the session's homes is the Linux session's to measure (Documented, no
   setting one host honours is not a setting.
 - **The Plasma widget reads a D-Bus feed, never a file.** Qt 6.10.3's XMLHttpRequest reads no
   local file unless `QML_XHR_ALLOW_FILE_READ` is set in its environment (Qt's XMLHttpRequest
-  page), which a person would have to set for plasmashell. Plasma's `org.kde.plasma.workspace.dbus` has only a service watcher at
-  plasma-workspace v6.1.0, calls and messages from v6.3.0, and `DBusProperties` and
-  `DBusSignalWatcher` from v6.4.0 (`components/dbus/` at each tag), so the widget follows the
-  feed without a poll from Plasma 6.4. Debian 13's 6.3.6 has neither, so the widget is
-  packaged apart.
+  page), which a person would have to set for plasmashell. Plasma's
+  `org.kde.plasma.workspace.dbus` has only a service watcher at plasma-workspace v6.1.0, calls
+  and messages from v6.3.0, and `Properties` and `SignalWatcher` from v6.4.0 (`components/dbus/`
+  at each tag, v6.3.0's read again on 29 October), so the widget follows the feed without a poll
+  from Plasma 6.4. Debian 13's 6.3.6 has neither, so the widget is packaged apart. [The Plasma
+  widget](#the-plasma-widget) has the rest.
 - **Without a status item, closing the window quits**, and the watch service runs the
   automatic switch and the warm-ups once it has, which Preferences turns on (brief `close`):
   stock GNOME has no StatusNotifierItem host, and Background Apps lists no host app (synthesis
@@ -413,6 +415,69 @@ given and a launched search told, and nothing told for an id the search did not 
 KRunner gets the same results as matches at Moderate, the first at 1 and the next at 0.5, and a run
 told with the token set before it, and none after `Teardown` (`tests/presence`).
 
+## The Plasma widget
+
+The app serves `com.usepitboard.Pitboard.WidgetFeed`, Pitboard's own interface
+(`data/dbus/com.usepitboard.Pitboard.WidgetFeed.xml`), at `<app path>/WidgetFeed` on its own
+connection, from its registration on (`src/widget_feed.rs`). `Feed` is the model's
+`widget_feed()`, the glance as JSON, empty before the first read and once Pitboard is removed;
+`Revision` is the snapshot's `widget_revision` it was taken at. `PropertiesChanged` carries both,
+with nothing invalidated, as the revision moves and only then. With no file named, the model
+moves the revision only as what a widget shows changes, not as the time of the read does
+(`model/state.rs` `glanced`), so the feed's **Updated** can be older than the last read, as on
+macOS. Measured on a bus of the tests' own, as uid 1000 in Ubuntu 26.04's image with GLib
+2.88.0, the tests failing first to build without the module: GDBus refuses a `Set` of either
+property and a call of any method on the interface, and introspection lists the two properties
+read only, no method and no signal (`tests/widget_feed.rs`).
+
+The widget is QML on Kirigami, PlasmaComponents 3 and `org.kde.plasma.workspace.dbus`, read at
+plasma-workspace v6.4.0 and v6.8.2, which differ there in no call or property the widget uses:
+
+- `Properties` reads the interface with `GetAll` and `Introspect` once its service, path and
+  interface are set, then takes each `PropertiesChanged` itself, inserting the changed values
+  and emitting `propertiesChanged` (`components/dbus/dbusproperties.cpp:59-126,352-363`). So
+  the widget needs no `SignalWatcher`.
+- Each call the module makes is a `QDBusMessage::createMethodCall`, which leaves the bus to start
+  the service a well-known name names (`dbusproperties.cpp:35,62,107`,
+  `dbuspendingreply.cpp:24,75`). Measured in Fedora 44's image with Plasma 6.7.5, Qt 6.11.2 and
+  dbus-daemon 1.16.2, on a private bus with a service file for `com.usepitboard.Pitboard`: a
+  `Properties` on that name with no owner had the bus start the service; a call to a unique
+  name with no owner answered `org.freedesktop.DBus.Error.ServiceUnknown` and started nothing.
+  So the widget reads and asks only the owner's unique name, which it takes with `GetNameOwner`
+  once `DBusServiceWatcher` says the name is registered. The watcher asks the bus itself,
+  `NameHasOwner` and `NameOwnerChanged` through `QDBusServiceWatcher`
+  (`dbusservicewatcher.cpp:56-106`), which starts nothing.
+- `SessionBus.asyncCall` with a `signature` sends at once and introspects nothing
+  (`dbuspendingreply.cpp:21-41`). `ActivateAction`'s `(sava{sv})` takes the feed's id as the one
+  variant of its `av` (`dbusencoder.cpp:54-129`), as `app.switch-from-outside` takes a string.
+- With no `compactRepresentation`, a `PlasmoidItem` that has a full one takes the shell
+  package's default compact representation, Plasma's own icon of `Plasmoid.icon` (libplasma
+  v6.4.0 `src/plasmaquick/appletquickitem.cpp:703-710`). So the widget sets the icon and draws
+  only its full representation.
+- KPackage 6.13.0 resolves a package named by its id as the folder of that name under each data
+  folder's package root (`src/kpackage/package.cpp:470-492`), so the widget's folder is its
+  `KPlugin.Id`, which `check-linux-app.sh` holds.
+- PlasmaComponents 3's `ProgressBar` draws `widgets/bar_meter_horizontal` in the colours of the
+  item's `Kirigami.Theme` (libplasma v6.4.0
+  `src/declarativeimports/plasmacomponents3/ProgressBar.qml`), so a bar takes the colour of its
+  limit's step from a `highlightColor` set on it: neutral for low and negative for out, as the
+  pictures show.
+
+The Plasma each distribution ships: Debian 13 6.3.6, so no widget; Ubuntu 26.04 6.6.4 at its
+release and 6.6.6 in its updates (Launchpad); Fedora 43 6.4.5 at its release and 6.7.5 in its
+updates; Fedora 44 6.6.4 and 6.7.5 (dnf in each image, 29 October).
+
+`tst_widget.qml` runs under `qmltestrunner -platform offscreen` in Fedora 44's image, through
+`check.sh widget`, with KDE's platform theme (`QT_QPA_PLATFORMTHEME=kde`, plasma-integration
+6.7.5) reading BreezeLight's, then BreezeDark's colour scheme from `kdeglobals`. Its stand-in
+for the app, `tests/stand-in.py` on PyGObject, owns the name only once the bus starts it from a
+service file `run-tests.sh` writes after the bus has started, which dbus-daemon 1.16.2 finds at
+the activation. Measured there, the tests failing first to compile with no widget: the widget
+shows the account in use, each of its limits and the feed's words alone; its Switch asks
+`ActivateAction("switch-from-outside", [<id>])`; and with no Pitboard running it asks nothing,
+the bus starting the stand-in only for the test's own `StartServiceByName`. A TestCase is not
+drawn unless made visible: its items said they were hidden and drew nothing until then.
+
 ## The install layout
 
 Under Meson's prefix, `/usr` for a package:
@@ -429,8 +494,10 @@ Under Meson's prefix, `/usr` for a package:
 | `share/gnome-shell/search-providers/com.usepitboard.Pitboard.search-provider.ini` | `data` |
 | `share/krunner/dbusplugins/com.usepitboard.Pitboard.desktop` | `data/krunner` |
 
-The Plasma widget, at `share/plasma/plasmoids/com.usepitboard.Pitboard/`, comes behind a Meson
-option of its own and is packaged apart, since it needs Plasma 6.4. `pitboard` itself, beside
+The Plasma widget, `share/plasma/plasmoids/com.usepitboard.Pitboard/` with its `metadata.json`
+and `contents/ui/{main,Feed,FullRepresentation,AccountRow}.qml`, is installed while Meson's
+`plasma_widget` is on, as it is by default, and packaged apart, since it needs Plasma 6.4.
+`check-linux-app.sh` holds a tree that has it to those files. `pitboard` itself, beside
 `pitboard-app`, is the packages' to install.
 
 ## The metainfo
@@ -505,6 +572,13 @@ arm64 in Docker 29.8.2 on the owner's Mac on 28 October 2026, as uid 1000:
 - Fedora's image has `useradd` but not `setpriv`, which is util-linux's, beside the
   util-linux-core it ships. Ubuntu's and Debian's have both. Ubuntu's image has a user at
   uid 1000, `ubuntu`; the others' Containerfiles make one, since dbus-daemon needs it.
+- Fedora's image also has the Plasma widget's packages: `plasma-workspace`, which
+  holds `org.kde.plasma.workspace.dbus`, `libplasma`, `kf6-kirigami`, `kf6-qqc2-desktop-style`,
+  `breeze-icon-theme`, `qt6-qtdeclarative-devel` for `qmllint` and `qmltestrunner`, and
+  `python3-gobject-base`: 362 packages more, 349 MiB, 1 GiB installed, plasma-workspace 6.7.5,
+  KF 6.31.0 and Qt 6.11.2 on 29 October. They bring xdg-desktop-portal, which the private bus
+  then starts in each run; its document portal fails to mount FUSE in the container and says
+  so, and the tests pass.
 - Debian's 397 packages, 198 MB, came from snapshot.debian.org in 15 s, and Fedora's 414,
   279 MiB, in a 93 s step. snapshot.ubuntu.com answered each request in about 2 s, a cached one
   included: Ubuntu's 400 packages, 215 MB, took 3 min 39 s, and in two other runs apt waited
@@ -564,6 +638,8 @@ lists (`the_app_exports_only_its_outside_actions`):
 - The window's actions, installed on its class (`gtk_widget_class_install_action`) under
   `pitboard.`, are on no path: GTK keeps them in the widget's action muxer. Its keys are bound
   on the class too.
+- At `<app path>/WidgetFeed` the app serves its widget feed, which exports no `org.gtk.Actions`
+  ([The Plasma widget](#the-plasma-widget)).
 
 ## The UI tests
 

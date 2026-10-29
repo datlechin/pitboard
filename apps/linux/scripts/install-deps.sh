@@ -51,12 +51,16 @@ case $distro in
     apt-get install --update -y --no-install-recommends "$@" $apt_packages $fonts
     ;;
   fedora-44)
-    # util-linux for setpriv, which CI's jobs run the tests through.
+    # util-linux for setpriv, which CI's jobs run the tests through. Plasma's QML modules, Qt's
+    # qmllint and qmltestrunner, PyGObject for the stand-in for the app, and Breeze's icons and
+    # colour schemes, for the Plasma widget's checks.
     dnf install -y --repo fedora --repo updates --setopt=install_weak_deps=False \
       ca-certificates curl gcc pkgconf-pkg-config python3 gtk4-devel gtk4-devel-tools \
       libadwaita-devel glib2-devel meson ninja-build desktop-file-utils appstream dbus-daemon \
       at-spi2-core mutter mesa-dri-drivers mesa-libEGL librsvg2-tools adwaita-icon-theme \
-      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux gvfs
+      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux gvfs \
+      plasma-workspace libplasma kf6-kirigami qt6-qtdeclarative-devel python3-gobject-base \
+      breeze-icon-theme kf6-qqc2-desktop-style
     ;;
   *)
     echo "install-deps.sh knows ubuntu-26.04, debian-13 and fedora-44, not $distro" >&2

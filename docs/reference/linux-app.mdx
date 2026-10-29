@@ -1,7 +1,7 @@
 ---
 title: "The app on Linux"
 sidebarTitle: "App on Linux"
-description: "Look up the app on Linux: its window, tray icon, notifications, start at login, search and keyboard shortcuts."
+description: "Look up the app on Linux: its window, tray icon, notifications, start at login, search, Plasma widget and keyboard shortcuts."
 ---
 
 The app on Linux runs on GNOME and KDE Plasma, with GTK 4.18 and libadwaita 1.7 or later: Debian 13, Ubuntu 26.04 and Fedora 43 or later. It does what [the menu bar app](/reference/mac-app) does, in GNOME's words, and has no Claude Desktop accounts. This page gives where it differs.
@@ -78,6 +78,14 @@ The app posts the notifications the [menu bar app](/reference/mac-app#notificati
 While Pitboard runs, GNOME's search and KRunner find **Switch to work** for each account, and **Add Account…**. A word of an account's name finds it. Choosing a switch switches with no window, as [a Jump List switch](/reference/windows-app#jump-list) does on Windows. Neither starts Pitboard.
 
 The app's launcher offers **Add Account…** and **Refresh**, which start Pitboard if it is not running.
+
+## Plasma widget
+
+On KDE Plasma 6.4 or later, the **Pitboard** widget shows the accounts as the [large **Accounts** widget](/reference/mac-app#widgets-and-controls) does on macOS. Debian 13 has Plasma 6.3, and no widget.
+
+In a panel, the widget is the Pitboard mark, which shows the accounts when clicked. **Switch** beside an account switches to it with no window, as a switch from [search](#search) does. A switch Pitboard refuses is said in a notification.
+
+The widget shows what Pitboard shows only while Pitboard runs, and never starts it. While Pitboard is not running, the widget shows only the Pitboard mark, and the system tray keeps it among its hidden items.
 
 ## Keyboard shortcuts
 

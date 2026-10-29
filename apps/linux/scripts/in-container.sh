@@ -33,7 +33,7 @@ if [ "$#" -eq 0 ]; then
   case $distro in
     ubuntu-26.04) set -- lint test ui release ;;
     debian-13) set -- lint test floor ;;
-    *) set -- lint test ;;
+    *) set -- lint test widget ;;
   esac
 fi
 if command -v podman >/dev/null 2>&1; then

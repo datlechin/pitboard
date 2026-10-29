@@ -759,10 +759,11 @@ container:
 | `release` | Meson's setup, compile, tests and install of the release, then `check-linux-app.sh` on what it installed |
 | `floor` | `cargo hack check --rust-version -p pitboard-linux --all-targets --locked` |
 | `scripts` | `test-linux-app.py`, with `desktop-file-validate` and `appstreamcli` required |
+| `widget` | `qmllint` on the Plasma widget, then its tests under `headless.sh` over a stand-in for the app, in Breeze and in Breeze Dark, which need Plasma 6.4's QML modules, the pictures kept as `ui` keeps its own |
 
 With no step it runs the steps of the distribution's job on CI: `lint`, `test`, `ui` and
-`release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint` and `test` on
-`fedora-44`. A container runs as uid 1000, sees the repository and this machine's Cargo
+`release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint`, `test` and
+`widget` on `fedora-44`. A container runs as uid 1000, sees the repository and this machine's Cargo
 registry read only, and keeps Cargo's and Meson's folders in the volume
 `pitboard-linux-app-target`. Only a `cargo fetch` before the steps has the network, for
 Cargo's git checkouts. The release's link, at more than one job, takes most of 8 GiB: where
@@ -783,7 +784,8 @@ every home, XDG folder and temporary folder fresh and removed after.
 - whose D-Bus service starts anything but `/usr/bin/pitboard-app --gapplication-service`, or
   is for another name than `com.usepitboard.Pitboard`, or whose launcher handles more than
   `pitboard://`;
-- whose search provider or KRunner runner would start Pitboard.
+- whose search provider or KRunner runner would start Pitboard;
+- whose Plasma widget, where it has one, is another id's.
 
 `test-linux-app.py` tests each of these where `desktop-file-validate` and `appstreamcli` are
 on `PATH`, and `TEST_LINUX_APP_TOOLS` names the ones that must be, as the `scripts` step and CI
@@ -798,7 +800,8 @@ the container's root, and runs the `test` step from a nextest archive as a fresh
   and `release`, and on x86_64 `ui`, whose pictures it uploads as `linux-app-pictures`, kept for
   7 days, a run that failed included.
 - `linux-app-floor`, in Debian 13: `lint`, the tests and `floor`.
-- `linux-app-fedora`, in Fedora 44: `lint` and the tests.
+- `linux-app-fedora`, in Fedora 44: `lint`, the tests and `widget`, whose pictures it uploads
+  as `linux-widget-pictures`, kept for 7 days, a run that failed included.
 
 `install-deps.sh` takes Debian's and Ubuntu's packages from one snapshot of their archives,
 named in it. Fedora keeps none, so its job takes the packages of the day. A new snapshot is a

@@ -184,6 +184,7 @@ jobs:
           .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
           apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
           apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
+          apps/linux/plasmoid/tests/run-tests.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1155,13 +1156,14 @@ jobs:
           path: target/nextest/ci/junit.xml
       - run: apps/linux/scripts/check.sh floor
 
-  # Fedora 44 by digest. Fedora keeps no snapshot of its archive, so its packages move under the
+  # Fedora 44 by digest, which also has the Plasma 6.4 the widget needs, so the widget's tests and
+  # pictures run here. Fedora keeps no snapshot of its archive, so its packages move under the
   # image.
   linux-app-fedora:
     runs-on: ubuntu-26.04
     container:
       image: docker.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       RUSTUP_HOME: /opt/rustup
       CARGO_HOME: /opt/cargo
@@ -1188,6 +1190,19 @@ jobs:
         with:
           name: junit-linux-app-fedora
           path: target/nextest/ci/junit.xml
+      - name: The Plasma widget's tests and pictures, as the same user
+        run: |
+          install -d -o pitboard-tests -g pitboard-tests target/linux-widget-pictures
+          PITBOARD_LINUX_PICTURES=$PWD/target/linux-widget-pictures \
+            setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
+            apps/linux/scripts/check.sh widget
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-widget-pictures
+          path: target/linux-widget-pictures
+          retention-days: 7
+          if-no-files-found: ignore
 
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
   msrv:
