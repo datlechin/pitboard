@@ -714,14 +714,17 @@ keeps it is in the header of the module named.
   the model's default and closes as Cancel
   (`a_notices_buttons_send_their_intents_asking_first_where_it_says`,
   `a_question_answers_with_its_default_and_close_responses`).
-- The Linux app's sheets are the model's: Add Account and Sign In Again sign in with the code
-  the browser shows and name the account added, a failure is said inside the sheet with what
-  was typed still there, and Escape while signing in is the sign-in's Cancel
+- The Linux app's sheets are the model's, each an Adwaita dialog with its buttons in its header:
+  Add Account and Sign In Again sign in with the code the browser shows and name the account
+  added, a failure is said inside the sheet with what was typed still there, and Escape while
+  signing in is the sign-in's Cancel, and on Name, Rename and Clean Up theirs
   (`adding_an_account_signs_in_with_the_fixtures_code_and_names_it`,
-  `a_failure_stays_in_the_dialog`, `escape_while_signing_in_cancels_it`). A link dropped on the
-  window or pasted in Open Link reaches the model as it came, and Open in Browser hands it to the
-  browser, a fixture's stand-in opener in a fixture (`a_dropped_link_opens_open_link`,
-  `a_pasted_link_opens_open_link`, `open_in_browser_hands_the_link_to_the_opener`).
+  `a_failure_stays_in_the_dialog`, `escape_while_signing_in_cancels_it`,
+  `rename_asks_in_a_dialog_whose_header_holds_its_buttons_and_escape_is_cancel`). A link
+  dropped on the window or pasted in Open Link reaches the model as it came, and Open in
+  Browser hands it to the browser, a fixture's stand-in opener in a fixture
+  (`a_dropped_link_opens_open_link`, `a_pasted_link_opens_open_link`,
+  `open_in_browser_hands_the_link_to_the_opener`).
 - In a fixture the Linux app writes, posts and registers nothing outside the fixture's folder,
   and leaves every home it was given as it found it, beside Mesa's shader cache
   (`a_fixture_writes_nothing_outside_its_folder`,

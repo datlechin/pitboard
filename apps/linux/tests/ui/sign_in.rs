@@ -1,8 +1,9 @@
-//! Add Account and Sign In Again in their dialog, and the sheets that ask in an alert: signing in
-//! with the code the browser shows and naming the account added, Escape while signing in, and a
-//! failure said inside the sheet it happened in.
+//! Add Account and Sign In Again in their dialog, and Name and Rename in theirs: signing in with
+//! the code the browser shows and naming the account added, Escape while signing in and on
+//! Rename, and a failure said inside the sheet it happened in.
 
 use adw::prelude::*;
+use pitboard_linux::dialogs::name::SheetDialog;
 use pitboard_linux::dialogs::sign_in::SignIn;
 use pitboard_linux::window::AccountGroup;
 use pitboard_model::{Intent, RowEnd};
@@ -65,10 +66,7 @@ fn adding_an_account_signs_in_with_the_fixtures_code_and_names_it() {
     viewed.until("the account added and asked a name", |shown| {
         matches!(shown.sheet, Some(pitboard_model::Sheet::Name { .. }))
     });
-    let alert = viewed
-        .dialog()
-        .downcast::<adw::AlertDialog>()
-        .expect("Name");
+    let alert = viewed.dialog().downcast::<SheetDialog>().expect("Name");
     let name = every::<adw::EntryRow>(&alert).remove(0);
     assert_eq!(
         name.text(),
@@ -137,7 +135,7 @@ fn escape_while_signing_in_cancels_it() {
     );
 }
 
-// Renamed to the name another account has, the alert stays up and says why, and the name typed
+// Renamed to the name another account has, the dialog stays up and says why, and the name typed
 // stays there to correct.
 #[gtk::test]
 fn a_failure_stays_in_the_dialog() {
@@ -158,10 +156,7 @@ fn a_failure_stays_in_the_dialog() {
     group
         .activate_action("account.rename", None)
         .expect("its menu's Rename");
-    let alert = viewed
-        .dialog()
-        .downcast::<adw::AlertDialog>()
-        .expect("Rename");
+    let alert = viewed.dialog().downcast::<SheetDialog>().expect("Rename");
     let name = every::<adw::EntryRow>(&alert).remove(0);
 
     name.set_text(&taken.title);
@@ -193,4 +188,36 @@ fn a_failure_stays_in_the_dialog() {
         taken.title,
         "what was typed is there to correct"
     );
+}
+
+// Rename asks in a dialog as Add Account does: Cancel and Save in its header, and Escape is its
+// Cancel.
+#[gtk::test]
+fn rename_asks_in_a_dialog_whose_header_holds_its_buttons_and_escape_is_cancel() {
+    let viewed = Viewed::of("oneTool");
+    let other = (viewed.items().into_iter())
+        .find(|item| matches!(item.end, Some(RowEnd::Button { .. })))
+        .expect("an account not in use");
+    let group = (every::<AccountGroup>(&viewed.window).into_iter())
+        .find(|group| group.title() == other.title)
+        .expect("its group");
+    group
+        .activate_action("account.rename", None)
+        .expect("its menu's Rename");
+    let dialog = viewed.dialog();
+    let save = (viewed.shown.snapshot().sheet_text.clone())
+        .expect("its words")
+        .confirm;
+    let cancel = pitboard_model::app_words(pitboard_model::Front::Gnome)
+        .window
+        .cancel;
+
+    let header = every::<adw::HeaderBar>(&dialog).remove(0);
+    let _ = (button(&header, &cancel), button(&header, &save));
+    viewed.sent_since();
+    escape(&every::<adw::EntryRow>(&dialog).remove(0));
+
+    viewed.until("closed", |shown| shown.sheet.is_none());
+    assert_eq!(viewed.sent(), [Intent::CloseSheet]);
+    assert!(viewed.window.visible_dialog().is_none());
 }

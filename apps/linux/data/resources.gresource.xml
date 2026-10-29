@@ -15,6 +15,7 @@
     <file>ui/limit-row.ui</file>
     <file>ui/notice-row.ui</file>
     <file>ui/sign-in.ui</file>
+    <file>ui/sheet.ui</file>
     <file>ui/open-link.ui</file>
     <file>ui/preferences.ui</file>
     <file>ui/diagnostics.ui</file>

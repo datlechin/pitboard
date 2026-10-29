@@ -1,7 +1,7 @@
 //! The window's dialogs, each an Adwaita one, put up and taken down as the model says.
 //!
 //! The model keeps the sheet over the window: Add Account and Sign In Again are a dialog of
-//! their own ([`sign_in`]), and Name, Rename and Clean Up ask in an alert ([`name`]). A sheet
+//! their own ([`sign_in`]), and Name, Rename and Clean Up another ([`name`]). A sheet
 //! the person closed stays down until the model has heard and moved on, and one the model lets
 //! go closes telling it nothing. What the window asks by itself, quitting an app or replacing a
 //! login, and a failure the model says, are alerts in front of everything ([`question`],
@@ -34,7 +34,7 @@ use pitboard_model::{
 use crate::preferences::{self, Preferences};
 use crate::shown::Shown;
 use crate::window::Host;
-use name::SheetAlert;
+use name::SheetDialog;
 use open_link::OpenLink;
 use shortcuts::Shortcuts;
 use sign_in::SignIn;
@@ -43,35 +43,35 @@ use welcome::Welcome;
 // The dialog up for the model's sheet.
 enum Up {
     SignIn(SignIn),
-    Alert(Rc<SheetAlert>),
+    Sheet(SheetDialog),
 }
 
 impl Up {
     fn sheet(&self) -> &Sheet {
         match self {
             Up::SignIn(dialog) => dialog.sheet(),
-            Up::Alert(alert) => alert.sheet(),
+            Up::Sheet(dialog) => dialog.sheet(),
         }
     }
 
     fn dialog(&self) -> adw::Dialog {
         match self {
             Up::SignIn(dialog) => dialog.clone().upcast(),
-            Up::Alert(alert) => alert.alert.clone().upcast(),
+            Up::Sheet(dialog) => dialog.clone().upcast(),
         }
     }
 
     fn show(&self, snapshot: &Snapshot) {
         match self {
             Up::SignIn(dialog) => dialog.show(snapshot),
-            Up::Alert(alert) => alert.show(snapshot),
+            Up::Sheet(dialog) => dialog.show(snapshot),
         }
     }
 
     fn withdraw(&self) {
         match self {
             Up::SignIn(dialog) => dialog.withdraw(),
-            Up::Alert(alert) => alert.withdraw(),
+            Up::Sheet(dialog) => dialog.withdraw(),
         }
     }
 }
@@ -207,9 +207,10 @@ impl Dialogs {
             Sheet::Add { .. } | Sheet::SignInAgain { .. } => {
                 Up::SignIn(SignIn::new(sheet.clone(), self.host.clone()))
             }
-            Sheet::Name { .. } | Sheet::Rename { .. } | Sheet::Stow => {
-                Up::Alert(SheetAlert::new(sheet.clone(), self.host.clone()))
-            }
+            Sheet::Name { ref account, .. } | Sheet::Rename { ref account } => Up::Sheet(
+                SheetDialog::naming(sheet.clone(), account.tool, self.host.clone()),
+            ),
+            Sheet::Stow => Up::Sheet(SheetDialog::stowing(self.host.clone())),
         };
         up.show(snapshot);
         let dialog = up.dialog();

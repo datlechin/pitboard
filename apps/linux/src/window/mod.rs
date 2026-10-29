@@ -453,6 +453,7 @@ mod tests {
         let _ = NoticeRow::new(host.clone());
         let add = pitboard_model::Sheet::Add { tool: None };
         let _ = crate::dialogs::sign_in::SignIn::new(add, host.clone());
+        let _ = crate::dialogs::name::SheetDialog::stowing(host.clone());
         let _ = crate::dialogs::open_link::OpenLink::new(host.clone());
         let _ = crate::preferences::Preferences::new(host.clone(), &shown.snapshot());
         let _ = crate::dialogs::welcome::Welcome::new(host);

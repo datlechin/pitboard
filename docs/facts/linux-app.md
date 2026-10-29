@@ -740,14 +740,16 @@ libadwaita 1.9, by the tests named:
 Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by the tests named:
 
 - `AdwAlertDialog` closes on any response: a response's button calls `adw_dialog_close` and only
-  then emits `response` (`button_clicked_cb`, `src/adw-alert-dialog.c`). With `can-close` off,
-  that close is a `close-attempt` instead, so Name, Rename and Clean Up stay up until the model
-  closes their sheet, saying inside what went wrong (`a_failure_stays_in_the_dialog`), and a
-  close attempt no response follows is Escape.
+  then emits `response` (`button_clicked_cb`, `src/adw-alert-dialog.c`). So the sheets that stay
+  up until the model closes them, saying inside what went wrong, are `AdwDialog`s with their
+  buttons in the header bar: Add Account, Sign In Again, Name, Rename and Clean Up
+  (`a_failure_stays_in_the_dialog`).
 - An `AdwDialog` in a window takes Escape through its sheet's shortcut, which calls
   `adw_dialog_close` (`src/adw-floating-sheet.c`, `src/adw-bottom-sheet.c`): with `can-close` off
-  that is a `close-attempt`, which the sign-in dialog answers as its Cancel where the model says
-  Escape is that (`escape_while_signing_in_cancels_it`).
+  that is a `close-attempt`, its header bar showing no close button, which the sign-in dialog
+  answers as its Cancel where the model says Escape is that, and Name, Rename and Clean Up as
+  their Cancel (`escape_while_signing_in_cancels_it`,
+  `rename_asks_in_a_dialog_whose_header_holds_its_buttons_and_escape_is_cancel`).
 - `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
   `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
   same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its
