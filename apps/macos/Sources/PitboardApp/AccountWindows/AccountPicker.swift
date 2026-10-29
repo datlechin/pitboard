@@ -79,23 +79,9 @@ struct AccountPicker: View {
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("picker.ok")
             }
-        // Neither shipping app meets it: each has account windows.
-        case .noWindows(let title, let link, let linkText, let detail, let inBrowser):
-            Text(title).font(.headline)
-                .accessibilityIdentifier(titled)
-            LinkLine(text: linkText, url: link.url)
-            Text(detail).explanatory()
-                .accessibilityIdentifier("picker.detail")
-            HStack {
-                Spacer()
-                cancelButton
-                Button(inBrowser) {
-                    if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("picker.inBrowser")
-            }
+        // Given only to a front with no account windows (`Front::offers_account_windows`).
+        case .noWindows:
+            EmptyView()
         case .noAccount(let title, let link, let linkText, let detail, let inBrowser, let add):
             Text(title).font(.headline)
                 .accessibilityIdentifier(titled)
