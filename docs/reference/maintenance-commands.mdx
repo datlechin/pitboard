@@ -123,7 +123,7 @@ Usage: pitboard vault [OPTIONS] [COMMAND]
 | `status` | Says where this Pitboard directory keeps the [parked logins](/security#where-parked-logins-are-kept) of Claude Code and Codex. The default. |
 | `move <FORM>` | On Linux, moves every parked login into `secret-service`, your login keyring, or `files`, 0600 files in `~/.pitboard/vault`. |
 
-`status` reads Pitboard's own files and changes nothing. Its first line says where they are:
+`status` reads Pitboard's own files and, on Linux, asks your session's bus whether a Secret Service answers, which can start your keyring there as any program's first question to it does. It unlocks and changes nothing. Its first line says where they are:
 
 | First line | When |
 | --- | --- |

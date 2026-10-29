@@ -604,7 +604,10 @@ impl Pitboard {
         }
     }
 
-    /// Where this home keeps the parked logins of Claude Code and Codex, from its files alone.
+    /// Where this home keeps the parked logins of Claude Code and Codex: from its files, and on
+    /// Linux by asking the session's bus whether a Secret Service answers, which D-Bus may answer
+    /// by starting the keyring there, as it starts a service on its first call. Nothing is
+    /// unlocked or changed.
     pub fn vault(&self) -> Result<switch::Keeping> {
         switch::keeping(&self.ctx)
     }

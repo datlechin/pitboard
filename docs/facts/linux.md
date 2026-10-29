@@ -283,6 +283,13 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
   `Prompt`, is the run's answer: every copy of its context remembers it, and each later question
   is `Locked` with no `Unlock` called. Another run asks again
   (`a_prompt_dismissed_is_not_put_up_again_in_the_same_run`).
+- Asking whether a Secret Service answers (`secret_service::answers`, which `pitboard vault`,
+  doctor and a new home's form ask) opens a session on `org.freedesktop.secrets`. In the D-Bus
+  specification (Message Bus Starting Services), a call to a name nobody owns starts the service
+  a `.service` file names for it, unless the message carries `NO_AUTO_START`; zbus 5.19.0 sets
+  that flag only where a call asks for `MethodFlags::NoAutoStart`, and secret-service asks for
+  none. So the question can start gnome-keyring where the session has its service file. It
+  unlocks nothing.
 - secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
   which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
   application that controls which store it uses not to link it, and whose `Entry` hides the
