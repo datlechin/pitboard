@@ -241,3 +241,25 @@ distribution's repositories while the image built:
   holds them, and zypper removes the packages alone.
 - The same day on Debian 13 and Ubuntu 26.04, `apt-get purge` left no folder no package holds
   either. `dpkg-query -L` of several packages puts an empty line between their lists.
+
+## The session bundle
+
+Measured on 29 October 2026 on the owner's Mac (arm64), through the steps of `linux-facts.yml`'s
+`session` job, with a key `age-keygen` made in a scratch folder:
+
+- age v1.3.2's GitHub release lists `age-v1.3.2-linux-arm64.tar.gz` with the SHA-256
+  `6b8dc4333c53a5a57c9e5834e3a48f92605d7154014cd07269ff3327db5d37f4`, which the tarball had. It
+  holds `age/age` beside `age-keygen`, `age-inspect`, four plugins and `LICENSE`.
+- That `age`, run as uid 1000 in the `debian-13` image, and Homebrew's age 1.3.2 on the Mac each
+  began the file they encrypted to an X25519 recipient with `age-encryption.org/v1`, a newline
+  and `-> X25519 `. `age -d` with the key's identity gave back the tar on the Mac.
+- `in-container.sh debian-13 command-line`, `deb` and `fedora-43 rpm` wrote the five packages
+  into one folder, and nothing else, and both checks passed them. `test-linux-packages.sh deb`
+  and `rpm` passed on that folder.
+- `pack-linux-session-bundle.sh` packed it under dash, GNU coreutils 9.7 and GNU tar 1.35 in the
+  `debian-13` image, and under the Mac's `sh`, its `sha256sum` (text_cmds-199) and bsdtar 3.5.3.
+  Each tar named every file `session-build-aarch64-linux/<file>`, with `-h` following the
+  script's link, and `sha256sum -c SHA256SUMS` passed on the Mac after the unpacking
+  CONTRIBUTING.md shows.
+- gh 2.103.0's `run download --help`: "If only a single artifact is specified, it will be
+  extracted into the current directory", which `-D` names.

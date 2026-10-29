@@ -122,6 +122,30 @@ Tag the first release with Windows files only once each of these holds:
   `WINDOWS_UPDATE_PRIVATE_KEY` are set, as [the Windows update key](#the-windows-update-key)
   says, and `WINDOWS_SIGNER` is unset.
 
+## Before the first release with the Linux app
+
+The first release with the Linux packages is a `1.0.0-beta.N`, tagged only once a session on
+[the Linux session machines](AGENTS.md#the-linux-session-machines) has measured them:
+
+1. Build the session bundle from the branch that holds `Release <version>`, its draft pull
+   request's branch once one is open ([Prepare a release](#prepare-a-release)):
+
+   ```sh
+   gh workflow run linux-facts.yml --ref <branch> -f session=true -f age-recipient=<age public key>
+   ```
+
+   [The Linux session bundle](CONTRIBUTING.md#the-linux-session-bundle) says what it holds and
+   how to open it.
+2. On each machine, install the bundle's packages and measure what
+   [Not measured](docs/facts/not-measured.md) leaves to the Linux session.
+3. Commit what the session measured as `docs/facts/linux-session.md`. Its first paragraph names
+   the bundle in this form, as [the Windows session's page](docs/facts/windows-session.md) does:
+
+   ```text
+   The bundle was `linux-facts.yml` session run <run id> at <commit>, the commit that holds
+   `Release <version>`.
+   ```
+
 ## What a release publishes
 
 Each release has a tarball of the command line for each target of the `build` job, the app

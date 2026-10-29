@@ -159,8 +159,8 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
 `windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh`, `linux-versions.sh`,
-`linux-repository-key.sh` and `pack-command-line.sh` in `.github/scripts`,
-`apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
+`linux-repository-key.sh`, `pack-command-line.sh` and `pack-linux-session-bundle.sh` in
+`.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
 `crates/pitboard/Cargo.toml`, the Linux repository's key in `packaging/linux`, or a workflow's
 call of a PowerShell script in `.github/scripts`:
 
@@ -169,7 +169,8 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
   .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh \
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
   .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh \
-  .github/scripts/pack-command-line.sh apps/macos/scripts/build-number.sh
+  .github/scripts/pack-command-line.sh .github/scripts/pack-linux-session-bundle.sh \
+  apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
 ```
 
@@ -736,7 +737,9 @@ docker run --rm --user 1000:1000 --network none -v "$PWD":/src -w /src \
 built as a release builds it, inotify on four file systems, the process names of npm's `claude`
 and `codex` with the stand-in in their place, and headless mutter in Ubuntu 26.04's image. No pull request runs it on its own: one that
 changes the script dispatches it on its branch and names the run. What a run measured goes in
-`docs/facts/linux-runners.md` once it is read.
+`docs/facts/linux-runners.md` once it is read. With `-f session=true -f age-recipient=<age
+public key>`, it builds the Linux session bundle instead, which only the owner dispatches, as
+[The Linux session bundle](#the-linux-session-bundle) says.
 
 The display parts also run in Docker, packages while the image builds and the rest as the user
 they made, with no network:
@@ -927,6 +930,31 @@ before and no package holds.
 
 CI's `linux-packaging` job runs the four of each format on `ubuntu-26.04` and
 `ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<format>-<arch>` for 7 days.
+
+### The Linux session bundle
+
+`.github/workflows/linux-facts.yml`'s `session` job builds the bundle for
+[the Linux session machines](AGENTS.md#the-linux-session-machines): the aarch64 packages a
+release would ship, built, checked and installed by the steps above, on `ubuntu-26.04-arm`. Only
+the owner dispatches it, as
+[Before the first release with the Linux app](RELEASING.md#before-the-first-release-with-the-linux-app)
+says. `session-gate.sh` refuses anything but a branch at 1.0.0-beta.1 or later and a key that
+is not an age public key, as it does for Windows. The packages are unsigned: the signing key is in
+the `linux-packages` environment alone. `pack-linux-session-bundle.sh` lists every file in
+`SHA256SUMS`, packs the folder in one tar and encrypts it with age to that key. GitHub keeps the
+artifact a day. Download, decrypt and unpack it on the Mac, then delete it from GitHub:
+
+```sh
+name=session-build-aarch64-linux
+gh run download <run id> -n "$name" -D "$name"
+age -d -i <age identity file> -o "$name.tar" "$name/$name.tar.age" && rm -r "$name" &&
+  tar -xf "$name.tar" && rm "$name.tar"
+gh api repos/datlechin/pitboard/actions/runs/<run id>/artifacts --jq '.artifacts[].id' |
+  xargs -I{} gh api -X DELETE repos/datlechin/pitboard/actions/artifacts/{}
+```
+
+Copy the folder, with its `SHA256SUMS` at the root, to a machine, and delete it from the Mac
+after the session.
 
 ## Tool registers
 

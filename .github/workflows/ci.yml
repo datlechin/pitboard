@@ -190,7 +190,7 @@ jobs:
           apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
           apps/linux/plasmoid/tests/run-tests.sh
           .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
-          .github/scripts/test-linux-packages.sh
+          .github/scripts/test-linux-packages.sh .github/scripts/pack-linux-session-bundle.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1347,10 +1347,10 @@ jobs:
       # The update key rehearsal ships bundles that really do update themselves, so it must
       # never be able to reach the real key, the real certificate or the real feed.
       # windows-facts.yml and linux-facts.yml run on whatever branch they are dispatched on, and
-      # windows-facts.yml's session job ships a bundle off the runner. A workflow that never names
-      # secrets cannot be handed one, and that is worth knowing on the pull request that changes
-      # it rather than the month after.
-      - name: The update key rehearsal, the runner facts and the session bundle name no repository secret
+      # their session jobs ship a bundle off the runner. A workflow that never names secrets
+      # cannot be handed one, and that is worth knowing on the pull request that changes it
+      # rather than the month after.
+      - name: The update key rehearsal, the runner facts and the session bundles name no repository secret
         run: |
           for workflow in rotation.yml windows-facts.yml linux-facts.yml; do
             if grep -qw secrets ".github/workflows/$workflow"; then

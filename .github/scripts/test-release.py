@@ -28,6 +28,7 @@ SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
 LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
 LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
 PACK_COMMAND_LINE = REPO / ".github" / "scripts" / "pack-command-line.sh"
+PACK_LINUX_SESSION_BUNDLE = REPO / ".github" / "scripts" / "pack-linux-session-bundle.sh"
 REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
@@ -1475,6 +1476,177 @@ esac
                 done = run(PACK_COMMAND_LINE, *args)
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage:", done.stderr)
+
+
+class LinuxSessionBundle(unittest.TestCase):
+    NAME = "session-build-aarch64-linux"
+    FILES = (
+        "pitboard-v1.0.0-beta.7-aarch64.rpm",
+        "pitboard-app-v1.0.0-beta.7-aarch64.deb",
+        "pitboard-v1.0.0-beta.7-aarch64.deb",
+        "pitboard-archive-keyring-v1.0.0-beta.7-all.deb",
+        "pitboard-app-v1.0.0-beta.7-aarch64.rpm",
+    )
+    HEADER = b"age-encryption.org/v1\n-> X25519 stand-in\n"
+    # A stand-in for age on PATH that keeps what it was asked and writes age's header for an X25519
+    # key before the tar, or with STAND_IN_AGE=plain the tar alone, or with STAND_IN_AGE=fails part
+    # of it before failing.
+    STAND_IN = r"""#!/bin/sh
+printf '%s\n' "$*" >"$STAND_IN_AGE_ASKED"
+case ${STAND_IN_AGE-} in
+  plain) cat "$6" >"$5" ;;
+  fails)
+    head -c 64 "$6" >"$5"
+    exit 1
+    ;;
+  *) { printf 'age-encryption.org/v1\n-> X25519 stand-in\n'; cat "$6"; } >"$5" ;;
+esac
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        tools = self.work / "bin"
+        tools.mkdir()
+        (tools / "age").write_text(self.STAND_IN)
+        (tools / "age").chmod(0o755)
+        self.asked = self.work / "asked"
+        self.env = {
+            **{name: value for name, value in os.environ.items() if name != "STAND_IN_AGE"},
+            "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+            "STAND_IN_AGE_ASKED": str(self.asked),
+        }
+        self.out = self.work / "sealed"
+        self.sealed = self.out / f"{self.NAME}.tar.age"
+
+    def folder(self, under, files):
+        folder = self.work / under
+        folder.mkdir()
+        for name in files:
+            path = folder / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"{name}\n")
+        return folder
+
+    def pack(self, folder, name=NAME, **env):
+        return subprocess.run(
+            ["sh", PACK_LINUX_SESSION_BUNDLE, folder, name, self.out, "age", SessionGate.KEY],
+            capture_output=True,
+            text=True,
+            env={**self.env, **env},
+        )
+
+    def assertRefused(self, done, said, folder):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(said, done.stderr)
+        self.assertFalse(self.asked.exists())
+        self.assertFalse((folder / "SHA256SUMS").exists())
+
+    def test_the_bundle_is_the_folder_summed_and_sealed_to_the_key(self):
+        folder = self.folder("session", self.FILES)
+        done = self.pack(folder)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, f"{self.sealed}\n")
+        self.assertEqual(os.listdir(self.out), [self.sealed.name])
+        asked = self.asked.read_text().split()
+        self.assertEqual(
+            asked[:5], ["--encrypt", "--recipient", SessionGate.KEY, "--output", str(self.sealed)]
+        )
+        self.assertEqual(len(asked), 6)
+        self.assertEqual(Path(asked[5]).name, f"{self.NAME}.tar")
+        self.assertFalse(Path(asked[5]).exists())
+        listed = sorted(self.FILES)
+        sums = "".join(
+            f"{hashlib.sha256((folder / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in listed
+        )
+        self.assertEqual((folder / "SHA256SUMS").read_text(), sums)
+        sealed = self.sealed.read_bytes()
+        self.assertEqual(sealed[: len(self.HEADER)], self.HEADER)
+        with tarfile.open(fileobj=io.BytesIO(sealed[len(self.HEADER) :])) as tar:
+            members = tar.getmembers()
+            packed = {m.name: tar.extractfile(m).read() for m in members if m.isfile()}
+        self.assertEqual(
+            packed,
+            {
+                f"{self.NAME}/{name}": (folder / name).read_bytes()
+                for name in [*listed, "SHA256SUMS"]
+            },
+        )
+        self.assertEqual([m.name for m in members if m.isdir()], [self.NAME])
+
+    def test_a_folder_with_nothing_to_ship_is_refused(self):
+        for under, files in (("empty", ()), ("hollow", ("deb/",))):
+            with self.subTest(folder=under):
+                folder = self.folder(under, ())
+                for name in files:
+                    (folder / name).mkdir()
+                done = self.pack(folder)
+                self.assertRefused(done, f"{folder} holds nothing to pack", folder)
+                self.assertFalse(self.out.exists())
+
+    def test_what_was_packed_already_is_refused(self):
+        summed = self.folder("summed", (*self.FILES, "SHA256SUMS"))
+        done = self.pack(summed)
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(f"{summed} holds a SHA256SUMS already", done.stderr)
+        self.assertEqual((summed / "SHA256SUMS").read_text(), "SHA256SUMS\n")
+        self.assertFalse(self.asked.exists())
+        self.out.mkdir()
+        self.sealed.write_bytes(b"an earlier bundle")
+        folder = self.folder("session", self.FILES)
+        self.assertRefused(self.pack(folder), f"{self.sealed} is there already", folder)
+        self.assertEqual(self.sealed.read_bytes(), b"an earlier bundle")
+
+    def test_a_name_with_a_space_is_refused(self):
+        for under, name in (
+            ("space", "pitboard a.deb"),
+            ("newline", "pitboard\na.deb"),
+            ("tab", "deb\tfolder/pitboard.deb"),
+        ):
+            with self.subTest(name=name):
+                folder = self.folder(under, (*self.FILES, name))
+                done = self.pack(folder)
+                self.assertRefused(done, "has a space in its name, which SHA256SUMS cannot name", folder)
+
+    def test_a_name_that_is_not_a_session_bundles_is_refused(self):
+        folder = self.folder("session", self.FILES)
+        for name in (
+            "session-build-",
+            "session-build-Aarch64-linux",
+            "build-aarch64-linux",
+            "session-build-../aarch64-linux",
+            "session-build-aarch64 linux",
+        ):
+            with self.subTest(name=name):
+                done = self.pack(folder, name)
+                self.assertRefused(done, f"{name} is not a session bundle's name", folder)
+
+    def test_nothing_is_left_of_a_bundle_age_did_not_encrypt(self):
+        for under, age, said in (
+            ("plain", "plain", "does not read as encrypted to an X25519 key"),
+            ("fails", "fails", "age exited 1"),
+        ):
+            with self.subTest(age=age):
+                folder = self.folder(under, self.FILES)
+                done = self.pack(folder, STAND_IN_AGE=age)
+                self.assertEqual(done.returncode, 1, done.stdout)
+                self.assertIn(said, done.stderr)
+                self.assertEqual(done.stdout, "")
+                self.assertEqual(os.listdir(self.out), [])
+                self.assertFalse((folder / "SHA256SUMS").exists())
+                self.assertFalse(Path(self.asked.read_text().split()[5]).exists())
+                self.asked.unlink()
+
+    def test_it_takes_five_arguments(self):
+        folder = self.folder("session", self.FILES)
+        given = (folder, self.NAME, self.out, "age", SessionGate.KEY)
+        for args in (given[:4], (*given, "more")):
+            with self.subTest(args=len(args)):
+                done = run(PACK_LINUX_SESSION_BUNDLE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+                self.assertFalse((folder / "SHA256SUMS").exists())
 
 
 class ScriptCalls(unittest.TestCase):
