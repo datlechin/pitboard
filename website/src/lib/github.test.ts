@@ -394,10 +394,15 @@ test("describes every Linux package and its bill of materials, and SHA256SUMS na
     `pitboard-v${v}-aarch64.rpm`,
   ];
   const keyring = `pitboard-archive-keyring-v${v}-all.deb`;
+  const widget = [
+    `pitboard-plasma-widget-v${v}-all.deb`,
+    `pitboard-plasma-widget-v${v}-noarch.rpm`,
+  ];
   const release = made(v, [
     `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
     ...packages,
     ...packages.map((name) => `${name}.cdx.json`),
+    ...widget,
     keyring,
     "install.sh",
     "SHA256SUMS",
@@ -430,6 +435,8 @@ test("describes every Linux package and its bill of materials, and SHA256SUMS na
         `pitboard-app-v${v}-aarch64.rpm.cdx.json`,
         ["linux"],
       ],
+      [widget[0], "The Plasma widget, a Debian package", null, ["linux"]],
+      [widget[1], "The Plasma widget, an RPM package", null, ["linux"]],
       [
         `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
         "Command line, Linux on x86_64",
@@ -475,7 +482,7 @@ test("describes every Linux package and its bill of materials, and SHA256SUMS na
     without.at(-1)?.forHtml,
     "Checksums of the apps, the command line archives and <code>install.sh</code>",
   );
-  for (const name of [`pitboard-v${v}-riscv64.deb`, `pitboard-plasma-widget-v${v}-all.deb`]) {
+  for (const name of [`pitboard-v${v}-riscv64.deb`, `pitboard-plasma-widget-v${v}-amd64.deb`]) {
     assert.throws(() => fileRows(made(v, [name, "SHA256SUMS"])), /does not describe/);
   }
 });

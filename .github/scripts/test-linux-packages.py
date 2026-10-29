@@ -52,6 +52,8 @@ RPM_ZSH = "usr/share/zsh/site-functions/_pitboard"
 FISH = "usr/share/fish/vendor_completions.d/pitboard.fish"
 MANUAL = "usr/share/man/man1/pitboard.1.gz"
 KEYRING = "usr/share/keyrings/pitboard-archive-keyring.pgp"
+PLASMA = "plasma-workspace (>= 4:6.4)"
+RPM_PLASMA = "(plasma-workspace >= 6.4 or plasma6-workspace >= 6.4)"
 # A stand-in for the command line, and the man page and completions it writes.
 STAND_IN = "#!/bin/sh\n# pitboard 1.0.0-beta.7\n"
 # rpmlint reads the programs of an RPM package as the release's, so their stand-ins are programs
@@ -143,6 +145,13 @@ def put(root, path, data, mode=0o644):
     file.chmod(mode)
 
 
+# The Plasma widget's folder in the tree, as Meson installs it.
+def widget_files(root, app):
+    for source in sorted(path for path in app.PLASMOID.rglob("*") if path.is_file()):
+        put(root, Path(app.WIDGET) / source.relative_to(app.PLASMOID), source.read_bytes())
+    return root
+
+
 # As dh_compress compresses: gzip -9n.
 def compressed(data):
     return gzip.compress(data if isinstance(data, bytes) else data.encode(), 9, mtime=0)
@@ -182,6 +191,8 @@ def rpm_package(root, top, fields, description, rpm_format=4, machine=None):
         else:
             listed.append(f"/{path}")
     requires = "".join(f"Requires: {name}\n" for name in fields["Requires"])
+    if "BuildArch" in fields:
+        requires += f"BuildArch: {fields['BuildArch']}\n"
     name = fields["Name"]
     spec = top / f"{name}.spec"
     put(
@@ -296,6 +307,7 @@ class DebianPackagesCheck(unittest.TestCase):
         self.trees = {
             "pitboard": self.command_line_tree(),
             "pitboard-app": self.app_tree(),
+            "pitboard-plasma-widget": self.widget_tree(),
             "pitboard-archive-keyring": self.keyring_tree(),
         }
         self.fields = {
@@ -306,6 +318,10 @@ class DebianPackagesCheck(unittest.TestCase):
             "pitboard-app": {
                 "Architecture": self.architecture,
                 "Depends": f"pitboard (= {DEB}), {FLOOR}",
+            },
+            "pitboard-plasma-widget": {
+                "Architecture": "all",
+                "Depends": f"pitboard-app (= {DEB}), {PLASMA}",
             },
             "pitboard-archive-keyring": {"Architecture": "all", "Multi-Arch": "foreign"},
         }
@@ -333,13 +349,16 @@ class DebianPackagesCheck(unittest.TestCase):
 
     def app_tree(self):
         root = self.tree("pitboard-app")
-        self.app.release_tree(root)
+        self.app.release_tree(root, widget=False)
         # lintian takes the tree's stand-in, which starts as an ELF file does, for a program
         # built for another architecture.
         put(root, self.app.PROGRAM, "#!/bin/sh\n# the release's program\n", 0o755)
         (root / self.app.MANUAL).unlink()
         put(root, f"{self.app.MANUAL}.gz", compressed(APP_MANUAL.read_bytes()))
         return root
+
+    def widget_tree(self):
+        return widget_files(self.tree("pitboard-plasma-widget"), self.app)
 
     def keyring_tree(self):
         root = self.tree("pitboard-archive-keyring")
@@ -446,6 +465,55 @@ class DebianPackagesCheck(unittest.TestCase):
                 put(self.trees[package], path, "\n")
                 self.assertRefused(says)
 
+    def test_a_widget_package_that_does_not_need_plasma_6_4_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-all.deb"
+        for plasma in (
+            "",
+            ", plasma-workspace",
+            ", plasma-workspace (>= 4:6.3)",
+            # Debian's Plasma is epoch 4, so 6.4 alone is below 4:5.27.
+            ", plasma-workspace (>= 6.4)",
+            ", plasma-workspace (>= 4:6.4) | plasma-desktop",
+        ):
+            with self.subTest(plasma=plasma):
+                self.fresh()
+                self.fields["pitboard-plasma-widget"]["Depends"] = f"pitboard-app (= {DEB}){plasma}"
+                self.assertRefused(
+                    f"{package} does not depend on plasma-workspace (>= 4:6.4), the first Plasma"
+                )
+
+    def test_a_widget_that_does_not_depend_on_its_own_app_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-all.deb"
+        for app in ("", f"pitboard-app (>= {DEB}), ", "pitboard-app (= 1.0.0~beta.6), "):
+            with self.subTest(app=app):
+                self.fresh()
+                self.fields["pitboard-plasma-widget"]["Depends"] = f"{app}{PLASMA}"
+                self.assertRefused(f"{package} does not depend on pitboard-app (= {DEB})")
+
+    def test_a_widget_package_with_files_outside_its_folder_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-all.deb"
+        for path, says in (
+            (
+                "usr/share/plasma/plasmoids/org.example.Other/metadata.json",
+                "is not in pitboard-plasma-widget's layout",
+            ),
+            ("usr/bin/pitboard-widget", "is not in pitboard-plasma-widget's layout"),
+            (
+                f"{self.app.WIDGET}/contents/ui/Extra.qml",
+                f"{package}'s is not the release's install tree",
+            ),
+        ):
+            with self.subTest(path=path):
+                self.fresh()
+                put(self.trees["pitboard-plasma-widget"], path, "\n")
+                self.assertRefused(says)
+        self.fresh()
+        (self.trees["pitboard-plasma-widget"] / self.app.WIDGET / "metadata.json").unlink()
+        self.assertRefused(f"{package} holds no /{self.app.WIDGET}/metadata.json")
+        self.fresh()
+        widget_files(self.trees["pitboard-app"], self.app)
+        self.assertRefused(f"{self.app.WIDGET}/metadata.json is in more than one package")
+
     def test_a_keyring_that_is_not_the_committed_key_is_refused(self):
         package = f"pitboard-archive-keyring-v{VERSION}-all.deb"
         for data in (KEY.read_bytes(), self.unarmored[:-1]):
@@ -472,7 +540,6 @@ class DebianPackagesCheck(unittest.TestCase):
         self.fields["pitboard"]["Version"] = VERSION
         package = f"pitboard-v{VERSION}-{self.architecture}.deb"
         self.assertRefused(f"{package} is version {VERSION}, not {DEB}")
-
 
 
 class RpmPackagesCheck(unittest.TestCase):
@@ -506,7 +573,11 @@ class RpmPackagesCheck(unittest.TestCase):
         self.work = Path(folder.name)
         self.out = self.work / "packages"
         self.tarball = command_line_tarball(self.work, self.machine, self.programs["pitboard"])
-        self.trees = {"pitboard": self.command_line_tree(), "pitboard-app": self.app_tree()}
+        self.trees = {
+            "pitboard": self.command_line_tree(),
+            "pitboard-app": self.app_tree(),
+            "pitboard-plasma-widget": widget_files(self.tree("pitboard-plasma-widget"), self.app),
+        }
         self.fields = {
             package: {
                 "Version": RPM_VERSION,
@@ -519,6 +590,10 @@ class RpmPackagesCheck(unittest.TestCase):
         self.fields["pitboard-app"]["Requires"] = [
             f"pitboard = {RPM}", *RPM_FLOOR, *RPM_FLOOR_VERSIONS
         ]
+        self.fields["pitboard-plasma-widget"] |= {
+            "Requires": [f"pitboard-app = {RPM}", RPM_PLASMA],
+            "BuildArch": "noarch",
+        }
 
     def tree(self, package):
         root = self.work / "trees" / package
@@ -537,7 +612,7 @@ class RpmPackagesCheck(unittest.TestCase):
 
     def app_tree(self):
         root = self.tree("pitboard-app")
-        self.app.release_tree(root)
+        self.app.release_tree(root, widget=False)
         put(root, self.app.PROGRAM, self.programs["pitboard-app"], 0o755)
         return root
 
@@ -547,7 +622,8 @@ class RpmPackagesCheck(unittest.TestCase):
             fields = {"Name": package, **self.fields[package]}
             top = self.work / "rpmbuild" / package
             built = rpm_package(root, top, fields, self.descriptions[package], rpm_format)
-            shutil.copy(built, self.out / f"{package}-v{version}-{self.machine}.rpm")
+            machine = fields.get("BuildArch", self.machine)
+            shutil.copy(built, self.out / f"{package}-v{version}-{machine}.rpm")
 
     def assertRefused(self, says, **built):
         self.build(**built)
@@ -663,10 +739,61 @@ class RpmPackagesCheck(unittest.TestCase):
     def test_a_package_in_rpm_format_6_is_refused(self):
         for package in self.trees:
             with self.subTest(package=package):
+                machine = self.fields[package].get("BuildArch", self.machine)
                 self.assertRefused(
-                    f"{package}-v{VERSION}-{self.machine}.rpm is in RPM's format 6, not 4",
+                    f"{package}-v{VERSION}-{machine}.rpm is in RPM's format 6, not 4",
                     rpm_format=6,
                 )
+
+    def test_a_widget_package_that_does_not_need_plasma_6_4_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-noarch.rpm"
+        for plasma in (
+            [],
+            ["plasma-workspace >= 6.4"],
+            ["plasma6-workspace >= 6.4"],
+            ["(plasma-workspace >= 6.3 or plasma6-workspace >= 6.4)"],
+            ["(plasma-workspace or plasma6-workspace >= 6.4)"],
+        ):
+            with self.subTest(plasma=plasma):
+                self.fresh()
+                requires = [f"pitboard-app = {RPM}", *plasma]
+                self.fields["pitboard-plasma-widget"]["Requires"] = requires
+                self.assertRefused(
+                    f"{package} does not require (plasma-workspace >= 6.4 or plasma6-workspace >="
+                )
+
+    def test_a_widget_that_does_not_depend_on_its_own_app_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-noarch.rpm"
+        for app in ([], [f"pitboard-app >= {RPM}"], ["pitboard-app = 1.0.0~beta.6-1"]):
+            with self.subTest(app=app):
+                self.fresh()
+                self.fields["pitboard-plasma-widget"]["Requires"] = [*app, RPM_PLASMA]
+                self.assertRefused(f"{package} does not require pitboard-app = {RPM}")
+
+    def test_a_widget_package_with_files_outside_its_folder_is_refused(self):
+        package = f"pitboard-plasma-widget-v{VERSION}-noarch.rpm"
+        for path, says in (
+            (
+                "usr/share/plasma/plasmoids/org.example.Other/metadata.json",
+                "is not in pitboard-plasma-widget's layout",
+            ),
+            ("usr/bin/pitboard-widget", "is not in pitboard-plasma-widget's layout"),
+            (
+                f"{self.app.WIDGET}/contents/ui/Extra.qml",
+                f"{package}'s is not the release's install tree",
+            ),
+        ):
+            with self.subTest(path=path):
+                self.fresh()
+                put(self.trees["pitboard-plasma-widget"], path, "\n")
+                self.assertRefused(says)
+        self.fresh()
+        (self.trees["pitboard-plasma-widget"] / self.app.WIDGET / "metadata.json").unlink()
+        self.assertRefused(f"{package} holds no /{self.app.WIDGET}/metadata.json")
+        self.fresh()
+        widget_files(self.trees["pitboard-app"], self.app)
+        self.assertRefused(f"{self.app.WIDGET}/metadata.json is in more than one package")
+
 
 class Repository(unittest.TestCase):
     @classmethod
@@ -696,8 +823,8 @@ class Repository(unittest.TestCase):
         cls.final = cls.release("1.0.0")
 
     # A release's packages at the version, as the release names them, for each architecture: the
-    # command line and the app of both formats, the app's metainfo edited where asked, and
-    # Debian's keyring.
+    # command line and the app of both formats, the app's metainfo edited where asked, and the
+    # Plasma widget of both formats and Debian's keyring, for every architecture.
     @classmethod
     def release(cls, version, architectures=("amd64", "arm64"), metainfo=lambda text: text):
         work = Path(tempfile.mkdtemp(dir=cls.root))
@@ -708,7 +835,7 @@ class Repository(unittest.TestCase):
         def tree(name):
             root = Path(tempfile.mkdtemp(dir=work))
             if name == "pitboard-app":
-                cls.app.release_tree(root)
+                cls.app.release_tree(root, widget=False)
                 put(root, cls.app.PROGRAM, "#!/bin/sh\n# the release's program\n", 0o755)
                 edited = metainfo((root / cls.app.METAINFO).read_text(encoding="utf-8"))
                 if edited is None:
@@ -718,6 +845,8 @@ class Repository(unittest.TestCase):
                     (root / cls.app.METAINFO).write_text(edited, encoding="utf-8")
             elif name == "pitboard":
                 put(root, PROGRAM, STAND_IN, 0o755)
+            elif name == "pitboard-plasma-widget":
+                widget_files(root, cls.app)
             else:
                 put(root, KEYRING, KEY.read_bytes())
             return root
@@ -741,11 +870,19 @@ class Repository(unittest.TestCase):
                 "Summary": f"Pitboard's {name}",
                 "Requires": list(requires),
             }
+            if machine == "noarch":
+                fields["BuildArch"] = machine
             top = Path(tempfile.mkdtemp(dir=work))
-            built = rpm_package(tree(name), top, fields, f"Pitboard's {name}.", machine=machine)
+            built = rpm_package(
+                tree(name), top, fields, f"Pitboard's {name}.",
+                machine=None if machine == "noarch" else machine,
+            )
             shutil.copy(built, out / f"{name}-v{tag}-{machine}.rpm")
 
         deb("pitboard-archive-keyring", "all", Source="pitboard")
+        deb("pitboard-plasma-widget", "all", Source="pitboard",
+            Depends=f"pitboard-app (= {version}), {PLASMA}")
+        rpm("pitboard-plasma-widget", "noarch", f"pitboard-app = {version}-1", RPM_PLASMA)
         for architecture in architectures:
             machine = MACHINES[architecture]
             deb("pitboard", architecture)
@@ -815,6 +952,7 @@ class Repository(unittest.TestCase):
             (name, architecture): f"pool/main/p/pitboard/{name}_{version}_{architecture}.deb"
             for name, architecture in [
                 ("pitboard-archive-keyring", "all"),
+                ("pitboard-plasma-widget", "all"),
                 *[(name, a) for a in MACHINES for name in ("pitboard", "pitboard-app")],
             ]
         }
@@ -850,9 +988,14 @@ class Repository(unittest.TestCase):
                 )
                 for package in primary.findall("common:package", REPOMD)
             )
+            # The widget, for every machine, is in each machine's repository.
             expected = [
-                (name, version, "1", machine, f"Packages/{name}-{version}-1.{machine}.rpm")
-                for name in ("pitboard", "pitboard-app")
+                (name, version, "1", arch, f"Packages/{name}-{version}-1.{arch}.rpm")
+                for name, arch in (
+                    ("pitboard", machine),
+                    ("pitboard-app", machine),
+                    ("pitboard-plasma-widget", "noarch"),
+                )
             ]
             self.assertEqual(listed, expected)
             self.assertEqual(

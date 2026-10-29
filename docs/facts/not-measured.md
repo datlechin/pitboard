@@ -238,6 +238,7 @@ Mac. Not measured:
 
 - An x86_64 build or install of either format. rpmlint's verdict on the x86_64 command line was
   read from an rpm `rpmbuild --target x86_64` made of the released binary.
+
 ## The Linux repository
 
 Every build, signature and setup in [the repository's facts](linux-packages.md#the-repository) is

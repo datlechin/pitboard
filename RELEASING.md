@@ -224,9 +224,10 @@ The MSI is built with WiX v7. The owner accepted its Open Source Maintenance Fee
 Nothing is owed while Pitboard's revenue stays under US$10,000 a year and sponsorships stay
 donations: WiX v7.0.0's `OSMFEULA.txt`, lines 12 to 23, and `.github/FUNDING.yml`.
 
-From the first release after a Linux session, each release also has the Linux packages, each
-with a bill of materials: `pitboard` and `pitboard-app` as `.deb` for amd64 and arm64 and as
-`.rpm` for x86_64 and aarch64, `pitboard-v<version>-<arch>` and `pitboard-app-v<version>-<arch>`,
+From the first release after a Linux session, each release also has the Linux packages:
+`pitboard` and `pitboard-app` as `.deb` for amd64 and arm64 and as `.rpm` for x86_64 and
+aarch64, `pitboard-v<version>-<arch>` and `pitboard-app-v<version>-<arch>`, each with a bill of
+materials, the Plasma widget as `pitboard-plasma-widget-v<version>-all.deb` and `-noarch.rpm`,
 and `pitboard-archive-keyring-v<version>-all.deb`. `linux-build` builds and checks them on each
 machine as CI's `linux-packaging` job does, with the `build` job's tarball as the command line,
 and installs and removes them on fresh images. `linux-sign` signs the RPM packages with

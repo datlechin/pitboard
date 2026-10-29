@@ -250,6 +250,50 @@ distribution's repositories while the image built:
 - The same day on Debian 13 and Ubuntu 26.04, `apt-get purge` left no folder no package holds
   either. `dpkg-query -L` of several packages puts an empty line between their lists.
 
+## The Plasma widget's package
+
+Read and measured on 29 October 2026 in Docker on the owner's Mac (arm64), in the images named
+above, with 1.0.0-beta.6's packages:
+
+- The widget follows the app's D-Bus feed through `org.kde.plasma.workspace.dbus`'s
+  `Properties`, which Plasma has from 6.4.0
+  ([the Linux app's facts](linux-app.md#the-plasma-widget)), so its package needs Plasma 6.4.
+- Plasma in each system, by `apt-cache policy`, `dnf repoquery` and `zypper info`:
+
+  | System | Package | Version |
+  | --- | --- | --- |
+  | Debian 13 | plasma-workspace | 4:6.3.6-2 |
+  | Ubuntu 26.04 | plasma-workspace | 4:6.6.4-0ubuntu2, and 4:6.6.6-0ubuntu0.1 in its updates |
+  | Fedora 43 | plasma-workspace | 6.4.5-4.fc43, and 6.7.5-1.fc43 in its updates |
+  | Fedora 44 | plasma-workspace | 6.6.4-1.fc44, and 6.7.5-1.fc44 in its updates |
+  | Tumbleweed 20261020 | plasma6-workspace | 6.8.0-1.2 |
+
+  Debian's and Ubuntu's carry epoch 4, so the Debian package's floor is `4:6.4`: `6.4` alone sorts
+  below `4:5.27`. Fedora's carry none. Tumbleweed's plasma6-workspace provides
+  `plasma6-workspace` and `plasma5-workspace = 6.8.0`, and no `plasma-workspace`, so the rpm
+  requires either name, in a rich dependency.
+- `dnf repoquery --whatprovides /usr/share/plasma/plasmoids` names libplasma, plasma-desktop and
+  plasma-workspace on Fedora 43 and 44, so the spec lists no `%dir` for it.
+- debhelper builds the arch all package beside the others in `dpkg-buildpackage -b`; lintian
+  2.122.0 said nothing of its `pitboard-app (= ${source:Version})`. rpmbuild wrote a noarch rpm
+  under `RPMS/noarch`, and rpmlint 2.8.0 `--strict` gave it `no-documentation`, since it holds
+  its licence alone, which `pitboard.rpmlintrc` filters.
+- Installed from the file, apt 3.0.3 on Debian 13 stopped at "pitboard-plasma-widget : Depends:
+  plasma-workspace (>= 4:6.4) but it is not going to be installed", with "Unable to correct
+  problems, you have held broken packages", and installed the rest without it.
+- `test-linux-packages.sh` installed it from the file, with the app and the command line, on
+  Ubuntu 26.04 over plasma-workspace 4:6.6.6-0ubuntu0.1, on Fedora 43 and 44 over plasma-workspace
+  6.7.5, and on Tumbleweed over plasma6-workspace 6.8.0-1.2, each Plasma installed first, and its
+  `metadata.json` was at `/usr/share/plasma/plasmoids/com.usepitboard.Pitboard/`. For the app's
+  `gtk4 >= 4.18` and `libadwaita >= 1.7`, dnf installed gtk4 4.20.4 and libadwaita 1.8.8 on Fedora
+  43 and gtk4 4.22.5 and libadwaita 1.9.4 on Fedora 44, and zypper libgtk-4-1 and libadwaita-1-0
+  on Tumbleweed. Each removal left nothing no package holds, dnf taking gtk4 and libadwaita with
+  the packages.
+- With Plasma brought by the widget rather than installed first, dnf5 on Fedora 43 refused to
+  remove the packages: "The operation would result in removing the following protected packages:
+  systemd-udev", which Plasma had brought and which dnf removes with the requirements nothing else
+  needs. So the images install Plasma first, as a Plasma desktop has it.
+
 ## The repository
 
 Read on 29 October 2026 in the sources named, and measured where a line says so: in Docker on

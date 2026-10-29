@@ -892,10 +892,11 @@ fixture empties first.
 Each format's packages are built on the oldest system of the floor that uses it, over the Meson
 install: the Debian packages on Debian 13 by debhelper from `packaging/linux/debian`, the RPM
 packages on Fedora 43 by rpmbuild from `packaging/linux/pitboard.spec`. Both build `pitboard`,
-the release tarball's command line byte for byte with its man page and completions, and
-`pitboard-app`, which depends on the `pitboard` of its own version. Debian's add
-`pitboard-archive-keyring`, the repository's key. Build, check and install them in containers,
-into a folder `out` of your choosing:
+the release tarball's command line byte for byte with its man page and completions,
+`pitboard-app`, which depends on the `pitboard` of its own version, and
+`pitboard-plasma-widget`, the Plasma widget, which depends on that `pitboard-app` and on Plasma
+6.4. Debian's add `pitboard-archive-keyring`, the repository's key. Build, check and install
+them in containers, into a folder `out` of your choosing:
 
 ```sh
 apps/linux/scripts/in-container.sh debian-13 command-line out
@@ -922,7 +923,9 @@ apps/linux/scripts/in-container.sh fedora-43 packages-test
   the check, with the tools of the system's format.
 - `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
   images, or the RPM packages on fresh Fedora 43, Fedora 44 and openSUSE Tumbleweed images,
-  checks them there and removes them.
+  checks them there and removes them. Each system but Debian 13 has its Plasma first, as a Plasma
+  desktop does, and takes the widget. On Debian 13, whose Plasma is 6.3, the test checks that apt
+  refuses the widget for it, and installs the rest.
 
 The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
 more. A failed step's files are copied out too.
@@ -935,6 +938,8 @@ more. A failed step's files are copied out too.
 - whose app does not depend on the `pitboard` of its own version and on the floor's libadwaita,
   GTK and GLib, at 1.7, 4.18 and 2.84, or whose tree, as Meson installed it, `check-linux-app.sh`
   fails;
+- whose widget does not depend on the app of its own version and on Plasma 6.4, or holds more
+  than the widget's folder, which with the app's tree `check-linux-app.sh` holds to its files;
 - whose keyring is not `packaging/linux/pitboard-archive-keyring.asc`, unarmored;
 - that are not in RPM's format 4, which Tumbleweed's RPM reads;
 - that lintian or rpmlint warns about. rpmlint takes the filters in

@@ -800,9 +800,9 @@ jobs:
   # linux-packaging job builds them on every pull request: each format on the oldest system of the
   # floor that uses it, Debian 13 or Fedora 43, by in-container.sh, from the tag's commit and the
   # build job's tarball, whose command line each package carries byte for byte. Each is checked as
-  # this release's, then installed on fresh images and removed again. The keyring, which both
-  # Debian builds make under one name, ships from the x86_64 one. No cache here or in linux-sign:
-  # the repository's key signs only what this run built.
+  # this release's, then installed on fresh images and removed again. The keyring and the Plasma
+  # widget, which both builds of a format make under one name, ship from the x86_64 one. No cache
+  # here or in linux-sign: the repository's key signs only what this run built.
   linux-build:
     name: linux-build (${{ matrix.format }}, ${{ matrix.arch }})
     needs: [guard, build]
@@ -853,7 +853,11 @@ jobs:
       - name: The packages, installed and removed on fresh systems
         run: sh .github/scripts/test-linux-packages.sh "$FORMAT" "$RUNNER_TEMP/packages"
       - if: matrix.format == 'deb' && matrix.arch == 'aarch64'
-        run: rm "$RUNNER_TEMP/packages/pitboard-archive-keyring-$GITHUB_REF_NAME-all.deb"
+        run: >
+          rm "$RUNNER_TEMP/packages/pitboard-archive-keyring-$GITHUB_REF_NAME-all.deb"
+          "$RUNNER_TEMP/packages/pitboard-plasma-widget-$GITHUB_REF_NAME-all.deb"
+      - if: matrix.format == 'rpm' && matrix.arch == 'aarch64'
+        run: rm "$RUNNER_TEMP/packages/pitboard-plasma-widget-$GITHUB_REF_NAME-noarch.rpm"
       # Not dist-, so publish never takes them: only linux-sign hands a package on.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -885,14 +889,18 @@ jobs:
           pattern: unsigned-linux-*
           path: signed
           merge-multiple: true
-      - name: Both formats for both machines, and the keyring once
+      - name: Both formats for both machines, and the widget and the keyring once
         run: |
           found=$(cd signed && find . -type f | sed 's|^\./||' | sort)
           expected=$(for package in pitboard pitboard-app; do
             for machine in amd64.deb arm64.deb x86_64.rpm aarch64.rpm; do
               echo "$package-$GITHUB_REF_NAME-$machine"
             done
-          done; echo "pitboard-archive-keyring-$GITHUB_REF_NAME-all.deb")
+          done
+          for package in pitboard-plasma-widget-all.deb pitboard-plasma-widget-noarch.rpm \
+            pitboard-archive-keyring-all.deb; do
+            echo "${package%-*}-$GITHUB_REF_NAME-${package##*-}"
+          done)
           if [ "$found" != "$(printf '%s\n' "$expected" | sort)" ]; then
             echo "linux-build handed on $(printf '%s\n' "$found" | tr '\n' ' ')" >&2
             exit 1
@@ -1164,7 +1172,8 @@ jobs:
             done
           fi
           # A command line package holds its tarball's pitboard, byte for byte, and the app's
-          # package the Linux app built for glibc. No lockfile describes the keyring.
+          # package the Linux app built for glibc. No lockfile describes the widget's QML or the
+          # keyring.
           if [ "$LINUX" = true ]; then
             for machine in x86_64:amd64 aarch64:arm64; do
               arch=${machine%%:*}

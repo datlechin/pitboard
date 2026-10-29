@@ -290,6 +290,8 @@ export function fileRows(release: Release): FileRow[] {
       `The app, ${what}`,
       ["linux"],
     ]),
+    [`pitboard-plasma-widget-v${v}-all.deb`, "The Plasma widget, a Debian package", ["linux"]],
+    [`pitboard-plasma-widget-v${v}-noarch.rpm`, "The Plasma widget, an RPM package", ["linux"]],
     [
       `pitboard-v${v}-aarch64-apple-darwin.tar.gz`,
       "Command line, macOS on Apple silicon",

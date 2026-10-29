@@ -305,6 +305,9 @@ keeps it is in the header of the module named.
 - The app's package needs the floor's libadwaita, GTK and GLib by version, in a deb and in an
   rpm, where the libraries' own sonames name no floor
   (`an_app_without_the_floors_libraries_is_refused`).
+- The Plasma widget's package needs the app of its own version and Plasma 6.4
+  (`a_widget_that_does_not_depend_on_its_own_app_is_refused`,
+  `a_widget_package_that_does_not_need_plasma_6_4_is_refused`).
 - An RPM package is in RPM's format 4, which every RPM of the floor reads, whatever format the
   RPM that built it writes by default (`a_package_in_rpm_format_6_is_refused`).
 - A test installs a deb or an rpm, or sets the repository up, only while it builds a container
