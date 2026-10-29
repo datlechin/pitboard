@@ -242,6 +242,17 @@ mod tests {
     // Long enough for a write the watch heard to be told, where nothing should be.
     const QUIET: Duration = Duration::from_millis(500);
 
+    // FSEvents may tell the rig's own writes, made before the watch began, after it began.
+    // Waits until nothing more is told, and says how the last wait ended.
+    fn settled(written: &mut Written) -> Waited {
+        loop {
+            match written.wait(QUIET) {
+                Waited::Written => {}
+                other => return other,
+            }
+        }
+    }
+
     fn replaced(dir: &std::path::Path, name: &str) {
         atomic::write(Permit::for_a_test(), &dir.join(name), b"{}", Perms::Secret)
             .expect("replaced as the core replaces its files");
@@ -261,7 +272,7 @@ mod tests {
             Waited::Written,
             "a watch began"
         );
-        assert_eq!(written.wait(Duration::ZERO), Waited::Elapsed, "watched");
+        assert_eq!(settled(&mut written), Waited::Elapsed, "watched");
 
         for name in ["state.json", "usage.json"] {
             let began = Instant::now();
@@ -288,6 +299,7 @@ mod tests {
             Waited::Written,
             "a watch began"
         );
+        assert_eq!(settled(&mut written), Waited::Elapsed, "watched");
 
         replaced(&dir, "told.json");
         replaced(&dir, "app.json");
@@ -321,7 +333,7 @@ mod tests {
             Waited::Written,
             "watched once there"
         );
-        assert_eq!(written.wait(Duration::ZERO), Waited::Elapsed, "watched");
+        assert_eq!(settled(&mut written), Waited::Elapsed, "watched");
         replaced(&dir, "state.json");
         assert_eq!(written.wait(PATIENCE), Waited::Written);
     }
@@ -340,7 +352,7 @@ mod tests {
             Waited::Written,
             "a watch began"
         );
-        assert_eq!(written.wait(Duration::ZERO), Waited::Elapsed, "watched");
+        assert_eq!(settled(&mut written), Waited::Elapsed, "watched");
 
         let removed = pitboard.uninstall().expect("uninstalled");
         assert!(removed.value.home_removed);
