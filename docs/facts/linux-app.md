@@ -239,13 +239,14 @@ from WebKit's and Epiphany's sources and not run:
 
 A notification has a title and a body alone (`g_notification_set_title`, `_set_body`, GIO
 2.84), so a model notice's subtitle, the tool beside another tool's accounts, is the body's first
-line (`src/notices.rs`). Each is posted at `G_NOTIFICATION_PRIORITY_NORMAL`, which GIO keeps
-for most notifications, such as completed downloads; `HIGH` is for what is time-sensitive, such
-as chat messages, and `URGENT` for what needs an answer within a short time, such as a phone
+line, and a notice has one button at most (`src/notices.rs`). Each is posted at
+`G_NOTIFICATION_PRIORITY_NORMAL`, GNotification's default, which GIO keeps for most
+notifications, such as completed downloads; `HIGH` is for what is time-sensitive, such as chat
+messages, and `URGENT` for what needs an answer within a short time, such as a phone
 call (`GNotificationPriority`, `gio/gioenums.h` at 2.84.4).
 
 Measured on a bus of the test's own: a notice posted from another thread reaches a stand-in
-`org.gtk.Notifications` with its default action and its first three buttons as
+`org.gtk.Notifications` at normal priority, with its default action and its button as
 `app.notice-clicked` and their arguments, and a stand-in freedesktop server's `ActionInvoked`
 for the default and for a button reaches the app's `notice-clicked` with each argument
 (`tests/notifications_gtk.rs`, `tests/notifications_freedesktop.rs`). An app only registered
@@ -288,13 +289,11 @@ fixture's stand-in writes in place of the entry.
   before the system suspends or hibernates and with `false` right after
   (`man/org.freedesktop.login1.xml:769-783`).
 - GLib 2.84.4 delivers a signal subscribed to by a well-known sender only from the name's
-  current owner (`gio/gdbusconnection.c:4326-4350`), and `g_bus_watch_name_on_connection` with
-  no flags asks the bus to start nothing.
+  current owner (`gio/gdbusconnection.c:4326-4350`).
 
 Measured on a bus of the test's own: `PrepareForSleep(true)` from the owner of
-`org.freedesktop.login1` tells nothing and `(false)` tells one wake; with no owner, the app hears
-that once, and a `(false)` from a connection that owns no such name tells nothing
-(`tests/logind.rs`).
+`org.freedesktop.login1` tells nothing and `(false)` tells one wake, and a `(false)` from a
+connection that owns no such name tells nothing (`tests/logind.rs`).
 
 ## Links
 

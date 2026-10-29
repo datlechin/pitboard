@@ -9,9 +9,7 @@ use std::rc::Rc;
 
 use gio::prelude::*;
 use pitboard_linux::config::APP_ID;
-use pitboard_linux::platform::notifications::{
-    Button, CLICKED, Desktop, Notice, Notifier, Priority,
-};
+use pitboard_linux::platform::notifications::{Button, CLICKED, Desktop, Notice, Notifier};
 
 // GNOME Shell 48.7's `data/dbus-interfaces/org.freedesktop.Notifications.xml`, the methods
 // GLib calls.
@@ -138,12 +136,11 @@ fn a_click_on_a_freedesktop_server_reaches_the_notices_action_with_its_argument(
         id: "replaced/work".into(),
         title: "work signed in elsewhere".into(),
         body: "Pitboard keeps the login it had.".into(),
-        priority: Priority::Normal,
         clicked: "open/work".into(),
-        buttons: vec![Button {
+        button: Some(Button {
             title: "Sign In Again".into(),
             clicked: "sign-in/work".into(),
-        }],
+        }),
     };
     let clicked = Rc::new(RefCell::new(Vec::new()));
     let action = gio::SimpleAction::new(CLICKED, Some(glib::VariantTy::STRING));

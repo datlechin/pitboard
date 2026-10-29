@@ -15,19 +15,15 @@ use super::Failed;
 /// The app's action a click activates, with the notice's or the button's argument.
 pub const CLICKED: &str = "notice-clicked";
 
-/// GNOME Shell 48 draws a notification's first three buttons alone.
-pub const MOST_BUTTONS: usize = 3;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Notice {
     // the same for the same news, so a newer one replaces it
     pub id: String,
     pub title: String,
     pub body: String,
-    pub priority: Priority,
     // what a click on the notification hands back
     pub clicked: String,
-    pub buttons: Vec<Button>,
+    pub button: Option<Button>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -37,20 +33,10 @@ pub struct Button {
     pub clicked: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Priority {
-    Low,
-    Normal,
-    High,
-    Urgent,
-}
-
 /// The desktop's notifications, or a fixture's stand-in. Asked on any thread: the model posts
 /// on a thread of its own.
 pub trait Notifier: Send + Sync {
     fn post(&self, notice: Notice) -> Result<(), Failed>;
-    fn withdraw(&self, id: String) -> Result<(), Failed>;
 }
 
 /// The desktop's, through the app's GApplication, on the main context the app was made on,
@@ -85,25 +71,15 @@ impl Notifier for Desktop {
         self.on_main(move |app| app.send_notification(Some(&notice.id), &notification(&notice)));
         Ok(())
     }
-
-    fn withdraw(&self, id: String) -> Result<(), Failed> {
-        self.on_main(move |app| app.withdraw_notification(&id));
-        Ok(())
-    }
 }
 
+// At GNotification's default priority, normal.
 fn notification(notice: &Notice) -> gio::Notification {
     let notification = gio::Notification::new(&notice.title);
     notification.set_body(Some(&notice.body));
-    notification.set_priority(match notice.priority {
-        Priority::Low => gio::NotificationPriority::Low,
-        Priority::Normal => gio::NotificationPriority::Normal,
-        Priority::High => gio::NotificationPriority::High,
-        Priority::Urgent => gio::NotificationPriority::Urgent,
-    });
     let action = format!("app.{CLICKED}");
     notification.set_default_action_and_target_value(&action, Some(&notice.clicked.to_variant()));
-    for button in notice.buttons.iter().take(MOST_BUTTONS) {
+    if let Some(button) = &notice.button {
         notification.add_button_with_target_value(
             &button.title,
             &action,

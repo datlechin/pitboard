@@ -153,10 +153,6 @@ mod tests {
             self.0.lock().unwrap().push(notice);
             Ok(())
         }
-
-        fn withdraw(&self, _id: String) -> Result<(), Failed> {
-            Ok(())
-        }
     }
 
     fn answer(request: u64, done: bool, said: &str) -> OutsideAnswer {

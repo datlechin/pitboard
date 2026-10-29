@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use gio::prelude::*;
 use pitboard_linux::config::APP_ID;
-use pitboard_linux::platform::notifications::{Button, Desktop, Notice, Notifier, Priority};
+use pitboard_linux::platform::notifications::{Button, Desktop, Notice, Notifier};
 
 // GNOME Shell 48.7's `data/dbus-interfaces/org.gtk.Notifications.xml`.
 const SERVER: &str = r#"
@@ -74,27 +74,20 @@ fn run(app: &gio::Application) {
 }
 
 fn notice() -> Notice {
-    let button = |title: &str, clicked: &str| Button {
-        title: title.into(),
-        clicked: clicked.into(),
-    };
     Notice {
         id: "run-out/work".into(),
         title: "work is out until 3:45 PM".into(),
         body: "Claude Code switched to home.".into(),
-        priority: Priority::High,
         clicked: "open/work".into(),
-        buttons: vec![
-            button("Switch Back", "switch-back/work"),
-            button("Keep home", "keep/home"),
-            button("Show Limits", "limits/work"),
-            button("Never shown", "fourth/work"),
-        ],
+        button: Some(Button {
+            title: "Switch Back".into(),
+            clicked: "switch-back/work".into(),
+        }),
     }
 }
 
 #[test]
-fn a_notice_posts_its_default_action_and_buttons_as_app_actions() {
+fn a_notice_posts_its_default_action_and_button_as_app_actions() {
     let test_bus = gio::TestDBus::new(gio::TestDBusFlags::NONE);
     test_bus.up();
     let server = connect(&test_bus.bus_address().unwrap());
@@ -109,14 +102,11 @@ fn a_notice_posts_its_default_action_and_buttons_as_app_actions() {
     let registration = server
         .register_object("/org/gtk/Notifications", &interface)
         .method_call({
-            let (calls, app, desktop) = (calls.clone(), app.clone(), desktop.clone());
+            let (calls, app) = (calls.clone(), app.clone());
             move |_, _, _, _, method, parameters, invocation| {
                 invocation.return_value(None);
                 calls.borrow_mut().push((method.to_owned(), parameters));
-                match method {
-                    "AddNotification" => desktop.withdraw("run-out/work".into()).unwrap(),
-                    _ => app.quit(),
-                }
+                app.quit();
             }
         })
         .build()
@@ -143,23 +133,18 @@ fn a_notice_posts_its_default_action_and_buttons_as_app_actions() {
             "('{APP_ID}', 'run-out/work', {{
               'title': <'work is out until 3:45 PM'>,
               'body': <'Claude Code switched to home.'>,
-              'priority': <'high'>,
+              'priority': <'normal'>,
               'default-action': <'app.notice-clicked'>,
               'default-action-target': <'open/work'>,
               'buttons': <[
                 {{'label': <'Switch Back'>, 'action': <'app.notice-clicked'>,
-                  'target': <'switch-back/work'>}},
-                {{'label': <'Keep home'>, 'action': <'app.notice-clicked'>,
-                  'target': <'keep/home'>}},
-                {{'label': <'Show Limits'>, 'action': <'app.notice-clicked'>,
-                  'target': <'limits/work'>}}
+                  'target': <'switch-back/work'>}}
               ]>
             }})"
         ),
     )
     .unwrap();
+    assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].0, "AddNotification");
     assert_eq!(calls[0].1, expected, "{}", calls[0].1.print(true));
-    assert_eq!(calls[1].0, "RemoveNotification");
-    assert_eq!(calls[1].1, (APP_ID, "run-out/work").to_variant());
 }

@@ -1,14 +1,14 @@
 //! The model's notices, posted as the desktop's notifications, or written by a fixture's
 //! stand-in. A notification has a title and a body alone, so a notice's subtitle, the tool beside
-//! another tool's accounts, is the body's first line. Each is posted at GNOME's normal priority:
-//! none is urgent enough to show over a full-screen window or through Do Not Disturb
+//! another tool's accounts, is the body's first line. Each is posted at GNotification's normal
+//! priority: none is urgent enough to show over a full-screen window or through Do Not Disturb
 //! (docs/facts/linux-app.md, Notifications).
 
 use std::sync::Arc;
 
 use pitboard_model::PlatformError;
 
-use crate::platform::notifications::{self, Button, Notifier, Priority};
+use crate::platform::notifications::{self, Button, Notifier};
 
 /// What the model posts through, and the app with it.
 pub struct Notices(pub Arc<dyn Notifier>);
@@ -38,14 +38,11 @@ pub(crate) fn posted(notice: pitboard_model::Notice) -> notifications::Notice {
             Some(subtitle) => format!("{subtitle}\n{body}"),
             None => body,
         },
-        priority: Priority::Normal,
         clicked,
-        buttons: (button.into_iter())
-            .map(|button| Button {
-                title: button.title,
-                clicked: button.clicked,
-            })
-            .collect(),
+        button: button.map(|button| Button {
+            title: button.title,
+            clicked: button.clicked,
+        }),
     }
 }
 
@@ -63,10 +60,6 @@ mod tests {
     impl Notifier for Posted {
         fn post(&self, notice: notifications::Notice) -> Result<(), Failed> {
             self.0.lock().unwrap().push(notice);
-            Ok(())
-        }
-
-        fn withdraw(&self, _id: String) -> Result<(), Failed> {
             Ok(())
         }
     }
@@ -103,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn a_notice_is_posted_at_normal_priority_with_its_button_and_what_each_click_hands_back() {
+    fn a_notice_is_posted_with_its_button_and_what_each_click_hands_back() {
         let posted = Arc::new(Posted::default());
 
         Notices(posted.clone()).post(notice(None)).unwrap();
@@ -114,12 +107,11 @@ mod tests {
                 id: "run-out/claude/work".into(),
                 title: "work is out until 3:45 PM".into(),
                 body: "Switch to personal, which has 88% left.".into(),
-                priority: Priority::Normal,
                 clicked: "accounts".into(),
-                buttons: vec![Button {
+                button: Some(Button {
                     title: "Switch to personal".into(),
                     clicked: "switch/claude/personal".into(),
-                }],
+                }),
             }
         );
     }

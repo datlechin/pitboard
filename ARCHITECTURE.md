@@ -733,7 +733,7 @@ keeps it is in the header of the module named.
   (`neither_search_starts_pitboard`). Each hands the app back only an id it was given in that
   search (`an_id_never_given_activates_nothing`).
 - A Linux notification's click reaches the app only as `app.notice-clicked`, with the argument
-  the notice gave it (`a_notice_posts_its_default_action_and_buttons_as_app_actions`,
+  the notice gave it (`a_notice_posts_its_default_action_and_button_as_app_actions`,
   `a_click_on_a_freedesktop_server_reaches_the_notices_action_with_its_argument`).
 - The Linux app starts at sign-in by one autostart entry that names its program and tries it
   first. Turning it off removes that entry alone, and Uninstall that entry and the app's own

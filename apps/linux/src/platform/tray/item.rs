@@ -26,8 +26,7 @@ const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 pub enum Heard {
     /// A tray shows the item: the watcher took it.
     Tray,
-    /// No tray shows it: no watcher owns its name, the one there went or refused the item, or
-    /// the item is hidden.
+    /// No tray shows it: no watcher owns its name, or the one there went or refused the item.
     NoTray,
     /// A click on the item, with the activation token the tray provided for it.
     Activated { token: Option<String> },
@@ -145,12 +144,6 @@ impl StatusItem for Desktop {
                 .map_err(failed)?;
         }
         changed.say(&inner.connection).map_err(failed)
-    }
-
-    fn hide(&self) -> Result<(), Failed> {
-        let taken = self.inner.take_off();
-        self.inner.say(false);
-        taken.map_err(failed)
     }
 }
 

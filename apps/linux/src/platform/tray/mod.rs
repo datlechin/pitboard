@@ -64,5 +64,4 @@ pub enum TrayEntry {
 /// The tray's item: the desktop's, or a fixture's stand-in.
 pub trait StatusItem {
     fn show(&self, item: &TrayItem) -> Result<(), Failed>;
-    fn hide(&self) -> Result<(), Failed>;
 }

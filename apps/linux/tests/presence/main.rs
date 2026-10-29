@@ -266,27 +266,6 @@ fn an_item_registers_once_a_watcher_appears_and_again_after_it_returns() {
     });
 }
 
-#[test]
-fn a_hidden_item_leaves_the_tray_and_comes_back_once_shown() {
-    on_a_bus(None, |session| {
-        let watcher = Watcher::new(session.connect());
-        watcher.appear();
-        let (heard, told) = collected();
-        let shown = Shown::new(session, told);
-        session.until(|| heard.borrow().len() == 1);
-
-        shown.item.hide().unwrap();
-        session.until(|| heard.borrow().len() == 2);
-        assert!(!session.owned(shown.item.name()));
-        shown.item.show(&face()).unwrap();
-        session.until(|| heard.borrow().len() == 3);
-
-        assert_eq!(heard.take(), [Heard::Tray, Heard::NoTray, Heard::Tray]);
-        assert_eq!(watcher.registered().len(), 2);
-        shown.host.properties(&shown.sni);
-    });
-}
-
 // A watcher the bus could start is not started: the item asks only a watcher that runs.
 #[test]
 fn with_no_watcher_nothing_registers_and_the_tray_is_said_to_be_absent() {

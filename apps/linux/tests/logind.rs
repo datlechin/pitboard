@@ -2,12 +2,12 @@
 //! the system bus.
 #![cfg(target_os = "linux")]
 
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gio::prelude::*;
-use pitboard_linux::platform::logind::{Heard, hear};
+use pitboard_linux::platform::logind::hear;
 
 const LOGIND: &str = "org.freedesktop.login1";
 const PATH: &str = "/org/freedesktop/login1";
@@ -83,30 +83,30 @@ fn waking_is_told_once_and_going_to_sleep_is_not() {
             let logind = connect(&address);
             bus_call(&logind, "RequestName", Some(&(LOGIND, 4u32).to_variant()));
             let system = connect(&address);
-            let told = Rc::new(RefCell::new(Vec::new()));
+            let told = Rc::new(Cell::new(0));
             let _waking = hear(&system, {
                 let told = told.clone();
-                move |heard| told.borrow_mut().push(heard)
+                move || told.set(told.get() + 1)
             });
             settle(&context, &system);
 
             prepare_for_sleep(&logind, true);
             settle(&context, &system);
-            assert!(told.borrow().is_empty(), "going to sleep was told");
+            assert_eq!(told.get(), 0, "going to sleep was told");
             prepare_for_sleep(&logind, false);
-            iterate_until(&context, || !told.borrow().is_empty());
+            iterate_until(&context, || told.get() > 0);
             settle(&context, &system);
-            told.take()
+            told.get()
         })
         .unwrap();
     test_bus.down();
 
-    assert_eq!(told, [Heard::Woke]);
+    assert_eq!(told, 1);
 }
 
 // A signal from a connection that does not own logind's name is not logind's.
 #[test]
-fn no_logind_is_said_and_nothing_else() {
+fn only_logind_is_heard() {
     let test_bus = gio::TestDBus::new(gio::TestDBusFlags::NONE);
     test_bus.up();
     let address = test_bus.bus_address().unwrap();
@@ -114,20 +114,20 @@ fn no_logind_is_said_and_nothing_else() {
     let told = context
         .with_thread_default(|| {
             let system = connect(&address);
-            let told = Rc::new(RefCell::new(Vec::new()));
+            let told = Rc::new(Cell::new(0));
             let _waking = hear(&system, {
                 let told = told.clone();
-                move |heard| told.borrow_mut().push(heard)
+                move || told.set(told.get() + 1)
             });
-            iterate_until(&context, || !told.borrow().is_empty());
+            settle(&context, &system);
 
             let pretender = connect(&address);
             prepare_for_sleep(&pretender, false);
             settle(&context, &system);
-            told.take()
+            told.get()
         })
         .unwrap();
     test_bus.down();
 
-    assert_eq!(told, [Heard::NoLogind]);
+    assert_eq!(told, 0);
 }

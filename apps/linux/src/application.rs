@@ -406,13 +406,12 @@ impl Services {
         let hearing = Hearing::default();
         let (kept, woke) = (Rc::downgrade(&hearing), app.downgrade());
         gio::bus_get(gio::BusType::System, gio::Cancellable::NONE, move |bus| {
-            // No system bus is said as no logind is: the model's own timers still run.
+            // With no system bus no wake is heard, and the model's own timers still run.
             let (Ok(bus), Some(kept)) = (bus, kept.upgrade()) else {
                 return;
             };
-            let waking = logind::hear(&bus, move |heard| {
-                let running = woke.upgrade().and_then(|app| app.running());
-                if let (logind::Heard::Woke, Some(running)) = (heard, running) {
+            let waking = logind::hear(&bus, move || {
+                if let Some(running) = woke.upgrade().and_then(|app| app.running()) {
                     running.send(Intent::Woke);
                 }
             });

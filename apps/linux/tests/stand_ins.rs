@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::links::Opener;
-use pitboard_linux::platform::notifications::{Button, Notice, Notifier, Priority};
+use pitboard_linux::platform::notifications::{Button, Notice, Notifier};
 use pitboard_linux::platform::stand_in;
 use pitboard_linux::platform::tray::{Status, StatusItem, ToolTip, TrayEntry, TrayItem};
 
@@ -82,15 +82,13 @@ fn work(stand_ins: &Path) {
             id: "run-out/work".into(),
             title: "work is out until 3:45 PM".into(),
             body: "Claude Code switched to home.".into(),
-            priority: Priority::High,
             clicked: "open/work".into(),
-            buttons: vec![Button {
+            button: Some(Button {
                 title: "Switch Back".into(),
                 clicked: "switch-back/work".into(),
-            }],
+            }),
         })
         .unwrap();
-    notifications.withdraw("run-out/work".into()).unwrap();
 
     let tray = stand_in::Tray::new(stand_ins);
     tray.show(&TrayItem {
@@ -118,7 +116,6 @@ fn work(stand_ins: &Path) {
         ],
     })
     .unwrap();
-    tray.hide().unwrap();
 
     stand_in::Browser::new(stand_ins)
         .open("https://claude.ai/chat/1f2e", None)
@@ -200,17 +197,13 @@ fn a_fixtures_stand_ins_write_only_in_its_folder() {
     );
     assert_eq!(
         lines(&written.join("notifications.jsonl")),
-        [
-            serde_json::json!({"post": {
-                "id": "run-out/work",
-                "title": "work is out until 3:45 PM",
-                "body": "Claude Code switched to home.",
-                "priority": "high",
-                "clicked": "open/work",
-                "buttons": [{"title": "Switch Back", "clicked": "switch-back/work"}],
-            }}),
-            serde_json::json!({"withdraw": "run-out/work"}),
-        ]
+        [serde_json::json!({"post": {
+            "id": "run-out/work",
+            "title": "work is out until 3:45 PM",
+            "body": "Claude Code switched to home.",
+            "clicked": "open/work",
+            "button": {"title": "Switch Back", "clicked": "switch-back/work"},
+        }})]
     );
     let tray = lines(&written.join("tray.jsonl"));
     assert_eq!(tray[0]["show"]["status"], "NeedsAttention");
@@ -220,7 +213,7 @@ fn a_fixtures_stand_ins_write_only_in_its_folder() {
             "id": "switch/work", "label": "work", "enabled": true, "radio": true,
         }})
     );
-    assert_eq!(tray[1], serde_json::json!("hide"));
+    assert_eq!(tray.len(), 1);
     assert_eq!(
         lines(&written.join("browser.jsonl")),
         [serde_json::json!({"open": "https://claude.ai/chat/1f2e"})]

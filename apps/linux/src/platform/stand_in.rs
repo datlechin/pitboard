@@ -82,13 +82,11 @@ impl StartAtSignIn for Autostart {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Posted<'a> {
-    Post(&'a Notice),
-    Withdraw(&'a str),
+struct Posted<'a> {
+    post: &'a Notice,
 }
 
-/// `notifications.jsonl`: `{"post":<notice>}` and `{"withdraw":<id>}`.
+/// `notifications.jsonl`: `{"post":<notice>}`.
 pub struct Notifications(Lines);
 
 impl Notifications {
@@ -99,22 +97,16 @@ impl Notifications {
 
 impl Notifier for Notifications {
     fn post(&self, notice: Notice) -> Result<(), Failed> {
-        self.0.write(&Posted::Post(&notice))
-    }
-
-    fn withdraw(&self, id: String) -> Result<(), Failed> {
-        self.0.write(&Posted::Withdraw(&id))
+        self.0.write(&Posted { post: &notice })
     }
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Shown<'a> {
-    Show(&'a TrayItem),
-    Hide,
+struct Shown<'a> {
+    show: &'a TrayItem,
 }
 
-/// `tray.jsonl`: `{"show":<item>}` and `"hide"`.
+/// `tray.jsonl`: `{"show":<item>}`.
 pub struct Tray(Lines);
 
 impl Tray {
@@ -154,11 +146,7 @@ impl Drop for Hearing {
 
 impl StatusItem for Tray {
     fn show(&self, item: &TrayItem) -> Result<(), Failed> {
-        self.0.write(&Shown::Show(item))
-    }
-
-    fn hide(&self) -> Result<(), Failed> {
-        self.0.write(&Shown::Hide)
+        self.0.write(&Shown { show: item })
     }
 }
 

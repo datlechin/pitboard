@@ -219,7 +219,7 @@ in a desktop's session. Not measured, each for the Linux session machines:
   gave.
 - Which notification backend GLib picks in a Plasma session, which turns on whether anything
   owns `org.gtk.Notifications` there, and how many buttons Plasma draws. The app posts the
-  same notice to either, at most three buttons.
+  same notice to either, with one button at most.
 - Whether a click on a notification in GNOME Shell and in Plasma reaches `app.notice-clicked`
   with its argument, as the stand-ins of their interfaces do.
 - `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
