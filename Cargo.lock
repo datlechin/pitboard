@@ -2376,6 +2376,7 @@ dependencies = [
  "glib-build-tools",
  "gtk4",
  "libadwaita",
+ "pitboard-core",
  "pitboard-model",
  "serde",
  "serde_json",

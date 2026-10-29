@@ -59,6 +59,8 @@ serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
+# The places the core's guard keeps a build for tests out of, the app's own folders among them.
+pitboard-core = { workspace = true, features = ["test-support"] }
 # The UI tests' AT-SPI client, on zbus's own async-io executor, with no Tokio. The app never
 # links it.
 atspi = { version = "0.30.0", default-features = false, features = ["connection", "proxies"] }

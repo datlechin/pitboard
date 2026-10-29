@@ -77,6 +77,21 @@ mod tests {
         assert!(!file.exists(), "made by its writer");
     }
 
+    // The core names the folder again, so a build for tests refuses it in a home it was given.
+    #[test]
+    fn the_data_folder_is_the_one_the_cores_guard_refuses() {
+        let started_in = pitboard_core::context::Context::from_env();
+        let refused = pitboard_core::testing::real_login_places(&started_in).unwrap();
+
+        let folder = DataFolder::of_this_user();
+
+        assert!(
+            refused.iter().any(|place| place == folder.path()),
+            "{} is not among {refused:?}",
+            folder.path().display()
+        );
+    }
+
     #[cfg(feature = "fixture")]
     #[test]
     fn a_fixtures_folder_is_the_one_its_stand_ins_write_in() {

@@ -68,7 +68,11 @@ pub const PACKAGE: Package = package(option_env!("PITBOARD_PACKAGE"));
 /// The program as Meson installs it, which the core finds the command line beside. None for a
 /// build Cargo made alone, wherever it runs from.
 pub fn installed_program() -> Option<String> {
-    BINDIR.map(|bindir| format!("{bindir}/pitboard-app"))
+    BINDIR.map(installed_in)
+}
+
+fn installed_in(bindir: &str) -> String {
+    format!("{bindir}/pitboard-app")
 }
 
 #[cfg(test)]
@@ -114,6 +118,15 @@ mod tests {
                 Build::Debug.link_scheme(),
                 Build::Debug.object_path(),
             )
+        );
+    }
+
+    // Renewal and the watch service run the command line the packages install beside it.
+    #[test]
+    fn the_installed_program_names_the_command_line_beside_it() {
+        assert_eq!(
+            pitboard_model::app_command_line(installed_in("/usr/bin")).as_deref(),
+            Some("/usr/bin/pitboard")
         );
     }
 

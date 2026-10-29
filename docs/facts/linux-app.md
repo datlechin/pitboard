@@ -23,7 +23,13 @@ with Debian's packages of that day, or in [the checks' images](#the-checks-image
 
 Only Meson builds the release, with `PITBOARD_BUILD=release` (`src/config.rs`). Anything Cargo
 builds alone is the debug build, `--release` or not, and installs nothing, since nothing
-installs it.
+installs it. The release hands the model its program as Meson installs it,
+`PITBOARD_BINDIR/pitboard-app`, and renewal and the watch service run the `pitboard` beside it
+([linux.md](linux.md#the-linux-apps-programs),
+`the_installed_program_names_the_command_line_beside_it`), each a unit the core writes only where
+the user manager reads it for this home, and skipped once that `pitboard` is gone
+([linux.md](linux.md#the-users-systemd)). The debug build hands none, so its Preferences say it
+has no command line beside it to run either.
 
 | | Release | Debug |
 |---|---|---|

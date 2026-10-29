@@ -731,8 +731,10 @@ keeps it is in the header of the module named.
   (`a_fixture_writes_nothing_outside_its_folder`,
   `a_fixture_launch_owns_the_devel_name_and_leaves_its_homes_as_its_world_made_them`).
 - The Linux app's own data folder is its id in `$XDG_DATA_HOME`, each build its own, never in
-  Pitboard's directory, so `pitboard uninstall` leaves it and the app's Uninstall takes it back
-  (`data_folder.rs`, `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
+  Pitboard's directory, so `pitboard uninstall` leaves it and the app's Uninstall takes it back,
+  and it is one the core's guard keeps a build for tests out of (`data_folder.rs`,
+  `the_data_folder_is_the_one_the_cores_guard_refuses`,
+  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
 - Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
   (`neither_search_starts_pitboard`). Each hands the app back only an id it was given in that
   search (`an_id_never_given_activates_nothing`).
