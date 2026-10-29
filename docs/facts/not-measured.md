@@ -256,6 +256,10 @@ arm64, in Docker on a Mac, with keys a test made. Not measured:
   plugin offers to remove an expired key before a transaction, so that `gpgkey=` imports it
   again, and libzypp's changelog for 17.25.4 says "Fix update of gpg keys with elongated expire
   date (bsc#1179222)"; neither has run on this key.
+- What apt, dnf5 and zypper do with indices and rpms a new signing subkey signs, once
+  RELEASING.md's Replace the signing subkey revokes the old one, and how each takes the key with
+  the new subkey when it is fetched again. `test-linux-repository.sh` measured only indices
+  another key signed: apt and dnf5 kept the ones they had, and zypper refused them.
 - The real key's signatures, and `packages.usepitboard.com` serving the tree: no release has
   written it. Until the first one does:
   - which `Cache-Control` the zone honours for R2 behind `packages.usepitboard.com`, whether it
@@ -265,6 +269,11 @@ arm64, in Docker on a Mac, with keys a test made. Not measured:
     `x-amz-checksum-crc64nvme` trailer ([the release](linux-packages.md#r2-and-the-aws-cli)),
     which R2's S3 page neither lists nor refuses, and whether it then serves each object
     without that `Content-Encoding`.
+- The install docs' commands on x86_64, on a desktop install rather than a container image, and
+  against `packages.usepitboard.com` with the real key's signatures
+  ([the install docs](linux-packages.md#the-install-docs)). Among them whether `curl` and `gpg`
+  come with a desktop install of Debian 13 and Ubuntu 26.04, and how long zypper keeps indices
+  before `zypper dup` fetches them again.
 - Every Linux job of `release.yml`: none has run, and their steps ran on the Mac alone
   ([the release](linux-packages.md#the-release)). Among them a `docker://` step in a job that
   runs in a container, which the upload is, and the rpm build of an rc.

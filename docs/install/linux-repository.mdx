@@ -1,0 +1,143 @@
+---
+title: "Set up the Linux repository"
+sidebarTitle: "Linux repository"
+description: "Set up Pitboard's repository for apt, dnf or zypper, choose its channel, or remove it."
+---
+
+`packages.usepitboard.com` gives apt, dnf and zypper the app and the command line, for x86_64 and aarch64. The app needs Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed.
+
+Until 1.0.0, Pitboard's packages are in the beta channel alone, which these steps set up.
+
+Its indices and RPM packages are signed with Pitboard's repository key, whose fingerprint is `22DCF748069770D807A1804F47C507760C9A97E3`. Go on only if your system shows the same.
+
+## Set up apt
+
+On Debian 13 and Ubuntu 26.04:
+
+<Steps>
+  <Step title="Download the key and the setup files">
+    If your system has no `curl`, install it first with `sudo apt install curl`.
+
+    ```sh
+    sudo curl -fsSL -o /usr/share/keyrings/pitboard-archive-keyring.pgp https://packages.usepitboard.com/pitboard-archive-keyring.pgp
+    sudo curl -fsSL -o /etc/apt/sources.list.d/pitboard-beta.sources https://packages.usepitboard.com/pitboard-beta.sources
+    sudo curl -fsSL -o /etc/apt/preferences.d/pitboard.pref https://packages.usepitboard.com/pitboard.pref
+    ```
+  </Step>
+  <Step title="Check the key">
+    ```sh
+    gpg --show-keys /usr/share/keyrings/pitboard-archive-keyring.pgp
+    ```
+
+    ```text
+    pub   rsa4096 2026-10-28 [C] [expires: 2036-10-25]
+          22DCF748069770D807A1804F47C507760C9A97E3
+    uid                      Pitboard Packages
+    sub   rsa4096 2026-10-28 [S] [expires: 2028-10-27]
+    ```
+
+    If the fingerprint under `pub` differs, delete the three files and stop.
+  </Step>
+  <Step title="Install the app">
+    ```sh
+    sudo apt update
+    sudo apt install pitboard-app
+    ```
+
+    apt also installs `pitboard`, the command line, and `pitboard-archive-keyring`, which brings each later copy of the key. For the command line alone, install `pitboard`.
+  </Step>
+</Steps>
+
+## Set up dnf
+
+On Fedora 43 and later:
+
+```sh
+sudo dnf config-manager addrepo --from-repofile=https://packages.usepitboard.com/pitboard-beta.repo
+sudo dnf install pitboard-app
+```
+
+dnf first says `repomd.xml GPG signature verification error: Signing key not found`, then asks to import the key:
+
+```text
+Importing OpenPGP key 0x0C9A97E3:
+ UserID     : "Pitboard Packages"
+ Fingerprint: 22DCF748069770D807A1804F47C507760C9A97E3
+ From       : https://packages.usepitboard.com/pitboard-archive-keyring.asc
+Is this ok [y/N]:
+```
+
+Enter `y` if the fingerprint matches. dnf asks again before it installs the packages. It also installs `pitboard`, the command line. For the command line alone, install `pitboard`.
+
+## Set up zypper
+
+On openSUSE Tumbleweed:
+
+```sh
+sudo zypper addrepo --refresh https://packages.usepitboard.com/pitboard-beta.repo
+sudo zypper install pitboard-app
+```
+
+zypper shows the key it received and asks `Do you want to reject the key, trust temporarily, or trust always?`. Enter `a` if its `Key Fingerprint` is `22DC F748 0697 70D8 07A1 804F 47C5 0776 0C9A 97E3`. zypper also installs `pitboard`, the command line. For the command line alone, install `pitboard`.
+
+## Choose a channel
+
+| Channel | Holds | Setup files |
+| --- | --- | --- |
+| `beta` | Each beta and each full release, whichever is higher | `pitboard-beta.sources` and `pitboard-beta.repo` |
+| `stable` | The most recent full release | `pitboard.sources` and `pitboard.repo` |
+
+Until 1.0.0, `stable` holds no release. apt refuses it with `does not have a Release file`, dnf says `Usable URL not found`, and zypper says `Repository type can't be determined`.
+
+To move to the other channel, replace its setup file. The version installed stays until the other channel holds a higher one. With apt:
+
+```sh
+sudo rm /etc/apt/sources.list.d/pitboard-beta.sources
+sudo curl -fsSL -o /etc/apt/sources.list.d/pitboard.sources https://packages.usepitboard.com/pitboard.sources
+sudo apt update
+```
+
+With dnf:
+
+```sh
+sudo rm /etc/yum.repos.d/pitboard-beta.repo
+sudo dnf config-manager addrepo --from-repofile=https://packages.usepitboard.com/pitboard.repo
+```
+
+With zypper:
+
+```sh
+sudo zypper removerepo pitboard-beta
+sudo zypper addrepo --refresh https://packages.usepitboard.com/pitboard.repo
+```
+
+These move from `beta` to `stable`. To move back, swap `pitboard` and `pitboard-beta` in them.
+
+On openSUSE, `zypper dup` installs the version the channel holds, even one lower than the version installed.
+
+## Remove the repository
+
+Remove Pitboard first, as [Remove Pitboard itself](/install/remove#remove-pitboard-itself) says. Then, with apt:
+
+```sh
+sudo apt remove pitboard-archive-keyring
+sudo rm -f /etc/apt/sources.list.d/pitboard.sources /etc/apt/sources.list.d/pitboard-beta.sources /etc/apt/preferences.d/pitboard.pref /usr/share/keyrings/pitboard-archive-keyring.pgp
+```
+
+With dnf:
+
+```sh
+sudo rm -f /etc/yum.repos.d/pitboard.repo /etc/yum.repos.d/pitboard-beta.repo
+sudo rpmkeys --delete 22DCF748069770D807A1804F47C507760C9A97E3
+```
+
+With zypper:
+
+```sh
+sudo zypper removerepo pitboard-beta pitboard
+sudo rpmkeys --delete 0c9a97e3
+```
+
+## Arch Linux and other systems
+
+Pitboard has no package for other systems. Install the command line with [the install script](/install#install-with-the-script) or [Homebrew](/install#install-with-homebrew). The app builds with Meson, as [Build the app](/install/other-ways#build-the-app) says.

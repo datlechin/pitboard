@@ -435,7 +435,10 @@ At 1.0.0, rewrite:
   sentence and the Windows sentence of Check the checksums in `docs/install/verify.mdx`, and
   to the checksum bullet of `SECURITY.md`.
 - The sentences of `docs/install.mdx` and `docs/install/linux-repository.mdx` that say the Linux
-  app comes from the beta channel alone: from 1.0.0, `stable` holds it.
+  app comes from the beta channel alone, or that `stable` holds no release: from 1.0.0, `stable`
+  holds it. The setup steps of `docs/install/linux-repository.mdx` then name `pitboard.sources`
+  and `pitboard.repo`, and moving channels goes from `stable` to `beta`. usepitboard.com's
+  commands follow by themselves.
 
 Once `microsoft/winget-pkgs` holds both packages, add their `winget install` lines to
 `docs/install/other-ways.mdx`, and to `windowsWays` in `website/src/data/commands.ts`, which
@@ -647,8 +650,9 @@ On the offline machine, with the offline copy:
    C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` binds the subkey again, to two years from that day.
 2. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
    `packaging/linux/pitboard-archive-keyring.asc`. The same pull request gives
-   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry
-   and RELEASING.md the new dates.
+   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry,
+   and RELEASING.md and the `gpg --show-keys` output in `docs/install/linux-repository.mdx` the
+   new dates.
 3. Export the subkey again, as above, into `PACKAGES_SIGNING_KEY`. The copy there carries the
    old binding, and gpg signs nothing with a subkey whose binding has expired.
    `with-linux-signing-key.sh` refuses it until then, before `linux-sign` signs anything.
@@ -662,3 +666,28 @@ they imported first, with its first binding, after the extended key has signed. 
 reaches them only if they import the key again once that copy expires, which is
 [not measured](docs/facts/not-measured.md#the-linux-repository). So extend well before the 180
 days run out.
+
+### Replace the signing subkey
+
+Where the subkey's secret is lost, or someone else may hold it, revoke it and sign with a new
+one. On the offline machine, with the offline copy:
+
+1. `gpg --edit-key 22DCF748069770D807A1804F47C507760C9A97E3`, then `key 1`, `revkey` with the
+   reason that applies, and `save`.
+2. `gpg --quick-add-key 22DCF748069770D807A1804F47C507760C9A97E3 rsa4096 sign 2y` adds the new
+   signing subkey.
+3. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
+   `packaging/linux/pitboard-archive-keyring.asc`. The checks leave the revoked subkey out and
+   sign with the new one. The same pull request gives `test_the_committed_key_is_the_owners`,
+   the table above, `docs/install/code-signing-policy.mdx` and the `gpg --show-keys` output in
+   `docs/install/linux-repository.mdx` the new subkey.
+4. `gpg --armor --export-secret-subkeys <new subkey>!` replaces `PACKAGES_SIGNING_KEY`, and its
+   passphrase `PACKAGES_SIGNING_PASSPHRASE`.
+
+An installed system's copy of the key has the old subkey alone, so what the new one signs is to
+it signed by another key: apt and dnf5 keep the indices they had, and zypper refuses the
+refresh, as `test-linux-repository.sh` measured for another key's indices. No keyring package
+reaches apt through those indices. So the release that first signs with the new subkey says in
+its notes to fetch the key again, as the setup steps in `docs/install/linux-repository.mdx` do.
+What each package manager does with the replaced key is
+[not measured](docs/facts/not-measured.md#the-linux-repository).

@@ -10,7 +10,7 @@ description: "Install the app or the command line on macOS, Windows or Linux, an
 | --- | --- | --- |
 | macOS | Apple silicon or Intel | macOS 14 or later, on Apple silicon or Intel |
 | Windows | Windows 11 24H2 or later, or Windows Server 2025, on x64 or ARM64 | The same as the command line |
-| Linux | x86_64 or aarch64, on any distribution | None |
+| Linux | x86_64 or aarch64, on any distribution | Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed, on x86_64 or aarch64 |
 
 The app includes the command line, so install one or the other. On an older Windows, Pitboard [changes nothing](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows).
 
@@ -18,7 +18,7 @@ You also need Claude Code, OpenAI's Codex CLI or Claude Desktop, signed in to on
 
 Pitboard for Windows is in beta, and its files are not signed. It was run with real Claude Code logins on 18 October 2026, with Claude Code 2.1.302. Codex sign-ins and switches on Windows have not been measured.
 
-On Linux, Pitboard builds and passes its tests, but has not been run with real logins.
+On Linux, Pitboard was run with real Claude Code and Codex logins on 30 October 2026, with Claude Code 2.1.314 and Codex 0.166.0, on Fedora 44 with GNOME and with KDE Plasma, Ubuntu 26.04 and Debian 13.
 
 ## Install the app
 
@@ -49,9 +49,20 @@ On Linux, Pitboard builds and passes its tests, but has not been run with real l
       </Step>
     </Steps>
   </Tab>
-</Tabs>
+  <Tab title="Linux">
+    Set up Pitboard's repository as [Set up the Linux repository](/install/linux-repository) shows, then install `pitboard-app`:
 
-Linux has no app: install the command line.
+    | System | Command |
+    | --- | --- |
+    | Debian 13 and Ubuntu 26.04 | `sudo apt install pitboard-app` |
+    | Fedora 43 and later | `sudo dnf install pitboard-app` |
+    | openSUSE Tumbleweed | `sudo zypper install pitboard-app` |
+
+    It installs the command line, the `pitboard` package, with it. For the command line alone, install `pitboard`.
+
+    Until 1.0.0, the app comes from the repository's beta channel alone.
+  </Tab>
+</Tabs>
 
 ## Install with the script
 
@@ -115,6 +126,10 @@ Where Codex's home inside WSL is a folder on a Windows drive, such as `/mnt/c/Us
 | The `pitboard` cask | `brew upgrade pitboard` |
 | The app on macOS, from its cask or a release file | It updates itself. |
 | The app on Windows | It updates itself to each full release. To install a later beta, open its installer. |
+| Pitboard's repository, with apt | `sudo apt update`, then `sudo apt upgrade`. |
+| Pitboard's repository, with dnf | `sudo dnf upgrade --refresh` |
+| Pitboard's repository, with zypper | `sudo zypper refresh`, then `sudo zypper dup`. |
+| A Linux package from a release file | It never updates. Install the next release's packages, or [set up the repository](/install/linux-repository). |
 | Cargo, a release file or a build of your own | As [Other ways to install](/install/other-ways) says for each. |
 
 [Updates](/reference/settings#updates) lists the app's update settings. `brew upgrade --greedy` also upgrades the `pitboard-app` cask.

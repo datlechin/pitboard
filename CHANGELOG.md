@@ -33,8 +33,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the login keyring locked catches up once you sign in.
 - On Linux, each release comes as `.deb` and `.rpm` packages of the app and the command line,
   for x86_64 and aarch64.
-- A signed apt and dnf repository at `packages.usepitboard.com` brings Pitboard's updates on
-  Linux, with a beta channel you can choose instead.
+- A signed apt and dnf [repository](https://docs.usepitboard.com/install/linux-repository) at
+  `packages.usepitboard.com` brings Pitboard's updates on Linux, with a beta channel you can
+  choose instead.
 
 ### Changed
 

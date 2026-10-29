@@ -1305,6 +1305,19 @@ class RepositoryKey(unittest.TestCase):
         self.assertPasses(self.checked(REPOSITORY_KEY, "1840705212"))
         self.assertRefused(self.checked(REPOSITORY_KEY, "1840705213"), "has 179 days left")
 
+    def test_the_docs_and_releasing_name_the_committed_keys_fingerprints(self):
+        found = self.assertPasses(self.checked(REPOSITORY_KEY, "1793145600"))
+        for page, keys in (
+            ("RELEASING.md", ("primary", "signing")),
+            ("docs/install/linux-repository.mdx", ("primary",)),
+            ("docs/install/code-signing-policy.mdx", ("primary", "signing")),
+        ):
+            path = REPO / page
+            text = path.read_text() if path.is_file() else ""
+            for key in keys:
+                with self.subTest(page=page, key=key):
+                    self.assertTrue(found[key] in text, f"{page} does not name {found[key]}")
+
     def test_a_signing_subkey_with_fewer_than_180_days_left_is_refused(self):
         key = self.exported(self.key(subkeys=(("sign", 400),)))
         found = self.assertPasses(self.checked(key, self.at(400 - 180)))

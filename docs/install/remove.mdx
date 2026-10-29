@@ -3,7 +3,7 @@ title: "Remove Pitboard"
 description: "Uninstall Pitboard from the app, or delete parked logins with `pitboard uninstall` and remove Pitboard the way you installed it."
 ---
 
-Removing the program alone leaves every parked login on the machine. The app's **Uninstall Pitboard** removes both. On the command line, delete the parked logins first, then remove Pitboard the way you installed it.
+Removing the program alone leaves every parked login on the machine. The app's **Uninstall Pitboard** removes both. On Linux, it deletes the parked logins and names the command that removes the app. On the command line, delete the parked logins first, then remove Pitboard the way you installed it.
 
 <Warning>
   Uninstalling cannot be undone. Each tool stays signed in to the account in use. Every other account needs a sign-in again before you can use it.
@@ -11,7 +11,7 @@ Removing the program alone leaves every parked login on the machine. The app's *
 
 ## Uninstall from the app
 
-The app deletes every saved sign-in, as `pitboard uninstall` does, and its own settings and account windows, then removes itself.
+The app deletes every saved sign-in, as `pitboard uninstall` does, and its own settings and account windows, then removes itself. On Linux, your package manager removes it.
 
 <Tabs>
   <Tab title="macOS">
@@ -25,6 +25,11 @@ The app deletes every saved sign-in, as `pitboard uninstall` does, and its own s
     In **Settings** > **Advanced**, select **Uninstall** on the **Uninstall Pitboard** card, then **Uninstall**. Pitboard exits, and Windows Installer removes the app with a progress bar, as [Remove Pitboard itself](#remove-pitboard-itself) lists.
 
     If Pitboard cannot remove everything, do what the card says, then select **Try again**.
+  </Tab>
+  <Tab title="Linux">
+    In **Preferences** > **Advanced**, click **Uninstall Pitboard**, then **Uninstall**. Pitboard turns off **Start Pitboard at Login** and removes its folders, `~/.local/share/com.usepitboard.Pitboard` and `~/.cache/com.usepitboard.Pitboard`. **Remove the App** then names the command that removes the app and the command line, such as `sudo apt remove pitboard-app pitboard`, with **Copy** beside it. Run it in a terminal, then click **Quit**.
+
+    If Pitboard cannot remove everything, do what **Advanced** says, then click **Try Again**.
   </Tab>
 </Tabs>
 
@@ -92,6 +97,11 @@ If you set `PITBOARD_HOME`, or `pitboard uninstall` refuses, keeps the directory
 | A release tarball or zip | Delete `pitboard` or `pitboard.exe`, and the man page and completion files if you copied them. |
 | The app on macOS, from a release download | Move `Pitboard.app` to the Trash, or [uninstall it from the app](#uninstall-from-the-app). |
 | The app on Windows | In **Settings** > **Apps** > **Installed apps**, select **Uninstall** in the menu beside **Pitboard**, or [uninstall it from the app](#uninstall-from-the-app). |
+| The Linux packages, with apt | `sudo apt remove pitboard-app pitboard` |
+| The Linux packages, with dnf | `sudo dnf remove pitboard-app pitboard` |
+| The Linux packages, with zypper | `sudo zypper remove pitboard-app pitboard` |
+
+Removing the Linux packages leaves Pitboard's repository set up. [Remove the repository](/install/linux-repository#remove-the-repository) says how to remove it too.
 
 For the install script:
 

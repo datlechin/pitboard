@@ -77,6 +77,8 @@ works.
   [Verify a download](https://docs.usepitboard.com/install/verify).
 - On macOS and Linux, the install script and casks install only files matching the release's
   checksums.
+- On Linux, apt, dnf and zypper install from Pitboard's repository only what its signed indices
+  list, and each RPM package is signed with the repository key.
 - On macOS, the app installs only an update signed with its update key or, in a Developer ID
   copy, by the same team. On Windows, it installs only an update whose installer is signed
   with its Windows update key.

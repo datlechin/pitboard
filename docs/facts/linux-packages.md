@@ -471,6 +471,64 @@ signed beta tree over HTTP on the Mac:
   `check-linux-packages.sh` passed them. Checked at `Cargo.toml`'s version, it would refuse every
   package of an rc.
 
+## The install docs
+
+Measured on 29 October 2026, arm64, in Docker on the owner's Mac, with the commands of
+`docs/install/linux-repository.mdx`, `docs/install/other-ways.mdx` and `docs/install/verify.mdx`
+run as written, `sudo` included, with only `packages.usepitboard.com` turned into the loopback
+server of `test-linux-repository.sh`'s trees, which `repository-test.Containerfile` built from the
+1.0.0-beta.6 packages `in-container.sh` built and signed with a key it made. Each system was the
+image of the repository's test, with sudo, and gpg on Debian and Ubuntu: Debian 13 with apt 3.0.3,
+gpg 2.4.7 and curl 8.14.1; Ubuntu 26.04 with apt 3.2.0, gpg 2.4.8 and curl 8.18.0; Fedora 43 with
+dnf5 5.2.18.0, rpm 6.0.2 and curl 8.15.0; openSUSE Tumbleweed 20261020 with zypper 1.14.101,
+libzypp 17.38.16 and rpm 4.20.1. The installs started from the `beta` tree, whose keyring package
+holds the test's key, since the given packages' holds the committed one.
+
+- `gpg --show-keys` of the committed key, served and fetched as the docs fetch it, printed on
+  Debian and Ubuntu the four lines the docs show, the subkey without its fingerprint.
+- apt: the three `curl` downloads, `apt update` and `apt install pitboard-app` installed
+  `pitboard-app`, with `pitboard` and `pitboard-archive-keyring` as dependencies. `apt remove
+  pitboard-app pitboard` left the keyring, "automatically installed and is no longer required";
+  `apt remove pitboard-archive-keyring` took its file, and `rm -f` the rest. `apt install` of the
+  two release files installed them with the keyring as a recommended package not installed, and
+  `apt-cache policy` gave only `/var/lib/dpkg/status` as their source.
+- dnf: `dnf config-manager addrepo --from-repofile=` wrote `/etc/yum.repos.d/pitboard-beta.repo`.
+  Fedora 43's `core` and `workstation-product` groups name `dnf5-plugins`, which holds
+  config-manager, among their default packages. Given the committed key's `.asc`, `dnf install`
+  printed "Importing OpenPGP key 0x0C9A97E3:" with `UserID : "Pitboard Packages"` and
+  `Fingerprint: 22DCF748069770D807A1804F47C507760C9A97E3`, as the docs show. With the test's key it
+  asked twice, at the repository's load and before the transaction. rpm 6.0.2 names an imported key
+  `gpg-pubkey-<fingerprint in lower case>-<creation in hex>`, and `rpmkeys --delete` with the
+  fingerprint in upper case removed it. dnf5 keeps its own copy of the key in
+  `/var/cache/libdnf5/<repository>-<hash>/pubring`, which removing the `.repo` file leaves.
+- zypper: `zypper addrepo --refresh` added the channel, and `zypper install pitboard-app` printed
+  "New repository or package signing key received:", the key's `Key Fingerprint` in ten groups of
+  four, its `Rpm Name` `gpg-pubkey-<last eight digits in lower case>-<creation in hex>`, and "Do you
+  want to reject the key, trust temporarily, or trust always? [r/t/a/?] (r):". zypper reads an
+  answer only from a terminal, "Cannot read input: bad stream or EOF" otherwise, so its commands
+  ran under `expect`. zypper never asked about a key that had not signed the index: given the
+  committed key's `.asc` beside indices the test's key signed, it said "signed with an unknown key".
+  `zypper removerepo pitboard-beta pitboard` removed the one it had and said "Repository
+  'pitboard' not found by alias, number or URI.", exit 0. rpm 4.20.1's `rpmkeys --delete` took the
+  last eight digits in lower case, and answered "package gpg-pubkey-<fingerprint> is not
+  installed" to the fingerprint.
+- With the channel at a higher release: apt took it at `apt update` and `apt upgrade`. `dnf
+  upgrade` minutes after the install kept the indices it had and found no Pitboard update, and
+  `dnf upgrade --refresh` took it. `zypper dup --dry-run` minutes after the install did not fetch
+  the indices again, and after `zypper refresh` planned the upgrade.
+- Moving channels: with `stable` empty, as before 1.0.0, apt said "The repository '.../deb stable
+  Release' does not have a Release file." and exited 100, dnf said "Usable URL not found" and went
+  on, exit 0, and `zypper refresh` said "Repository type can't be determined." and exited 4. Each
+  then moved from `beta` to `stable` once `stable` held a higher release. Moved back to `beta`
+  holding a lower one, apt and dnf kept the version installed, and `zypper dup --dry-run` planned
+  to downgrade both packages to it.
+- Release files: `rpm -K` printed "digests SIGNATURES NOT OK", exit 1, before the key was
+  imported, and "digests signatures OK" after `rpm --import` of the served `.asc`, on Fedora and
+  Tumbleweed. `dnf install` of the two signed files installed them without the key, "Warning:
+  skipped OpenPGP checks for 2 packages from repository: @commandline". `zypper install` stopped
+  at "Signature verification failed [4-Signatures public key is not available]" without it, and
+  installed them once `rpm --import` had.
+
 ## The session bundle
 
 Measured on 29 October 2026 on the owner's Mac (arm64), through the steps of `linux-facts.yml`'s

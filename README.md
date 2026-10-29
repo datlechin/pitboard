@@ -38,11 +38,13 @@ that issued it, and sends nothing for a Claude Desktop account.
 [What leaves your machine](https://docs.usepitboard.com/security#what-leaves-your-machine)
 lists every request.
 
-The command line runs on macOS, Windows and Linux. The app runs on macOS 14 or later and on
-Windows 11 24H2 or later, and includes the command line. Pitboard for Windows is in beta, and
+The command line runs on macOS, Windows and Linux. The app runs on macOS 14 or later, on
+Windows 11 24H2 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 or later and openSUSE
+Tumbleweed, and includes the command line. Pitboard for Windows is in beta, and
 its files are not signed. On Linux, Pitboard builds and passes its tests, its app for GNOME and
-KDE Plasma included, which is tested headless on Debian 13, Ubuntu 26.04 and Fedora 44. Neither
-has been run with real logins, and the app has not been run in a desktop session.
+KDE Plasma included, which is tested headless on Debian 13, Ubuntu 26.04 and Fedora 44. Both
+were run with real logins in desktop sessions of Fedora 44 with GNOME and with KDE Plasma, Ubuntu
+26.04 and Debian 13 ([what they measured](docs/facts/linux-session.md)).
 
 ## Install
 
@@ -58,6 +60,10 @@ Or with Homebrew:
 brew install datlechin/tap/pitboard              # the command line
 brew install --cask datlechin/tap/pitboard-app   # the app, on macOS
 ```
+
+On Debian 13, Ubuntu 26.04, Fedora 43 and later and openSUSE Tumbleweed, install the app from
+Pitboard's apt and dnf repository, as
+[Set up the Linux repository](https://docs.usepitboard.com/install/linux-repository) says.
 
 On Windows, download the installer from
 [Download Pitboard](https://usepitboard.com/download#windows). It installs the app and puts
