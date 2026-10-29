@@ -96,7 +96,7 @@ inside() {
   fi
   set -- --user 1000:1000 \
     --mount "type=bind,src=$repo,dst=/src,readonly" \
-    --tmpfs /cargo:uid=1000,gid=1000 \
+    --mount type=tmpfs,dst=/cargo,tmpfs-mode=1777 \
     --mount "type=bind,src=$registry,dst=/cargo/registry,readonly" \
     --mount "type=volume,src=$volume,dst=/target" \
     --workdir /src --env CARGO_HOME=/cargo --env "CARGO_TARGET_DIR=/target/$distro" \
