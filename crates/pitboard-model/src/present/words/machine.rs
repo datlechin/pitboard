@@ -502,9 +502,7 @@ mod tests {
         quit_with_downloads, switch_button, try_again, window_open,
     };
 
-    /// A `pitboard` installed apart from the app is updated the way it was installed, and none
-    /// of those ways does it by itself. Saying it "updates on its own" read as though nothing
-    /// needed doing, until the app moved on and the command line refused its newer files.
+    // "Updates on its own" read as nothing to do, until the command line refused newer files.
     #[test]
     fn a_command_line_installed_apart_says_how_to_update_it() {
         for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {

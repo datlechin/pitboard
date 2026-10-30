@@ -118,8 +118,6 @@ fn standing_json(standing: &Standing) -> Value {
 
 pub(crate) const WARMERS: &str = "the app or `pitboard watch`";
 
-/// The span, and each Claude Code account with whether it is warmed up and where it stands,
-/// as a person reads it.
 fn said(overview: &Overview) -> String {
     if overview.accounts.is_empty() {
         return "No Claude Code account is enrolled, so there is nothing to warm up.\n".into();

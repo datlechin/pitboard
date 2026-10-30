@@ -498,7 +498,6 @@ fn activity(seen: &Seen) -> ActivityShown {
     }
 }
 
-/// The `pitboard` a terminal runs, as SettingsView.swift's command line pane showed it.
 fn command_line(seen: &Seen) -> CommandLineShown {
     let machine = &seen.state.machine;
     let own = machine.own.unwrap_or_default();

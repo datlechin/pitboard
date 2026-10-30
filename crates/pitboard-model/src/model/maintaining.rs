@@ -903,13 +903,7 @@ fn the_accounts_pane_shown_reads_numbers_a_minute_old() {
     ));
 }
 
-/// A terminal runs the first `pitboard` on its login shell's `PATH`, then looks where each
-/// way of installing Pitboard puts one, and the settings say which it found: where it is and
-/// how it is kept up to date, the one inside this app or one installed apart from it, or
-/// that there is none, and only then offer to link this app's own, where it has one a link
-/// would keep reaching. It is looked for only when the settings ask.
-///
-/// `lanes.rs` has where it is looked for, over real files.
+// `lanes.rs` has where it is looked for, over real files.
 #[test]
 fn the_command_line_is_said_as_a_terminal_would_find_it() {
     let mut model = Hand::new();
