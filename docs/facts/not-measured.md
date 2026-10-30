@@ -228,6 +228,8 @@ in a desktop's session. Not measured, each for the Linux session machines:
   same notice to either, with one button at most.
 - Whether a click on a notification in GNOME Shell and in Plasma reaches `app.notice-clicked`
   with its argument, as the stand-ins of their interfaces do.
+- A Plasma logout with a dialog up since the window closes its dialogs with it, and a GNOME
+  logout with the app running ([Logging out](linux-app.md#logging-out)).
 - `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
   on `false` from the owner of `org.freedesktop.login1`.
 - Whether Plasma 6.8's tray and the AppIndicator extension take the status item, draw its menu

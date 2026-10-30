@@ -3,10 +3,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use glib::prelude::*;
+use adw::prelude::*;
 
 use super::harness::{App, Owned, Screen, WATCHER, activate, eventually, owned, session};
 use super::launch::{close, read};
+use super::views::Viewed;
 use pitboard_linux::presence::HELP;
 
 #[test]
@@ -46,6 +47,23 @@ fn with_one_closing_hides_it() {
     assert!(app.ended().is_none(), "the tray keeps Pitboard running");
     activate(&bus, "add-account", None);
     screen.window();
+}
+
+// The compositor's close, which a Plasma logout sends each window once, reaches the window as
+// `close()` does.
+#[gtk::test]
+fn with_one_closing_with_a_dialog_up_closes_the_dialog_and_hides_the_window() {
+    let viewed = Viewed::of("oneTool");
+    let window = &viewed.window;
+    window
+        .activate_action("pitboard.preferences", None)
+        .expect("the main menu's Preferences");
+    viewed.dialog();
+
+    window.close();
+
+    assert!(window.visible_dialog().is_none(), "Preferences up");
+    assert!(!window.is_visible(), "the window up");
 }
 
 // What a tray kept running with its window hidden quits as the tray goes, as closing the window
