@@ -411,8 +411,9 @@ pub struct Context {
     pub(crate) config_home: Option<PathBuf>,
     pub(crate) data_home: Option<PathBuf>,
     pub(crate) cache_home: Option<PathBuf>,
-    // `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` on Linux, where the user's systemd and
-    // the session's D-Bus are found.
+    // `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` on Linux, where the session's D-Bus is
+    // found, and the user's systemd on it. A relative runtime folder is none, as XDG Base
+    // Directory 0.8 ignores one.
     pub(crate) runtime_dir: Option<PathBuf>,
     pub(crate) session_bus_address: Option<String>,
     // On Linux, whether this run is in the desktop session, where the keyring's prompter shows
@@ -549,16 +550,6 @@ impl Context {
     /// The same for what may be thrown away: `XDG_CACHE_HOME`, else `.cache` in the home.
     pub fn cache_home(&self) -> Option<&std::path::Path> {
         self.cache_home.as_deref()
-    }
-
-    /// `XDG_RUNTIME_DIR` on Linux, where it names a full path. None where it does not, as
-    /// XDG Base Directory 0.8 ignores a relative one, and off Linux.
-    #[cfg_attr(
-        not(target_os = "linux"),
-        allow(dead_code, reason = "only Linux has a user manager to find")
-    )]
-    pub(crate) fn runtime_dir(&self) -> Option<&std::path::Path> {
-        self.runtime_dir.as_deref()
     }
 
     /// The session's D-Bus, as sd-bus finds it at systemd 262 (`bus_set_address_user`):
@@ -1816,7 +1807,6 @@ mod tests {
             ("DBUS_SESSION_BUS_ADDRESS", address),
         ];
         let given = read(Os::Linux, &both);
-        assert_eq!(given.runtime_dir(), Some(runtime.as_path()));
         assert_eq!(
             given.session_bus(),
             Some(SessionBus::Address(address.into()))
@@ -1830,12 +1820,9 @@ mod tests {
             Some(SessionBus::Socket(runtime.join("bus")))
         );
         let relative = read(Os::Linux, &[("XDG_RUNTIME_DIR", "relative/runtime")]);
-        assert_eq!(
-            (relative.runtime_dir(), relative.session_bus()),
-            (None, None)
-        );
+        assert_eq!(relative.session_bus(), None);
         let mac = read(Os::MacOs, &both);
-        assert_eq!((mac.runtime_dir(), mac.session_bus()), (None, None));
+        assert_eq!(mac.session_bus(), None);
     }
 
     // On Linux alone, with a display, and not over SSH, whose forwarded display is another than

@@ -1,65 +1,65 @@
-//! D-Bus on Linux, reached as systemd 262's own tools reach it: the user's systemd as
-//! `systemctl --user` does, and the session bus as sd-bus finds it.
+//! D-Bus on Linux: the session bus as sd-bus finds it at systemd 262, where the user's systemd
+//! and the Secret Service answer.
 //!
-//! Read in systemd's `src/shared/bus-util.c` at tag `v262`. `bus_connect_transport_systemd`
-//! takes the user manager's private socket, `systemd/private` in `XDG_RUNTIME_DIR`, peer to
-//! peer with no `Hello`, and accepts it only where the process listening is this user's or
-//! root's (`bus_check_peercred`). It falls back to the session bus only where `XDG_RUNTIME_DIR`
-//! is unset and `DBUS_SESSION_BUS_ADDRESS` is set, and a private socket that does not answer
-//! is the answer.
+//! Read in systemd's source at tag `v262`. `sd_bus_open_user` in
+//! `src/libsystemd/sd-bus/sd-bus.c` connects as a bus client to `DBUS_SESSION_BUS_ADDRESS`, else
+//! to `unix:path=$XDG_RUNTIME_DIR/bus` (`bus_set_address_user`). The user manager joins that bus
+//! the same way once its `dbus.socket` and `dbus.service` run, and takes
+//! `org.freedesktop.systemd1` there (`bus_init_api` and `bus_setup_api` in `src/core/dbus.c`,
+//! `manager_dbus_is_running` in `src/core/manager.c`).
 //!
-//! A build for tests reaches neither: the user's systemd is asked nothing
-//! (`systemd::UserManager`), and the only session bus is one a test started and named
-//! (`Context::with_test_bus`), never one in this account's own runtime folder.
+//! Not the manager's private socket, `systemd/private` in the runtime folder, which `systemctl
+//! --user` takes: `bus_on_connection` makes `org.freedesktop.systemd1` the sender of each
+//! message there, which zbus 5.19 reads only as a unique name and panics on (z-galaxy/zbus#1497),
+//! and systemd/systemd#3610 says that socket is not for other programs.
+//!
+//! A build for tests reaches no bus but one a test started and named (`Context::with_test_bus`),
+//! never one in this account's own runtime folder.
 
 use crate::context::{Context, SessionBus};
-use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 use zbus::Address;
 use zbus::address::transport::{Transport, Unix, UnixSocket};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
+use zbus::names::BusName;
 
 // sd-bus's own wait for an answer, `BUS_DEFAULT_TIMEOUT` in `bus-internal.h` at `v262`.
-const ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(25);
+const ANSWER_WITHIN: Duration = Duration::from_secs(25);
 
-// How `systemctl --user` reaches the user's systemd.
-#[derive(Debug, PartialEq, Eq)]
-enum Way {
-    Private(PathBuf),
-    Session(SessionBus),
-}
+const MANAGER: &str = "org.freedesktop.systemd1";
 
-fn way(ctx: &Context) -> Option<Way> {
-    match (ctx.runtime_dir(), ctx.session_bus()) {
-        (Some(runtime), _) => Some(Way::Private(runtime.join("systemd").join("private"))),
-        (None, Some(bus)) => Some(Way::Session(bus)),
-        (None, None) => None,
-    }
-}
+// Socket activation starts the bus before the manager joins it, and dbus-broker v37 refuses at
+// once a call to a name nobody owns that no service file names (`driver_forward_unicast` in
+// `src/bus/driver.c`): systemd installs none for the session bus. Not measured.
+const JOINS_WITHIN: Duration = Duration::from_secs(5);
+const LOOKS_EVERY: Duration = Duration::from_millis(50);
 
-/// A connection to the user's systemd, by the runtime folder and the bus `ctx` names.
+/// The session bus, once the user's systemd owns `org.freedesktop.systemd1` on it.
 pub(super) fn user_manager(ctx: &Context) -> Result<Connection, String> {
-    match way(ctx) {
-        Some(Way::Private(socket)) => private(&socket),
-        Some(Way::Session(bus)) => address(&bus)
-            .and_then(Builder::address)
-            .and_then(|builder| builder.method_timeout(ANSWER_WITHIN).build())
-            .map_err(|e| format!("the session bus did not answer: {e}")),
-        None => Err("neither XDG_RUNTIME_DIR nor DBUS_SESSION_BUS_ADDRESS is set".into()),
+    let connection = session(ctx)?;
+    let bus = zbus::blocking::fdo::DBusProxy::new(&connection)
+        .map_err(|e| format!("the session bus did not answer: {e}"))?;
+    let name = BusName::try_from(MANAGER).map_err(|e| e.to_string())?;
+    let given_up = Instant::now() + JOINS_WITHIN;
+    while !bus
+        .name_has_owner(name.clone())
+        .map_err(|e| format!("the session bus did not answer: {e}"))?
+    {
+        if Instant::now() >= given_up {
+            return Err(format!("nothing owns {MANAGER} on the session bus"));
+        }
+        std::thread::sleep(LOOKS_EVERY);
     }
+    Ok(connection)
 }
 
-/// A connection to the session's bus, where the Secret Service answers.
+/// A connection to the session's bus, where the Secret Service and the user's systemd answer.
 pub(super) fn session(ctx: &Context) -> Result<Connection, String> {
     #[cfg(any(test, feature = "test-support"))]
     let address = tests_own(ctx.test_bus())?;
     #[cfg(not(any(test, feature = "test-support")))]
-    let address = {
-        let bus = ctx
-            .session_bus()
-            .ok_or("neither DBUS_SESSION_BUS_ADDRESS nor XDG_RUNTIME_DIR is set")?;
-        address(&bus).map_err(|e| format!("the session bus's address does not read: {e}"))?
-    };
+    let address = named(ctx)?;
     Builder::address(address)
         .and_then(|builder| builder.method_timeout(ANSWER_WITHIN).build())
         .map_err(|e| format!("the session bus did not answer: {e}"))
@@ -78,7 +78,7 @@ fn tests_own(given: Option<&str>) -> Result<Address, String> {
         return Err(refused("but a socket in a test's own folder"));
     };
     // SAFETY: `geteuid` cannot fail and touches no memory of this process.
-    let own = PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }));
+    let own = std::path::PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }));
     let resolved = std::fs::canonicalize(socket).unwrap_or_else(|_| socket.clone());
     if crate::host::lies_in(socket, &own) || crate::host::lies_in(&resolved, &own) {
         return Err(refused(&format!("in this account's own {}", own.display())));
@@ -86,40 +86,25 @@ fn tests_own(given: Option<&str>) -> Result<Address, String> {
     Ok(address)
 }
 
-// The session bus as a D-Bus address names it.
-fn address(bus: &SessionBus) -> zbus::Result<Address> {
+// The session bus `ctx` names, as a D-Bus address.
+#[cfg_attr(
+    any(test, feature = "test-support"),
+    allow(
+        dead_code,
+        reason = "a build for tests reaches only the bus a test named"
+    )
+)]
+fn named(ctx: &Context) -> Result<Address, String> {
+    let bus = ctx
+        .session_bus()
+        .ok_or("neither DBUS_SESSION_BUS_ADDRESS nor XDG_RUNTIME_DIR is set")?;
     match bus {
         SessionBus::Address(given) => Address::try_from(given.as_str()),
-        SessionBus::Socket(path) => Ok(socket(path)),
+        SessionBus::Socket(path) => Ok(Address::from(Transport::Unix(Unix::new(
+            UnixSocket::File(path),
+        )))),
     }
-}
-
-fn socket(path: &Path) -> Address {
-    Address::from(Transport::Unix(Unix::new(UnixSocket::File(
-        path.to_path_buf(),
-    ))))
-}
-
-fn private(path: &Path) -> Result<Connection, String> {
-    let connection = Builder::address(socket(path))
-        .and_then(|builder| builder.p2p().method_timeout(ANSWER_WITHIN).build())
-        .map_err(|e| format!("{} did not answer: {e}", path.display()))?;
-    #[allow(
-        deprecated,
-        reason = "zbus 5.19's blocking `peer_creds` is an async fn; this is its blocking form"
-    )]
-    let peer = connection
-        .peer_credentials()
-        .map_err(|e| format!("{} would not say who answers it: {e}", path.display()))?;
-    // SAFETY: `geteuid` cannot fail and touches no memory of this process.
-    let me = unsafe { libc::geteuid() };
-    match peer.unix_user_id() {
-        Some(uid) if uid == 0 || uid == me => Ok(connection),
-        _ => Err(format!(
-            "{} is answered by another user's process",
-            path.display()
-        )),
-    }
+    .map_err(|e| format!("the session bus's address does not read: {e}"))
 }
 
 #[cfg(test)]
@@ -130,32 +115,6 @@ mod tests {
 
     fn read(pairs: &[(&str, &str)]) -> Context {
         Context::read(&Environment::on(Os::Linux, pairs.iter().copied()), "cli")
-    }
-
-    // As `bus_connect_transport_systemd` at v262: the session bus only without a runtime folder.
-    #[test]
-    fn the_user_manager_is_reached_as_systemctl_reaches_it() {
-        let address = "unix:path=/tmp/session-bus";
-        let both = read(&[
-            ("HOME", "/home/x"),
-            ("XDG_RUNTIME_DIR", "/run/user/1000"),
-            ("DBUS_SESSION_BUS_ADDRESS", address),
-        ]);
-        assert_eq!(
-            way(&both),
-            Some(Way::Private(PathBuf::from(
-                "/run/user/1000/systemd/private"
-            )))
-        );
-        let session = read(&[("HOME", "/home/x"), ("DBUS_SESSION_BUS_ADDRESS", address)]);
-        assert_eq!(
-            way(&session),
-            Some(Way::Session(SessionBus::Address(address.into())))
-        );
-        let neither = read(&[("HOME", "/home/x")]);
-        assert_eq!(way(&neither), None);
-        let refused = user_manager(&neither).expect_err("nowhere to ask");
-        assert!(refused.contains("XDG_RUNTIME_DIR"), "{refused}");
     }
 
     // Not the session a person runs the tests in, even where its variables name the test's bus.
@@ -176,11 +135,13 @@ mod tests {
             ("XDG_RUNTIME_DIR", &runtime),
             ("DBUS_SESSION_BUS_ADDRESS", given.address()),
         ]);
-        let refused = session(&desktop).expect_err("only a bus a test named");
-        assert!(
-            refused.contains("a test did not start and name"),
-            "{refused}"
-        );
+        for reach in [session, user_manager] {
+            let refused = reach(&desktop).expect_err("only a bus a test named");
+            assert!(
+                refused.contains("a test did not start and name"),
+                "{refused}"
+            );
+        }
 
         // SAFETY: `geteuid` cannot fail and touches no memory of this process.
         let uid = unsafe { libc::geteuid() };
