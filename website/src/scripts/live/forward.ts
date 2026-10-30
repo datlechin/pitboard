@@ -1,6 +1,7 @@
 // The page stands for one Mac or PC (plan question 3).
 // departs from the apps: Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure into view
 import { DOCS } from "../../data/site.ts";
+import type { System } from "../../lib/platform.ts";
 
 export type Shown = "accounts" | "settings";
 const elements: Record<Shown, string> = { accounts: "pb-accounts", settings: "pb-settings" };
@@ -10,7 +11,7 @@ interface Presents {
   present(sheet: string): void;
 }
 
-export function bringForward(window: Shown, system: "macos" | "windows", sheet?: string) {
+export function bringForward(window: Shown, system: System, sheet?: string) {
   // Windows' Settings is a page of the Pitboard window: the figure that draws it
   const figure =
     system === "windows" && window === "settings"

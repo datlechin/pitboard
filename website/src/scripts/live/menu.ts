@@ -1,12 +1,11 @@
 // A menu as NSMenu and WinUI's MenuFlyout run one, in WAI-ARIA's menu pattern, with each system's
 // keys (docs/facts/site.md).
-
 import { keyed, shown, text } from "./draw.ts";
 import type { State } from "../../lib/model.ts";
+import type { System } from "../../lib/platform.ts";
 import { listed, openSiteAs } from "../../lib/words.ts";
 import { sites } from "../../data/windows.ts";
 
-export type System = "macos" | "windows";
 export type How = "pointer" | "keyboard";
 export type Focus = "first" | "last" | "menu" | "keep";
 

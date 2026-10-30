@@ -19,7 +19,7 @@ import {
   type World,
 } from "../data/world.ts";
 import type { AutoStanding, Preferences, Skip, WarmStanding } from "./model.ts";
-import type { Platform } from "./platform.ts";
+import { fronts, type Front, type Platform } from "./platform.ts";
 
 // autoswitch.rs `SETTLING_SECONDS` and switch/mod.rs `ADOPTION_CEILING_SECONDS`, which the model's
 // rules count and these words say.
@@ -251,11 +251,30 @@ export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: n
   return first;
 }
 
-// The system an app runs on, whose words differ in case alone (present/words/mod.rs `titled`):
-// title case on macOS, sentence case on Windows.
-export type System = Extract<Platform, "macos" | "windows">;
-export const titled = (system: System, mac: string, win: string) =>
-  system === "windows" ? win : mac;
+// present/words/mod.rs `titled`: title case on macOS and in GNOME's header capitalisation,
+// sentence case on Windows.
+export const titled = (front: Front, title: string, sentence: string) =>
+  front === "windows" ? sentence : title;
+
+// present/words/mod.rs `settings`: Apple's Settings… in a menu, and GNOME's Preferences.
+export const settings = (front: Front, menuItem: boolean) =>
+  front === "gnome" ? "Preferences" : front === "macos" && menuItem ? "Settings…" : "Settings";
+
+// account_windows/mod.rs `this_machine`: one front on every Linux desktop, so no desktop's name.
+export const thisMachine = (front: Front) =>
+  ({ macos: "this Mac", windows: "this PC", gnome: "this computer" })[front];
+
+// present/words/setup.rs `where_it_lives` and `CLOSING_QUITS`: where no status item keeps
+// Pitboard running, as no stock GNOME has one, closing its window quits it.
+export const CLOSING_QUITS = "Pitboard quits once its window is closed.";
+export function whereItLives(front: Front, statusItem: boolean): string {
+  if (front === "windows")
+    return "Pitboard’s icon is in the notification area. Select ^ to find it.";
+  if (front === "macos") return "Pitboard lives in the menu bar.";
+  return statusItem
+    ? "Pitboard keeps running once its window is closed, and its icon stays with your other status icons."
+    : `${CLOSING_QUITS} Preferences can keep it watching your limits after that.`;
+}
 
 export const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
@@ -312,7 +331,7 @@ export const signInExpired = (a: Account, w: World) =>
 // present/accounts.rs `limits_said`, with `in_place_of_limits` before it: the line under an account
 // in the menu, "5-hour 59% used, Weekly 73%", the last limit it reached until that resets, or what
 // stands in their way.
-export function menuLine(a: Account, w: World, system: System = "macos"): string {
+export function menuLine(a: Account, w: World, front: Front = "macos"): string {
   if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
   if (a.limits.length === 0) return a.tool === "desktop" ? "No usage read" : a.email;
   // Rust's `max_by_key` keeps the last of the latest
@@ -326,13 +345,39 @@ export function menuLine(a: Account, w: World, system: System = "macos"): string
     return reached.resetsAt === null
       ? `${limitTitle(reached)} reached`
       : `${limitTitle(reached)} reached, resets ${clockAt(reached.resetsAt, w.now)}`;
-  return a.limits
-    .map((l, i) =>
+  return limitsLine(
+    front,
+    a.limits.map((l) => [limitShort(l), figure(l.percent)]),
+  );
+}
+
+// present/words/accounts.rs `limits_line`: "5-hour 42% used, Weekly 12%", in sentence case after
+// the first on Windows and GNOME, whose guidelines give it to text that runs on.
+export const limitsLine = (front: Front, limits: [name: string, figure: string][]) =>
+  limits
+    .map(([name, figure], i) =>
       i === 0
-        ? `${limitShort(l)} ${figure(l.percent)} used`
-        : `${system === "windows" ? uncapitalised(limitShort(l)) : limitShort(l)} ${figure(l.percent)}`,
+        ? `${name} ${figure} used`
+        : `${front === "macos" ? name : uncapitalised(name)} ${figure}`,
     )
     .join(", ");
+
+// present/words/accounts.rs `named_in_menu`: "work" on macOS, whose subtitle says the rest; "work
+// (42%)" on Windows and in a status item's menu on Linux, whose entries have no subtitle.
+export const namedInMenu = (front: Front, title: string, aside: string | null) =>
+  front !== "macos" && aside ? `${title} (${uncapitalised(aside)})` : title;
+
+// present/accounts.rs `item`'s menu title: an account's label, then the figure the menu bar would
+// show of it, or why it can't be switched to.
+export function menuTitle(a: Account, w: World, front: Front, switching = false): string {
+  const aside = switching
+    ? SWITCHING
+    : signInExpired(a, w)
+      ? SIGN_IN_EXPIRED
+      : a.limits.length > 0
+        ? `${fullest(a)}%`
+        : null;
+  return namedInMenu(front, a.label, aside);
 }
 
 // present/accounts.rs `limit_row`: one limit as a row of its account's bars, and as one sentence
@@ -404,15 +449,15 @@ export const accountSpoken = (a: Account, w: World) =>
     .join(", ");
 export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
-// The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
-// the line the menu shows under it, going on in lower case after its colon
-// (present/words/status_item.rs `bar_tip`).
-export const trayTip = (w: World) =>
+// A status item's tooltip, the Windows icon's and the Linux tray's: Pitboard, then each account in
+// use with its tool and the line the menu shows under it, going on in lower case after its colon
+// (present/words/status_item.rs `bar_tip`, from present/accounts.rs `summary`).
+export const barTip = (w: World, front: Front) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
-      return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, "windows"))}`;
+      return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, front))}`;
     }),
   ].join("\n");
 
@@ -424,24 +469,28 @@ export const shellTip = (tip: string) =>
     ? tip
     : tip.slice(0, /[\uD800-\uDBFF]/.test(tip[TIP_LENGTH - 1]) ? TIP_LENGTH - 1 : TIP_LENGTH);
 
-// A notification's words where each system says them in its own case.
-export type Said = Record<System, string>;
-const bothSaid = (mac: string, win: string): Said => ({ macos: mac, windows: win });
+// A notification's words as each front says them, worked out once for every front.
+export type Said = Record<Front, string>;
+export const eachFront = (words: (front: Front) => string) =>
+  Object.fromEntries(fronts.map((f) => [f, words(f)])) as Said;
 
 // present/words/notices.rs `limit_notification`: "5-Hour Limit Almost Reached", "Weekly limit
 // reached".
 export function limitNotification(limit: Limit, reached: boolean): Said {
   const headed = limitName(limit).split("-").map(capitalised).join("-");
   const title = `${headed} Limit${limit.scope ? ` (${limit.scope})` : ""}`;
-  return reached
-    ? bothSaid(`${title} Reached`, `${limitTitle(limit)} reached`)
-    : bothSaid(`${title} Almost Reached`, `${limitTitle(limit)} almost reached`);
+  return eachFront((front) =>
+    reached
+      ? titled(front, `${title} Reached`, `${limitTitle(limit)} reached`)
+      : titled(front, `${title} Almost Reached`, `${limitTitle(limit)} almost reached`),
+  );
 }
 
 // present/words/notices.rs `switch_button`: macOS draws the button its notification's category
-// registered, and a toast takes any.
-export const switchButton = (label: string): Said => bothSaid("Switch", `Switch to ${label}`);
-export const SWITCH_BACK = bothSaid("Switch Back", "Switch back");
+// registered, and a toast or a GNOME notification takes any.
+export const switchButton = (label: string) =>
+  eachFront((front) => (front === "macos" ? "Switch" : `Switch to ${label}`));
+export const SWITCH_BACK = eachFront((front) => titled(front, "Switch Back", "Switch back"));
 
 // present/words/notices.rs `has_used_share` and `other_used`: the at-limit notification's body.
 export const hasUsedShare = (label: string, used: string) => `${label} has used ${used}.`;

@@ -21,19 +21,23 @@ export const systemNames: Record<System, string> = {
   ...desktopNames,
 };
 
-// What words an app says, as crates/pitboard-model/src/front.rs names its fronts: one libadwaita
-// app on every Linux desktop.
-export type Front = "mac" | "windows" | "gnome";
-const fronts: Record<System, Front> = {
-  macos: "mac",
-  windows: "windows",
-  gnome: "gnome",
-  kde: "gnome",
-};
-export const frontOf = (system: System): Front => fronts[system];
+// What words an app says, by the system that says them, as crates/pitboard-model/src/front.rs
+// names its fronts: one libadwaita app, GNOME's, on every Linux desktop.
+export type Front = Extract<System, "macos" | "windows" | "gnome">;
+export const fronts: Front[] = ["macos", "windows", "gnome"];
+export const frontOf = (system: System): Front => (system === "kde" ? "gnome" : system);
 
 export const platformOf = (system: System): Platform =>
   system === "macos" || system === "windows" ? system : "linux";
+
+// The system a live drawing draws: its own, or for a drawing both desktops share the one shown.
+export function systemOf(el: Element): System {
+  const drawn = el.closest<HTMLElement>("[data-drawing]")?.dataset.drawing?.split(" ")[1];
+  if (drawn === "linux")
+    return el.ownerDocument.documentElement.dataset.desktop === "kde" ? "kde" : "gnome";
+  if (!systems.includes(drawn as System)) throw new Error(`no drawing names "${drawn}"`);
+  return drawn as System;
+}
 
 // The systems a prop names, in the site's order: `linux` stands for both desktops.
 export function systemsOf(on: readonly (Platform | Desktop)[]): System[] {

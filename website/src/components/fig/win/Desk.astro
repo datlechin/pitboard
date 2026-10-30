@@ -21,7 +21,7 @@ import {
   shortDate,
   statusLine,
   toolsOn,
-  trayTip,
+  barTip,
 } from "../../../lib/words.ts";
 
 interface Props {
@@ -55,7 +55,7 @@ const pointer = submenu
 const rowTip = updates ? "bottom-387" : "bottom-355";
 // a live tooltip sits where live/tooltip.ts puts it: centred over the pointer or its owner
 const tipAt = "absolute top-(--y) left-(--x) z-4 -mt-8 -translate-x-1/2 -translate-y-full";
-const shell = shellTip(trayTip(after)).split("\n");
+const shell = shellTip(barTip(after, "windows")).split("\n");
 const accounts = toolsOn("windows").flatMap(([tool]) =>
   after.accounts.filter((a) => a.tool === tool),
 );
@@ -89,7 +89,7 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
     <TrayItem
       on
       id={icon}
-      name={shellTip(trayTip(after))}
+      name={shellTip(barTip(after, "windows"))}
       level={menuBarLevel(after)}
       was={demo ? menuBarLevel(moments.before) : undefined}
       levels={live}

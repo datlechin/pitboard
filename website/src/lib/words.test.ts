@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  CLOSING_QUITS,
   accountSpoken,
   appSpan,
+  barTip,
   figure,
   hm,
   level,
@@ -11,9 +13,12 @@ import {
   limitName,
   limitNotification,
   limitRow,
+  limitsLine,
   menuBarClock,
   menuBarSpoken,
   menuLine,
+  menuTitle,
+  namedInMenu,
   rowLines,
   warmsAgainNote,
   paceColumn,
@@ -27,6 +32,7 @@ import {
   runsOutFirst,
   runsOutNote,
   sessionLifeColumn,
+  settings,
   shortDate,
   signInExpires,
   span,
@@ -34,8 +40,13 @@ import {
   staleNote,
   statusLine,
   statusLines,
+  switchButton,
+  SWITCH_BACK,
   switchSpoken,
+  thisMachine,
+  titled,
   toolsOn,
+  whereItLives,
   headsUp,
   whole,
 } from "./words.ts";
@@ -55,6 +66,8 @@ import {
 } from "../data/world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+// A Rust string literal as it reads once its line continuations are joined.
+const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 const core = (path: string) => repo(`crates/pitboard-core/src/${path}`);
 const provider = core("provider/mod.rs");
 
@@ -478,11 +491,120 @@ test("a notification is titled as present/words/notices.rs's a_notification_is_t
   ] as const) {
     const titled = limitNotification(limit, reached);
     assert.ok(body.includes(`pair("${titled.macos}", "${titled.windows}")`), titled.macos);
+    assert.equal(titled.gnome, titled.macos);
   }
   assert.deepEqual(limitNotification(at(WEEK), false), {
     macos: "Weekly Limit Almost Reached",
     windows: "Weekly limit almost reached",
+    gnome: "Weekly Limit Almost Reached",
   });
+});
+
+const wordsMod = repo("crates/pitboard-model/src/present/words/mod.rs");
+
+test("GNOME heads a title as a Mac does and calls Settings Preferences, as present/words/mod.rs says", () => {
+  assert.ok(wordsMod.includes("Front::MacMenuBar | Front::Gnome => title_case,"));
+  const body = rustTest(wordsMod, "each_front_cases_a_title_its_own_way");
+  assert.ok(body.includes('assert_eq!(check(Front::Gnome), "Check for Updates…");'));
+  assert.equal(titled("gnome", "Check for Updates…", "Check for updates"), "Check for Updates…");
+  assert.equal(titled("windows", "Check for Updates…", "Check for updates"), "Check for updates");
+  assert.ok(wordsMod.includes('Front::Gnome => "Preferences",'));
+  const said = [
+    settings("macos", true),
+    settings("macos", false),
+    settings("windows", true),
+    settings("gnome", true),
+    settings("gnome", false),
+  ];
+  assert.ok(body.includes(`[ ${said.map((s) => `"${s}"`).join(", ")} ]`), said.join());
+});
+
+test("a menu's limits and entries read as present/words/accounts.rs says for GNOME, in sentence case after the first", () => {
+  const body = rustTest(ffiWords, "an_account_is_said_in_these_words");
+  const limits: [string, string][] = [
+    ["5-hour", "42%"],
+    ["Weekly", "12%"],
+    ["Weekly (Fable)", "3%"],
+  ];
+  for (const [front, rust] of [
+    ["macos", "MacMenuBar"],
+    ["windows", "WindowsNotificationArea"],
+    ["gnome", "Gnome"],
+  ] as const)
+    assert.ok(
+      body.includes(`limits_line(Front::${rust}, &limits), "${limitsLine(front, limits)}"`),
+      front,
+    );
+  assert.ok(
+    body.includes(
+      `named_in_menu(Front::Gnome, "work", Some("64%")), "${namedInMenu("gnome", "work", "64%")}"`,
+    ),
+  );
+  assert.ok(body.includes(`named_in_menu(Front::Gnome, "spare", None), "spare"`));
+  assert.equal(namedInMenu("gnome", "spare", null), "spare");
+  assert.equal(namedInMenu("macos", "work", "64%"), "work");
+  assert.equal(namedInMenu("windows", "old", "Sign-in expired"), "old (sign-in expired)");
+  assert.equal(menuTitle(account("work"), moments.after, "gnome"), "work (40%)");
+  assert.equal(menuTitle(account("work"), moments.after, "macos"), "work");
+});
+
+test("GNOME's notification switches to an account by name, as present/words/notices.rs says", () => {
+  const body = rustTest(ffiWords, "gnome_notices_in_these_words");
+  assert.ok(body.includes('assert_eq!(switch_button(gnome, "personal"), "Switch to personal");'));
+  assert.ok(
+    ffiWords.includes("Front::WindowsNotificationArea | Front::Gnome => switch_to(label),"),
+  );
+  assert.deepEqual(switchButton("personal"), {
+    macos: "Switch",
+    windows: "Switch to personal",
+    gnome: "Switch to personal",
+  });
+  assert.ok(
+    body.includes(
+      'assert_eq!( limit_notification(gnome, "5-hour", None, false), "5-Hour Limit Almost Reached" );',
+    ),
+  );
+  const fiveHour = { percent: 95, resetsAt: null, lengthSeconds: 5 * HOUR };
+  assert.equal(limitNotification(fiveHour, false).gnome, "5-Hour Limit Almost Reached");
+  assert.equal(SWITCH_BACK.gnome, "Switch Back");
+});
+
+test("the tray's tooltip says each account in use as the menu's line goes on, as status_item.rs's bar_tip does", () => {
+  assert.ok(ffiWords.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'));
+  assert.ok(ffiAccounts.includes("words::limits_line(seen.front, &limits)"));
+  assert.equal(
+    barTip(moments.after, "gnome"),
+    "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): weekly 7% used",
+  );
+  assert.equal(barTip(moments.after, "gnome"), barTip(moments.after, "windows"));
+});
+
+test("GNOME's app calls the machine this computer, as account_windows/mod.rs says", () => {
+  const machine = repo("crates/pitboard-model/src/account_windows/mod.rs");
+  for (const [front, rust] of [
+    ["macos", "MacMenuBar"],
+    ["windows", "WindowsNotificationArea"],
+    ["gnome", "Gnome"],
+  ] as const)
+    assert.ok(machine.includes(`Front::${rust} => "${thisMachine(front)}",`), front);
+  assert.ok(ffiWords.includes('assert_eq!(checking(Front::Gnome), "Checking this computer…");'));
+});
+
+test("closing the window quits Pitboard where no status item keeps it, as present/words/setup.rs says", () => {
+  const setup = joined(repo("crates/pitboard-model/src/present/words/setup.rs"));
+  assert.ok(setup.includes(`pub(crate) const CLOSING_QUITS: &str = "${CLOSING_QUITS}";`));
+  assert.ok(setup.includes(`Front::Gnome if status_item => "${whereItLives("gnome", true)}"`));
+  assert.ok(
+    setup.includes(
+      'format!("{CLOSING_QUITS} Preferences can keep it watching your limits after that.")',
+    ),
+  );
+  assert.equal(
+    whereItLives("gnome", false),
+    "Pitboard quits once its window is closed. Preferences can keep it watching your limits after that.",
+  );
+  assert.ok(setup.includes(`"${whereItLives("windows", false)}".into()`));
+  assert.ok(setup.includes(`Front::MacMenuBar => "${whereItLives("macos", true)}".into(),`));
 });
 
 test("the menu bar item, a row and its button are spoken as present/words/ says them", () => {

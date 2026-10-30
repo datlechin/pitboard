@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   drawingsOf,
@@ -6,6 +7,7 @@ import {
   labelOf,
   onOf,
   platformOf,
+  systemOf,
   systems,
   systemsOf,
   wordsOf,
@@ -25,8 +27,32 @@ test("Linux stands for both its desktops, in the order the site names systems", 
 test("both desktops say the words of one front, GNOME's, as front.rs maps them", () => {
   assert.deepEqual(
     systems.map((s) => frontOf(s)),
-    ["mac", "windows", "gnome", "gnome"],
+    ["macos", "windows", "gnome", "gnome"],
   );
+  const front = readFileSync(
+    new URL("../../../crates/pitboard-model/src/front.rs", import.meta.url),
+    "utf8",
+  );
+  assert.ok(front.includes("/// The libadwaita app, on every Linux desktop.\n    Gnome,"));
+});
+
+// A drawing's element as live code finds it, on a page showing `desktop`.
+function inDrawing(drawing: string | null, desktop?: string) {
+  const own = drawing === null ? null : { dataset: { drawing } };
+  return {
+    closest: () => own,
+    ownerDocument: { documentElement: { dataset: { desktop } } },
+  } as unknown as Element;
+}
+
+test("a live drawing draws its own system, and one both desktops share the desktop shown", () => {
+  assert.equal(systemOf(inDrawing("app macos")), "macos");
+  assert.equal(systemOf(inDrawing("cli windows")), "windows");
+  assert.equal(systemOf(inDrawing("app kde", "gnome")), "kde");
+  assert.equal(systemOf(inDrawing("app linux")), "gnome");
+  assert.equal(systemOf(inDrawing("app linux", "kde")), "kde");
+  assert.throws(() => systemOf(inDrawing(null)));
+  assert.throws(() => systemOf(inDrawing("app beos")));
 });
 
 test("a page without JavaScript names the systems of each part above it", () => {

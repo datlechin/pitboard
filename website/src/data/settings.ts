@@ -5,6 +5,8 @@
 // MSI's install on Windows, whose command line is the one in the app's folder (reference/settings.mdx).
 // settings.test.ts finds each in its source.
 
+import type { Front } from "../lib/platform.ts";
+
 export type MenuBarShows = "nameAndUsage" | "usage" | "icon";
 
 export const macGeneral = {
@@ -60,11 +62,17 @@ export const isBeta = (version: string) => version.includes("-beta.");
 // AdvancedSettings.swift's and SettingsPage.xaml's switch, in each system's case
 export const renew = { macos: "Keep Saved Sign-Ins Fresh", windows: "Keep saved sign-ins fresh" };
 
-// present/words/machine.rs `renewal_about`, with Claude Desktop enrolled on macOS
-export const renewalAbout = (system: "macos" | "windows") =>
-  system === "macos"
-    ? "Your Mac refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t expire."
-    : "Your PC refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire.";
+// present/words/machine.rs `renewal_about`, its machine as each front names it, with Claude
+// Desktop enrolled on macOS, the one system it runs on
+const refreshes: Record<Front, string> = {
+  macos: "Your Mac",
+  windows: "Your PC",
+  gnome: "This computer",
+};
+export const renewalAbout = (front: Front) =>
+  front === "macos"
+    ? `${refreshes.macos} refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t expire.`
+    : `${refreshes[front]} refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire.`;
 
 // Windows' card for the command line a terminal finds, and macOS's heading and row for it
 export const inTerminal = "In your terminal";

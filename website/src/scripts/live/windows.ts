@@ -3,14 +3,13 @@
 import { cloned, text } from "./draw.ts";
 import { closeWindow, model, type State } from "../../lib/model.ts";
 import { siteOf } from "../../data/window.ts";
+import { systemOf, type System } from "../../lib/platform.ts";
 import type { Account } from "../../data/world.ts";
 
 // AccountWindow.xaml's own title until the window reads its account: run 40208954337 saw it 73 ms
 const XAML_TITLE_MS = 73;
 // how far down and right each window opens from the one before it, as AppKit cascades them
 const CASCADE = 22;
-
-type System = "macos" | "windows";
 
 // A template's clone, its `tpl-` ids made the desk's own.
 function made(system: System, name: string, desk: HTMLElement, key: string): HTMLElement {
@@ -113,7 +112,7 @@ function follow(s: State) {
   )) {
     const a = s.accounts.find((x) => x.id === w.dataset.account);
     if (!a || !s.windowsOpen.includes(a.id)) w.remove();
-    else titled(w, w.closest('[data-drawing="app windows"]') ? "windows" : "macos", a);
+    else titled(w, systemOf(w), a);
   }
 }
 

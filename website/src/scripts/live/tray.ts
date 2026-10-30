@@ -18,9 +18,9 @@ import {
   shellTip,
   shortDate,
   statusLine,
-  trayTip,
+  barTip,
+  menuTitle,
 } from "../../lib/words.ts";
-import { itemTitle } from "../../data/windows.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
 // WinUI's tooltip waits twice SPI_GETMOUSEHOVERTIME, 400 ms by default, for the pointer and for
@@ -162,7 +162,7 @@ class TrayDesk extends LiveFigure {
     if (!s.running) this.#menu.closeAll(false);
     text(this.querySelector("[data-time]"), hm(s.now));
     text(this.querySelector("[data-date]"), shortDate(s.now));
-    const tip = shellTip(trayTip(s));
+    const tip = shellTip(barTip(s, "windows"));
     attr(icon, "aria-label", tip);
     const level = menuBarLevel(s);
     for (const svg of icon.querySelectorAll("[data-level]"))
@@ -190,7 +190,7 @@ class TrayDesk extends LiveFigure {
   #said(s: State, a: Account) {
     const switching = s.switching?.id === a.id;
     return {
-      title: itemTitle(a, s, switching),
+      title: menuTitle(a, s, "windows", switching),
       tip: switching ? SWITCHING : menuLine(a, s, "windows"),
     };
   }

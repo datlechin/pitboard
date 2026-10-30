@@ -61,8 +61,8 @@ import {
   signInToAgain,
   siteOf,
   used,
-  type System,
 } from "../../data/window.ts";
+import { frontOf, systemOf, type System } from "../../lib/platform.ts";
 import { detail, limitCard, rowAction, signInSaid as windowsSignIn } from "../../data/windows.ts";
 import { winAdvanced } from "../../data/settings.ts";
 import type { Account, Tool } from "../../data/world.ts";
@@ -103,8 +103,7 @@ export class AccountsWindow extends LiveFigure {
 
   connectedCallback() {
     this.#off = new AbortController();
-    const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
-    this.system = drawing.endsWith("windows") ? "windows" : "macos";
+    this.system = systemOf(this);
     this.window = this.querySelector<HTMLElement>(':scope > [data-part="window"]')!;
     if (this.window.querySelector('[role="tablist"]'))
       this.#panes = new Panes({
@@ -674,7 +673,7 @@ export class AccountsWindow extends LiveFigure {
   #notices(s: State) {
     for (const box of this.querySelectorAll<HTMLElement>("[data-notice]")) {
       const tool = box.dataset.notice as Tool;
-      const n = noticeOf(s, tool, this.system);
+      const n = noticeOf(s, tool, frontOf(this.system));
       shown(box, !!n);
       if (!n) continue;
       text(part(box, "title"), n.title);
@@ -704,7 +703,7 @@ export class AccountsWindow extends LiveFigure {
     if (!box) return;
     const noticed =
       this.system === "windows" && !!this.querySelector("[data-notice]:not([hidden])");
-    const step = noticed ? null : setupStepOf(s, s.declinedSecond, this.system);
+    const step = noticed ? null : setupStepOf(s, s.declinedSecond, frontOf(this.system));
     this.#setupTool = step?.tool ?? null;
     shown(box, !!step);
     if (!step) return;
@@ -757,11 +756,11 @@ export class AccountsWindow extends LiveFigure {
     const again = signInExpired(a, s);
     shown(button, !on && !switching);
     // present/accounts.rs `action_of`: Sign In… where the row's sign-in has to be made again
-    text(button, again ? signInAsking(this.system) : SWITCH);
+    text(button, again ? signInAsking(frontOf(this.system)) : SWITCH);
     attr(
       button,
       "aria-label",
-      on ? null : again ? `${signInToAgain(this.system, a.label)}…` : switchSpoken(a),
+      on ? null : again ? `${signInToAgain(frontOf(this.system), a.label)}…` : switchSpoken(a),
     );
     attr(button, "disabled", s.switching && !switching ? "" : null);
     this.#limits(s, row, a);

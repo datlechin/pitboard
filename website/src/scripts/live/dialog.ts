@@ -1,11 +1,12 @@
 // A sheet, an alert or a ContentDialog as HTML's modal dialog (answer 15), placed and dimmed as
 // docs/facts/site.md reads each system's.
 // departs from the apps: A sheet, an alert or a ContentDialog blocks the whole page
+import type { System } from "../../lib/platform.ts";
 
 export type Cancelled = "key" | "button";
 
 export interface DialogOptions {
-  system: "macos" | "windows";
+  system: System;
   // the window it opens over, and that window's desk
   window: HTMLElement;
   desk: HTMLElement;

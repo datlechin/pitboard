@@ -39,10 +39,12 @@ import {
   sentence,
   shareOfLimit,
   switchButton,
+  titled,
+  eachFront,
   whole,
   type Said,
-  type System,
 } from "./words.ts";
+import type { System } from "./platform.ts";
 
 export { ADOPTION_CEILING_SECONDS, SETTLING_SECONDS };
 
@@ -479,14 +481,12 @@ function advise(s: State) {
 
 // present/words/notices.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did
 // not make by itself, and of its not judging one.
-const NOT_SWITCHED: Said = {
-  macos: "Automatic Switch Skipped",
-  windows: "Automatic switch skipped",
-};
-const NOT_SWITCHING: Said = {
-  macos: "Automatic Switching Paused",
-  windows: "Automatic switching paused",
-};
+const NOT_SWITCHED = eachFront((f) =>
+  titled(f, "Automatic Switch Skipped", "Automatic switch skipped"),
+);
+const NOT_SWITCHING = eachFront((f) =>
+  titled(f, "Automatic Switching Paused", "Automatic switching paused"),
+);
 
 // state.rs `look_to_switch` and its outcomes: what switching by itself came to, said under the
 // setting, and each reason not to said once until the next switch.
@@ -564,7 +564,7 @@ function lookToSwitch(s: State) {
       s.autoStanding = { came: "switched", from: was, to: to.label, used: shareOfLimit(limit) };
       post(s, {
         id: `auto/${was}/${to.label}/${s.now}`,
-        title: { macos: `Switched to ${to.label}`, windows: `Switched to ${to.label}` },
+        title: eachFront(() => `Switched to ${to.label}`),
         subtitle: toolName("claude"),
         body: `${was} has used ${shareOfLimit(limit)}. ${sentence(afterSwitch("claude", "Sessions"))}`,
         button: { title: SWITCH_BACK, tool: "claude", label: was },
@@ -1107,14 +1107,20 @@ export function reset() {
   rebase();
 }
 
-// How long each app took over a switch and a read in its UI tests on CI's runners
-// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after a row's
-// button on windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on
-// Windows and never seen dimmed on macOS.
+// How long each app took over a switch and a read (docs/facts/site.md): In Use 0.12 s after a click
+// on macOS, In use 0.19 to 0.37 s after a row's button on windows-2025 and 0.25 s on
+// windows-11-arm, in their UI tests on CI's runners; a tray entry's switch 1.06 s through KDE
+// Plasma in a Linux session, which GNOME's window takes too, measured on neither. Refresh was
+// disabled for 14 to 24 ms on Windows and never seen dimmed on macOS; Linux's read takes Windows'.
 export const TAKES_MS: Record<"switch" | "read", Record<System, number>> = {
-  switch: { macos: 120, windows: 250 },
-  read: { macos: 24, windows: 24 },
+  switch: { macos: 120, windows: 250, gnome: 1060, kde: 1060 },
+  read: { macos: 24, windows: 24, gnome: 24, kde: 24 },
 };
+
+// What each system's host gives the app beside its windows, as the app's model keeps it
+// (front.rs `Surfaces`): a status item in macOS's menu bar, Windows' notification area and KDE
+// Plasma's tray, and none on stock GNOME, where closing the window quits Pitboard.
+export const surfaces = (system: System) => ({ statusItem: system !== "gnome" });
 let token = 0;
 
 // The app's switch from a menu, the window's Switch or a notification's: the account reads

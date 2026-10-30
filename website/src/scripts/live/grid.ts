@@ -1,8 +1,9 @@
 // The account list as SwiftUI's List(selection:) and WinUI's ListView run it, in WAI-ARIA's grid
 // pattern with focus on the row (plan 3.3, 3.4 and section 6).
+import type { System } from "../../lib/platform.ts";
 
 export interface GridOptions {
-  system: "macos" | "windows";
+  system: System;
   grid: HTMLElement;
   rows: () => HTMLElement[];
   act: (row: HTMLElement) => void;
