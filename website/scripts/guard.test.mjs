@@ -240,17 +240,64 @@ const site = (body, ...versions) =>
     ],
   ]);
 
-test("compares the macOS and Linux downloads with the newest full release on /changelog", () => {
-  const linux = (v) => download(v, `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`);
+test("compares the macOS downloads with the newest full release on /changelog", () => {
+  const beta = "1.0.0-beta.1";
+  const cli = (v) => download(v, `pitboard-v${v}-aarch64-apple-darwin.tar.gz`);
   assert.deepEqual(
-    checkVersions(site(mac("0.15.0") + linux("0.15.0"), "1.0.0-beta.2", "1.0.0-beta.1", "0.15.0")),
+    checkVersions(site(mac("0.15.0") + cli("0.15.0"), "1.0.0-beta.2", beta, "0.15.0")),
     [],
   );
-  assert.equal(checkVersions(site(mac("0.15.0"), "1.0.0-beta.1", "0.14.0")).length, 1);
+  assert.equal(checkVersions(site(mac("0.15.0"), beta, "0.14.0")).length, 1);
   assert.equal(checkVersions(site(mac("0.15.0"), "0.16.0", "0.15.0")).length, 1);
   assert.match(
-    checkVersions(site(mac("0.15.0") + linux("1.0.0-beta.1"), "1.0.0-beta.1", "0.15.0")).join(),
-    /macOS and Linux downloads name 2 versions/,
+    checkVersions(site(mac(beta, "Download for Mac (beta)"), beta, "0.15.0")).join(),
+    /\/changelog starts at 0\.15\.0, the macOS downloads at 1\.0\.0-beta\.1/,
+  );
+  assert.match(
+    checkVersions(site(mac("0.15.0") + cli(beta), beta, "0.15.0")).join(),
+    /macOS downloads name 2 versions: 0\.15\.0, 1\.0\.0-beta\.1/,
+  );
+});
+
+test("takes the Linux downloads from that release, or from a beta /changelog shows above it", () => {
+  const beta = "1.0.0-beta.1";
+  const linux = (v) =>
+    [
+      `pitboard-app-v${v}-amd64.deb`,
+      `pitboard-app-v${v}-amd64.deb.cdx.json`,
+      `pitboard-app-v${v}-aarch64.rpm`,
+      `pitboard-plasma-widget-v${v}-all.deb`,
+      `pitboard-plasma-widget-v${v}-noarch.rpm`,
+      `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
+      `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz.cdx.json`,
+      `pitboard-v${v}-arm64.deb`,
+      `pitboard-archive-keyring-v${v}-all.deb`,
+      "install.sh",
+      "SHA256SUMS",
+    ]
+      .map((file) => download(v, file))
+      .join("");
+  const macos = mac("0.15.0") + download("0.15.0", "install.sh") + download("0.15.0", "SHA256SUMS");
+  assert.deepEqual(checkVersions(site(macos + linux(beta), beta, "0.15.0")), []);
+  assert.deepEqual(
+    checkVersions(
+      site(macos + linux(beta) + msi(beta, "Download for Windows (beta)"), beta, "0.15.0"),
+    ),
+    [],
+  );
+  assert.deepEqual(checkVersions(site(mac("1.0.0") + linux("1.0.0"), "1.1.0-beta.1", "1.0.0")), []);
+  const why = (body, ...versions) => checkVersions(site(body, ...versions)).join("\n");
+  assert.match(
+    why(macos + linux(beta), "0.15.0"),
+    /Linux downloads name 1\.0\.0-beta\.1, neither 0\.15\.0 nor a beta \/changelog shows above it/,
+  );
+  assert.match(
+    why(macos + linux(beta) + linux("1.0.0-beta.2"), "1.0.0-beta.2", beta, "0.15.0"),
+    /Linux downloads name 2 versions: 1\.0\.0-beta\.1, 1\.0\.0-beta\.2/,
+  );
+  assert.match(
+    why(macos + linux(beta) + download("0.14.0", "install.sh"), beta, "0.15.0"),
+    /install\.sh links name 0\.14\.0, which no other download names/,
   );
 });
 
