@@ -5,10 +5,10 @@
 //! keeps in the window's own action muxer and exports nowhere. It is an `AdwWindow`, since
 //! GtkApplication exports an application window's own action group on the bus
 //! (docs/facts/linux-app.md, What the app exports), so no other process reaches what the window
-//! does. Its keys are bound on its class too ([`keys`]). Closing it hides it while a tray keeps
-//! Pitboard running, and where none does closes it, which ends Pitboard once nothing else holds
-//! the app. It keeps its size in the app's data
-//! folder, and tells the model it was looked at each time it maps. Its dialogs are
+//! does. Its keys are bound on its class too ([`keys`]). Closing it, from the compositor or
+//! Ctrl+W, closes its dialogs first, then hides it while a tray keeps Pitboard running, and where
+//! none does closes it, which ends Pitboard once nothing else holds the app. It keeps its size in
+//! the app's data folder, and tells the model it was looked at each time it maps. Its dialogs are
 //! [`crate::dialogs`]'s, and a link dropped on it is handed to the model, which says what Open
 //! Link shows of it.
 //!
@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use gtk::glib::translate::IntoGlib;
 use gtk::{gio, glib};
 use pitboard_model::{Front, Intent, LocalTime, Part, Place, RemovalShown, WindowRequest};
 use serde::{Deserialize, Serialize};
@@ -174,7 +175,12 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for Window {}
+    impl ObjectImpl for Window {
+        fn constructed(&self) {
+            self.parent_constructed();
+            self.obj().take_close_requests();
+        }
+    }
 
     impl WidgetImpl for Window {
         fn map(&self) {
@@ -187,6 +193,7 @@ mod imp {
         // Closed, it lets go of the app, which ends where nothing else holds it.
         fn close_request(&self) -> glib::Propagation {
             let window = self.obj();
+            window.close_dialogs();
             window.keep_size();
             if window.host().keeps_running() {
                 window.set_visible(false);
@@ -389,6 +396,40 @@ impl Window {
         }
         self.present();
     }
+
+    // libadwaita's dialog host answers close-request first, closing the top dialog and ending the
+    // request, which kept the window up through a logout (docs/facts/linux-app.md, The dialogs).
+    fn take_close_requests(&self) {
+        let Some(host) = self.child() else {
+            return;
+        };
+        let request = glib::subclass::SignalId::lookup("close-request", gtk::Window::static_type())
+            .expect("GtkWindow's signal");
+        // SAFETY: the window and its child live through the call, which blocks handlers and runs
+        // none.
+        unsafe {
+            glib::gobject_ffi::g_signal_handlers_block_matched(
+                self.upcast_ref::<glib::Object>().as_ptr(),
+                glib::gobject_ffi::G_SIGNAL_MATCH_ID | glib::gobject_ffi::G_SIGNAL_MATCH_DATA,
+                request.into_glib(),
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                host.as_ptr().cast(),
+            );
+        }
+    }
+
+    // Top first, as Escape closes each: one that stays, as a sign-in under way does, keeps those
+    // under it.
+    fn close_dialogs(&self) {
+        while let Some(dialog) = self.visible_dialog() {
+            dialog.close();
+            if self.visible_dialog().as_ref() == Some(&dialog) {
+                break;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -477,6 +518,33 @@ mod tests {
         window.keep_size();
         assert!(folder.join(SIZE).is_file());
         window.destroy();
+    }
+
+    // Ctrl+W is `window.close`, which asks as the compositor's close does.
+    #[gtk::test]
+    fn without_a_tray_ctrl_w_with_a_dialog_up_closes_the_dialog_then_the_window() {
+        adw::init().unwrap();
+        crate::resources::register();
+        let scratch = tempfile::tempdir().unwrap();
+        let host = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let window = Window::new(None, &Shown::new(crate::testing::snapshot(1)), host);
+        window.present();
+        window
+            .activate_action("pitboard.preferences", None)
+            .unwrap();
+        let preferences = window.visible_dialog().expect("Preferences");
+        let closed = Rc::new(Cell::new(false));
+        let told = closed.clone();
+        preferences.connect_closed(move |_| told.set(true));
+
+        window.activate_action("window.close", None).unwrap();
+
+        assert!(closed.get(), "Preferences up");
+        let window: gtk::Widget = window.upcast();
+        assert!(
+            !gtk::Window::list_toplevels().contains(&window),
+            "the window up"
+        );
     }
 
     fn descendants<T: IsA<gtk::Widget>>(widget: &gtk::Widget) -> Vec<T> {

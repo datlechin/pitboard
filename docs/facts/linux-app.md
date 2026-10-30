@@ -308,6 +308,34 @@ Measured on a bus of the test's own: `PrepareForSleep(true)` from the owner of
 `org.freedesktop.login1` tells nothing and `(false)` tells one wake, and a `(false)` from a
 connection that owns no such name tells nothing (`tests/logind.rs`).
 
+## Logging out
+
+Measured on 30 October 2026 on the Linux session machine: Fedora 44 with KDE Plasma and KWin
+6.7.5 under Wayland, GTK 4.22.5 and libadwaita 1.9.4, the session bundle's app at
+`release-1.0.0-beta.8` (`db03f566`), kept running by Plasma's tray, whose watcher kded6 owns.
+`org.kde.Shutdown.logout` reached the login screen within 14 seconds with only the status item,
+and with the window shown. With Preferences up over the window, Plasma said "The following
+applications did not close: • Pitboard. Logging out anyway in 2 minutes." after 20 seconds,
+Preferences closed and the window still shown. In an earlier run, Alt+F4 on that window ended the
+app and the logout went on at once. [The dialogs](#the-dialogs) has why the window stayed.
+
+- plasma-shutdown has ksmserver close the session, then KWin the Wayland windows
+  (`startkde/plasma-shutdown/shutdown.cpp:40-117` at plasma-workspace v6.7.5). KWin sends each
+  toplevel one `close` and waits for each to be destroyed or unmapped, posts that notice after 10
+  seconds and logs out anyway after 2 minutes (`src/sm.cpp:367-447`,
+  `src/xdgshellwindow.cpp:45-60,305-312` at kwin v6.7.5). So a window that hides counts as
+  closed.
+- GTK 4.22 ignores `register-session` and watches the session through the Inhibit portal
+  wherever the portal has it (`gtk/gtkapplication.c:740-753`, `gtk/gtkapplication-dbus.c:328-372`
+  at 4.22.5). It emits `query-end` as the portal's `StateChanged` says 2, and quits the app at 3
+  (`:136-151`).
+- xdg-desktop-portal-kde 6.7.5 makes the monitor, but says 2 and 3 only when something calls
+  `queryCanEndSession` or `endSession` at its `/org/kde/SessionState`
+  (`src/inhibit.cpp:46-74,192-271` at v6.7.5). Nothing in plasma-workspace v6.7.5 or kwin v6.7.5
+  calls them, nor plasma-shutdown's `shutdown.cpp` on plasma-workspace's master of 30 October
+  2026. So on Plasma 6.7 the app hears a logout only as KWin's close, and nothing in it rests on
+  `query-end`.
+
 ## Links
 
 `src/platform/links.rs` hands the model what arrives, as text.
@@ -794,6 +822,22 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
   answers as its Cancel where the model says Escape is that, and Name, Rename and Clean Up as
   their Cancel (`escape_while_signing_in_cancels_it`,
   `rename_asks_in_a_dialog_whose_header_holds_its_buttons_and_escape_is_cancel`).
+- A request to close a window is its `close-request`: the compositor's close comes as
+  `GDK_DELETE` (`gtk/gtkmain.c:1730-1738` at GTK 4.22.5), and Ctrl+W's `window.close` through
+  `gtk_window_close` (`gtk/gtkwindow.c:1468-1484`). The class's handler, the window's
+  `close_request`, runs after those connected, and the first to return true ends the request
+  (`gtk/gtkwindow.c:1284-1292`, `gtk/gtkprivate.c:130-143`).
+- An `AdwWindow` makes its dialog host its child as it is made, and the host connects to its
+  root's `close-request` as it is rooted (`src/adw-window.c:330-331`,
+  `src/adw-dialog-host.c:266-278` at libadwaita 1.9.4, and at 1.7.0). With a dialog up, that
+  handler closes the top one and returns true (`src/adw-dialog-host.c:199-211`), so the window's
+  `close_request` never ran and the window stayed up ([Logging out](#logging-out)). The window
+  blocks the handler whose data is its child, and `close_request` closes its dialogs top first
+  as Escape does, then hides or closes the window
+  (`with_one_closing_with_a_dialog_up_closes_the_dialog_and_hides_the_window`,
+  `without_a_tray_ctrl_w_with_a_dialog_up_closes_the_dialog_then_the_window`). A dialog that
+  stays, as a sign-in under way does, stays in the window. Escape is the sheet's and never asks
+  the window, so it still closes only the dialog.
 - `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
   `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
   same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its
