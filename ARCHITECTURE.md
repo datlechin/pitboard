@@ -709,7 +709,8 @@ keeps it is in the header of the module named.
   - GNOME's search provider's `ActivateResult` and `LaunchSearch`, and KRunner's `Run`, which
     take only a result the search they end gave and make its switch a switch from outside, or
     open the window (`an_id_never_given_activates_nothing`, `activating_a_result_tells_its_id`,
-    `run_tells_the_id_after_its_token`, `launching_a_search_opens_the_window`);
+    `run_tells_the_id_after_its_token`, `launching_a_search_opens_the_window`,
+    `a_run_after_teardown_tells_the_id_with_the_token_set_after_it`);
   - the status item's `Activate`, which opens the window, and its DBusMenu's `Event`,
     `EventGroup` and `AboutToShow`, which take only an entry the menu shows
     (`activate_hands_over_the_token_the_host_provided`, `a_clicked_entry_is_told_once_by_its_id`,

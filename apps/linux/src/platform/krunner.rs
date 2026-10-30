@@ -3,10 +3,11 @@
 //! prefixes, and asks only those (docs/facts/linux-app.md, Search and KRunner). A query's words
 //! are the terms the app answers results for, as GNOME Shell's are.
 //!
-//! A run is told only of a match given since the session began, with the activation token
-//! KRunner set just before it.
+//! A run is told only of a match given in its session, with the activation token KRunner set
+//! just before it. KRunner tears a session down before it runs one of its matches, so the next
+//! session begins with the first match after `Teardown`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
@@ -47,6 +48,7 @@ struct Running {
     // each match given since the session began
     given: RefCell<HashSet<String>>,
     token: RefCell<Option<String>>,
+    torn_down: Cell<bool>,
 }
 
 impl Runner {
@@ -63,6 +65,7 @@ impl Runner {
             told: Box::new(told),
             given: RefCell::default(),
             token: RefCell::default(),
+            torn_down: Cell::default(),
         });
         let registration = connection
             .register_object(&path(app), &resources::interface(INTERFACE))
@@ -98,6 +101,10 @@ impl Running {
     fn answer(&self, call: Call, invocation: gio::DBusMethodInvocation) {
         match call {
             Call::Match { query } => {
+                if self.torn_down.take() {
+                    self.given.borrow_mut().clear();
+                    self.token.take();
+                }
                 let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
                 let found = (self.results)(&terms);
                 let count = found.len();
@@ -128,8 +135,7 @@ impl Running {
                 invocation.return_value(Some(&(config,).to_variant()));
             }
             Call::Teardown => {
-                self.given.borrow_mut().clear();
-                self.token.take();
+                self.torn_down.set(true);
                 invocation.return_value(None);
             }
             Call::SetActivationToken { token } => {

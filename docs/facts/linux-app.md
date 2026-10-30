@@ -423,7 +423,10 @@ under its object path, with the results the app gives for a search's terms. Read
   (`src/dbusrunner.cpp:269-287`). Ubuntu 26.04 ships KRunner 6.24.0 and Fedora 44 6.25.0
   (Launchpad, Fedora's mdapi).
 - KRunner hands a match's id back to `Run` with an empty action for its default, and calls
-  `Teardown` as a session that matched ends (6.17.0 `src/dbusrunner.cpp:84-93,270-290`). With
+  `Teardown` as a session that matched ends (6.17.0 `src/dbusrunner.cpp:84-93,270-290`). The run
+  comes after that `Teardown`: in the Linux session of 30 October 2026, on Fedora 44 with Plasma
+  6.7.5 and kf6-krunner 6.31.0, `dbus-monitor` showed KRunner call `Match` once per keystroke,
+  then `Teardown`, `SetActivationToken` and `Run` for the match chosen with Enter. With
   `X-Plasma-API=DBus`, the runner's, it calls no `Config` (`:33,106-113`). A match's fourth
   field is its category's relevance, which orders the categories, and its fifth orders the
   matches within one, from 0 to 1 (`src/querymatch.h:63-136`). Plasma 6.3.6's applications
@@ -436,8 +439,10 @@ first in Debian 13's against a provider and a runner that served nothing: a stan
 gets the ids of the results the app gives for its terms, a subsearch's among those it narrows alone,
 metas whose icon `g_icon_deserialize` makes a themed icon of that name, an activation of a result
 given and a launched search told, and nothing told for an id the search did not give; a stand-in
-KRunner gets the same results as matches at Moderate, the first at 1 and the next at 0.5, and a run
-told with the token set before it, and none after `Teardown` (`tests/presence`).
+KRunner gets the same results as matches at Moderate, the first at 1 and the next at 0.5, a run told
+with the token set before it, after `Teardown` too, and none for an id given before `Teardown` and
+the `Match` after it (`tests/presence`). The run after `Teardown` failed first, in Debian 13's and
+Fedora 44's images, against a runner that forgot its ids at `Teardown` (CI run 41050519070).
 
 ## The Plasma widget
 
