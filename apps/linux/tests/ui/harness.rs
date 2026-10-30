@@ -33,13 +33,14 @@ pub(crate) const HOMES: [&str; 9] = [
 
 // What headless.sh gives the tests, which a launch passes on: the display, its private bus, and
 // the settings and renderer the script names. Nothing else of the test's environment.
-const PASSED: [&str; 8] = [
+const PASSED: [&str; 9] = [
     "PATH",
     "LANG",
     "XDG_RUNTIME_DIR",
     "WAYLAND_DISPLAY",
     "DBUS_SESSION_BUS_ADDRESS",
     "GSETTINGS_BACKEND",
+    "ADW_DISABLE_PORTAL",
     "GDK_BACKEND",
     "GSK_RENDERER",
 ];

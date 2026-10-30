@@ -32,10 +32,12 @@ for name in $(env | awk -F= '/^(CARGO|RUSTUP|NEXTEST|__CARGO)_[A-Za-z0-9_]*=/ { 
   fi
 done
 
-# GSK_RENDERER: docs/facts/linux-app.md, The headless display.
+# GSK_RENDERER: docs/facts/linux-app.md, The headless display. ADW_DISABLE_PORTAL: libadwaita
+# reads the colour scheme and accent from the GSettings in memory, as a desktop's portal would
+# serve them, and not from whatever portal the private bus starts.
 env -i PATH="$PATH" LANG=C.UTF-8 \
   HOME="$root/home" XDG_CONFIG_HOME="$root/config" XDG_DATA_HOME="$root/data" \
   XDG_CACHE_HOME="$root/cache" XDG_STATE_HOME="$root/state" XDG_RUNTIME_DIR="$root/runtime" \
   TMPDIR="$root/tmp" PITBOARD_HOME="$root/pitboard" CLAUDE_CONFIG_DIR="$root/claude" \
-  CODEX_HOME="$root/codex" GSETTINGS_BACKEND=memory GDK_BACKEND=wayland GSK_RENDERER=opengl \
-  "$@"
+  CODEX_HOME="$root/codex" GSETTINGS_BACKEND=memory ADW_DISABLE_PORTAL=1 GDK_BACKEND=wayland \
+  GSK_RENDERER=opengl "$@"

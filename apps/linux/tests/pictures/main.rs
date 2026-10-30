@@ -1,11 +1,11 @@
 //! Each surface drawn in-process, as GTK's own reftests draw theirs: the window's paintable,
 //! rendered by the window's own renderer into a texture and saved as PNG, light and then dark,
 //! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads. Each is
-//! drawn over a fixture's model, with every clock time said as one fixed time and animations
-//! off, so a picture is the same from one run to the next, which each holds
-//! (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up over,
-//! as the model shows it once it has taken what the picture sends it. A header bar's title cut
-//! short fails its picture.
+//! drawn with GNOME's default settings over a fixture's model, with every clock time said as one
+//! fixed time and animations off, so a picture is the same from one run to the next, which each
+//! holds (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up
+//! over, as the model shows it once it has taken what the picture sends it. A header bar's title
+//! cut short fails its picture.
 #![cfg(target_os = "linux")]
 
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
-use gtk::glib;
+use gtk::{gdk, gio, glib};
 use pitboard_linux::data_folder::DataFolder;
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::stand_in;
@@ -29,6 +29,13 @@ use pitboard_model::{
 const PATIENCE: Duration = Duration::from_secs(30);
 
 const SCALE: f32 = 2.0;
+
+// GNOME's defaults, gsettings-desktop-schemas' `font-name`, `button-layout` and `accent-color`,
+// and the colour libadwaita draws that accent in.
+const FONT: &str = "Adwaita Sans 11";
+const DECORATION_LAYOUT: &str = "appmenu:close";
+const ACCENT: &str = "blue";
+const ACCENT_RGBA: &str = "#3584e4";
 
 struct Told(Mutex<mpsc::Sender<Snapshot>>);
 
@@ -200,7 +207,7 @@ fn cut_short(widget: &gtk::Widget, in_header: bool) -> Vec<String> {
 // The app's style sheet and icons, which AdwApplication and GtkApplication take from the
 // resource as the app starts, and which a window drawn here has no application to take.
 fn styled() {
-    let display = gtk::gdk::Display::default().expect("headless.sh's display");
+    let display = gdk::Display::default().expect("headless.sh's display");
     let css = gtk::CssProvider::new();
     css.load_from_resource(&format!("{}/style.css", pitboard_linux::resources::BASE));
     gtk::style_context_add_provider_for_display(
@@ -210,6 +217,48 @@ fn styled() {
     );
     gtk::IconTheme::for_display(&display)
         .add_resource_path(&format!("{}/icons", pitboard_linux::resources::BASE));
+}
+
+// GTK and libadwaita started with GNOME's defaults, which no portal gives them under headless.sh.
+// GTK 4.22 on Wayland then reads settings.ini alone, and libadwaita, under ADW_DISABLE_PORTAL,
+// the accent from GSettings. Else they draw `Sans 10`, three window buttons and Ubuntu's orange.
+fn started_like_gnome() {
+    let backend = gio::SettingsBackend::default();
+    assert_eq!(
+        backend.type_().name(),
+        "GMemorySettingsBackend",
+        "the pictures change GSettings only in memory, as headless.sh keeps them"
+    );
+    let interface = gio::SettingsSchemaSource::default()
+        .and_then(|schemas| schemas.lookup("org.gnome.desktop.interface", true))
+        .expect("gsettings-desktop-schemas' org.gnome.desktop.interface");
+    gio::Settings::new_full(&interface, Some(&backend), None)
+        .set_string("accent-color", ACCENT)
+        .unwrap();
+    let ini = glib::user_config_dir().join("gtk-4.0").join("settings.ini");
+    let wanted =
+        format!("[Settings]\ngtk-font-name={FONT}\ngtk-decoration-layout={DECORATION_LAYOUT}\n");
+    match std::fs::read_to_string(&ini) {
+        // An earlier picture's, in the same config home.
+        Ok(found) => assert_eq!(found, wanted, "{} is not the pictures'", ini.display()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir_all(ini.parent().unwrap()).unwrap();
+            std::fs::write(&ini, wanted).unwrap();
+        }
+        Err(error) => panic!("{}: {error}", ini.display()),
+    }
+    adw::init().unwrap();
+    let settings = gtk::Settings::default().unwrap();
+    assert_eq!(settings.gtk_font_name().as_deref(), Some(FONT));
+    assert_eq!(
+        settings.gtk_decoration_layout().as_deref(),
+        Some(DECORATION_LAYOUT)
+    );
+    assert_eq!(
+        adw::StyleManager::default().accent_color_rgba(),
+        gdk::RGBA::parse(ACCENT_RGBA).unwrap(),
+        "libadwaita's accent, read from GSettings under ADW_DISABLE_PORTAL=1"
+    );
 }
 
 // What a step of a picture sends the model, and what the model shows once it has taken it.
@@ -227,7 +276,7 @@ fn picture(
     then: impl Fn(&Window),
     dialog: bool,
 ) {
-    adw::init().unwrap();
+    started_like_gnome();
     pitboard_linux::resources::register();
     styled();
     let settings = gtk::Settings::default().unwrap();
