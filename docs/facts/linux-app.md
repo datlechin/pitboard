@@ -852,6 +852,17 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
   `without_a_tray_ctrl_w_with_a_dialog_up_closes_the_dialog_then_the_window`). A dialog that
   stays, as a sign-in under way does, stays in the window. Escape is the sheet's and never asks
   the window, so it still closes only the dialog.
+- An `AdwDialog` measures its content's height once, as it is rooted, and keeps it:
+  `adw_dialog_root` calls `set_content_size` (`src/adw-dialog.c:815` at 1.7.0, `:806` at
+  1.9.4), which makes it the natural height of the dialog's breakpoint bin
+  (`src/adw-breakpoint-bin.c:366`, `:387`). What a dialog shows once it is up goes under the
+  fold of its scrolled content. On Debian 13 on 30 October 2026 the sign-in dialog showed its
+  form and none of the refused enrol under it
+  ([The Linux session machines](linux-session.md#sign-in-and-the-secret-service)).
+  `follows-content-size` would drop `content-width` too (`update_natural_size`), so each dialog
+  that follows the model sets `content-height` to -1 once it has shown what changed, which
+  measures it again (`a_failure_said_after_a_sign_in_is_in_sight`,
+  `a_failure_stays_in_the_dialog`).
 - `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
   `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
   same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its

@@ -141,6 +141,7 @@ impl Welcome {
         imp.done.set_sensitive(welcome.done.enabled);
         imp.shown.replace(Some(welcome.clone()));
         imp.drawing.set(false);
+        super::fit_height(self.upcast_ref());
     }
 
     // A row a tool, made again as the tools change: its name, the account it has, and its step.
@@ -219,5 +220,6 @@ impl Welcome {
             imp.start_at_sign_in.set_active(start.is_on());
             imp.drawing.set(false);
         }
+        super::fit_height(self.upcast_ref());
     }
 }
