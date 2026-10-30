@@ -54,6 +54,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The app no longer says an account's numbers were read without asking Anthropic or OpenAI just
+  after it asked, as it did after a cancelled switch, or once another Pitboard recorded a change
+  that left the account as it was.
 - Where Codex has an account of the same name, the app keeps what a switch to a Claude Code
   account said once you sign in to that account again or rename it, where it put the notice away.
 - On Linux, daily renewal runs once each calendar day and catches up after the computer slept or

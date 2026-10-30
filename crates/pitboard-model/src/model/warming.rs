@@ -4,7 +4,7 @@
 //! is due, and what a warm-up runs, are the core's own and have their own tests.
 
 use super::state::{Answer, Job};
-use super::testing::machine::{Hand, Stub};
+use super::testing::machine::{Hand, Stub, offline_read};
 use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Doing, Intent, Notice};
@@ -511,4 +511,114 @@ fn a_halt_is_said_under_the_setting() {
         model.shown().machine.warm.standing,
         Some(words::warming_halted(&Halt::ProgramMissing))
     );
+}
+
+// As personal's row and the settings beside its toggle say `standing`, at 10:00.
+fn said(standing: &Standing) -> String {
+    let at = |_| "10:00".to_owned();
+    words::typeset(&pitboard_core::words::capitalised(&words::warm_standing(
+        standing, &at,
+    )))
+}
+
+// What personal's row says of its warm-up, and the settings beside its toggle.
+fn said_of_personal(model: &Hand) -> (Option<String>, Option<String>) {
+    let shown = model.shown();
+    let row = (shown.sections.iter())
+        .flat_map(|section| &section.accounts)
+        .find(|item| item.title == "personal")
+        .and_then(|item| item.detail.warm.as_ref())
+        .map(|warm| warm.said.clone());
+    let settings = (shown.machine.warm.accounts.iter())
+        .find(|choice| choice.title == "personal")
+        .and_then(|choice| choice.standing.clone());
+    (row, settings)
+}
+
+/// The core counts a warm-up's attempt before its run, so until the run is over its files say
+/// the account waits after one that didn't start. A read that landed meanwhile said so on the
+/// row and in the settings while the warm-up was still under way.
+#[test]
+fn a_read_during_a_warm_up_says_nothing_of_its_attempt() {
+    let mut machine = reading(overview(true, Standing::Due));
+    machine.warming = Ok(WarmUp::Started {
+        account: "personal".into(),
+        until: Some(UNTIL),
+    });
+    let mut model = Hand::new();
+    model.send(Intent::Start);
+    model.run_but(&mut machine, warm_up);
+    let under_way = (
+        Some(words::WARMING_UP.to_owned()),
+        Some(said(&Standing::Due)),
+    );
+    assert_eq!(said_of_personal(&model), under_way);
+
+    machine.warm = Some(overview(true, Standing::Waiting { until: UNTIL }));
+    machine.readings += 1;
+    let before = model.count(offline_read);
+    model.look();
+    model.run_but(&mut machine, warm_up);
+    assert_eq!(model.count(offline_read), before + 1);
+    assert_eq!(said_of_personal(&model), under_way);
+
+    let running = Standing::Running {
+        until: UNTIL,
+        next: Some(UNTIL),
+    };
+    machine.warm = Some(overview(true, running.clone()));
+    model.run(&mut machine);
+    assert_eq!(
+        said_of_personal(&model),
+        (Some(said(&running)), Some(said(&running)))
+    );
+}
+
+/// What a read found while a warm-up ran is shown once it is over, so one that came to nothing
+/// says when the next is tried.
+#[test]
+fn a_read_during_a_warm_up_that_came_to_nothing_is_shown_once_it_is_over() {
+    let mut machine = reading(overview(true, Standing::Due));
+    machine.warming = Err(came_to_nothing());
+    let mut model = Hand::new();
+    model.send(Intent::Start);
+    model.run_but(&mut machine, warm_up);
+    let waiting = Standing::Waiting { until: UNTIL };
+    machine.warm = Some(overview(true, waiting.clone()));
+    machine.readings += 1;
+    model.look();
+    model.run_but(&mut machine, warm_up);
+    model.run(&mut machine);
+    assert_eq!(machine.warmed, [None]);
+    assert_eq!(
+        said_of_personal(&model),
+        (Some(said(&waiting)), Some(said(&waiting)))
+    );
+}
+
+/// An account turned off while a warm-up runs stays off once it is over, whatever a read
+/// found before the change.
+#[test]
+fn an_account_turned_off_during_a_warm_up_stays_off() {
+    let mut machine = reading(overview(true, Standing::Due));
+    machine.warming = Err(came_to_nothing());
+    let mut model = Hand::new();
+    model.send(Intent::Start);
+    model.run_but(&mut machine, warm_up);
+    machine.readings += 1;
+    model.look();
+    model.run_but(&mut machine, warm_up);
+    model.send(Intent::SetWarm {
+        account: AccountKey::new(Tool::Claude, "personal"),
+        on: false,
+    });
+    model.run_but(&mut machine, warm_up);
+    let on = |model: &Hand| {
+        (model.shown().machine.warm.accounts.iter())
+            .map(|choice| choice.on)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(on(&model), [false]);
+    model.run(&mut machine);
+    assert_eq!(on(&model), [false]);
 }

@@ -346,8 +346,12 @@ pub(crate) fn row<T: IsA<adw::PreferencesRow> + IsA<gtk::Widget>>(
 }
 
 /// What Escape does where `from` has the focus: the first shortcut for it from `from` up to its
-/// window, activated as GTK activates one for the key.
+/// window, activated as GTK activates one for the key, after the compositor's answers to what the
+/// window asked, as a key comes. GTK keeps a freed entry's input method context when the entry
+/// goes before them (GNOME/gtk#8458).
 pub(crate) fn escape(from: &impl IsA<gtk::Widget>) {
+    from.as_ref().display().sync();
+    while glib::MainContext::default().iteration(false) {}
     let mut at = Some(from.as_ref().clone());
     while let Some(widget) = at {
         let controllers = widget.observe_controllers();

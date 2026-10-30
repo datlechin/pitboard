@@ -705,6 +705,13 @@ the UI tests' client, on zbus 5's own async-io executor:
   with GL on llvmpipe, so a launch's fresh cache folder holds it once a window has been drawn.
   The tests that hold every home as a fixture found it leave that folder alone, and nothing
   else.
+- GTK's Wayland input method takes a process's first focused entry as the display's current
+  context before `zwp_text_input_manager_v3` is bound, and clears it only once that is bound. An
+  entry freed in between leaves it pointing at freed memory, and headless mutter's
+  `text_input.enter` then crashes in `notify_im_change`
+  ([GNOME/gtk#8458](https://gitlab.gnome.org/GNOME/gtk/-/issues/8458), open, and the same in
+  4.22.5, 4.24.1 and `main` on 30 October 2026). So the tests' Escape waits for mutter's answers
+  first (`gdk_display_sync`), as a key does.
 
 ## The pictures
 
