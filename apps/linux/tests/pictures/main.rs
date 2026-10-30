@@ -23,7 +23,7 @@ use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{AccountGroup, Host, Window};
 use pitboard_model::{
     AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, Pane, PitboardModel,
-    Place, PlatformError, Sheet, Snapshot, Tool,
+    Place, PlatformError, Sheet, Snapshot, Surfaces, Tool,
 };
 
 const PATIENCE: Duration = Duration::from_secs(30);
@@ -85,17 +85,18 @@ impl LocalTime for Fixed {
 }
 
 // The window asks nothing of an app while it is drawn, and its start at sign-in is a
-// fixture's stand-in, off.
+// fixture's stand-in, off. A tray keeps it running where the model was told of one.
 struct Drawn {
     data: DataFolder,
     start_at_sign_in: stand_in::Autostart,
+    tray: bool,
 }
 
 impl Host for Drawn {
     fn send(&self, _: Intent) {}
     fn open(&self, _: &str, _: &gtk::Window) {}
     fn keeps_running(&self) -> bool {
-        false
+        self.tray
     }
     fn quit(&self) {}
     fn data(&self) -> &DataFolder {
@@ -320,10 +321,12 @@ fn picture(
             wait(done, &mut shown);
         }
     }
+    let tray = shown.status_item.is_some();
     let store = Shown::new(shown);
     let drawn = Drawn {
         data: DataFolder::at(&scratch.join("data")),
         start_at_sign_in: stand_in::Autostart::new(&scratch),
+        tray,
     };
     let window = Window::new(None, &store, Rc::new(drawn));
     window.present();
@@ -604,13 +607,28 @@ fn listed() -> Step {
     })
 }
 
-// Preferences over the accounts, on its page `page`, with what `steps` read.
-fn preferences(name: &str, page: &'static str, steps: &[Step]) {
+// A tray showing Pitboard, as the app tells the model once one does.
+fn with_a_tray() -> Step {
+    (
+        Some(Intent::SurfacesChanged {
+            surfaces: Surfaces { status_item: true },
+        }),
+        |shown| shown.status_item.is_some(),
+    )
+}
+
+// Preferences over the accounts, on its page `page`, with what `steps` read, saved as
+// `preferences-<page>`, or as `preferences-<page>-tray` where a tray shows Pitboard.
+fn preferences(page: &'static str, tray: bool, steps: &[Step]) {
+    let mut every = vec![listed()];
+    every.extend(tray.then(with_a_tray));
+    every.extend_from_slice(steps);
+    let name = format!("preferences-{page}{}", if tray { "-tray" } else { "" });
     picture(
-        name,
+        &name,
         "oneTool",
         true,
-        steps,
+        &every,
         move |window| {
             window
                 .activate_action("pitboard.preferences", None)
@@ -627,21 +645,40 @@ fn preferences(name: &str, page: &'static str, steps: &[Step]) {
 
 #[gtk::test]
 fn preferences_general() {
-    preferences("preferences-general", "general", &[listed()]);
+    preferences("general", false, &[]);
+}
+
+#[gtk::test]
+fn preferences_general_tray() {
+    preferences("general", true, &[]);
 }
 
 #[gtk::test]
 fn preferences_limits() {
-    preferences("preferences-limits", "limits", &[listed()]);
+    preferences("limits", false, &[]);
 }
 
 #[gtk::test]
-fn preferences_advanced() {
+fn preferences_limits_tray() {
+    preferences("limits", true, &[]);
+}
+
+fn preferences_advanced_with(tray: bool) {
     let read: Step = (Some(Intent::ReadSchedule), |_| true);
     let found: Step = (Some(Intent::LookForCommandLine), |shown| {
         shown.machine.command_line.in_terminal.is_some()
     });
-    preferences("preferences-advanced", "advanced", &[listed(), read, found]);
+    preferences("advanced", tray, &[read, found]);
+}
+
+#[gtk::test]
+fn preferences_advanced() {
+    preferences_advanced_with(false);
+}
+
+#[gtk::test]
+fn preferences_advanced_tray() {
+    preferences_advanced_with(true);
 }
 
 // A page of the window's, pushed over the accounts by its menu's `action`, once `shown` reads
