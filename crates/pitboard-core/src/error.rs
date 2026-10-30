@@ -1633,7 +1633,7 @@ fn pitboard_open(os: Os, home: &std::path::Path) -> String {
     let quit = match os {
         Os::MacOs => "Quit it from its item in the menu bar",
         // Every desktop shows its window; only some show a tray.
-        Os::Linux => "Quit it from the main menu in its window",
+        Os::Linux => "Quit it with Ctrl+Q in its window or from its tray menu",
         Os::Windows => "Exit it from its icon's menu in the notification area",
     };
     format!(
@@ -1921,6 +1921,31 @@ mod tests {
             );
             assert_eq!(make_readable(os, ProviderId::Claude), readable);
         }
+    }
+
+    // The Linux app's main menu has no Quit, as GNOME's apps have none.
+    #[test]
+    fn a_refusal_while_the_app_runs_says_how_each_system_quits_it() {
+        let home = std::path::Path::new("/home/x/.pitboard");
+        let quit = |os| {
+            let said = pitboard_open(os, home);
+            let (_, rest) = said.split_once("again once it was gone. ").expect("a quit");
+            rest.to_owned()
+        };
+        assert_eq!(
+            quit(Os::MacOs),
+            "Quit it from its item in the menu bar, then run this again. Nothing has changed."
+        );
+        assert_eq!(
+            quit(Os::Linux),
+            "Quit it with Ctrl+Q in its window or from its tray menu, then run this again. \
+             Nothing has changed."
+        );
+        assert_eq!(
+            quit(Os::Windows),
+            "Exit it from its icon's menu in the notification area, then run this again. \
+             Nothing has changed."
+        );
     }
 
     #[test]

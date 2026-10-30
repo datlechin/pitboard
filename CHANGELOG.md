@@ -72,7 +72,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `%`.
 - On Linux, Pitboard's messages, `pitboard doctor` and `pitboard --help` no longer name the
   keychain, a fallback store, the menu bar, Activity Monitor or Claude Desktop.
-- On Linux, `pitboard warm` names the app as a warmer.
+- On Linux, `pitboard warm` names the app as a warmer, and a refusal while the app runs says how
+  to quit it.
 - On Windows, `pitboard doctor` says Credential Manager still holds Claude Code's login under
   storage v5, and no longer says to unlock a keychain for parked logins it has yet to delete or
   account for.
