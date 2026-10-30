@@ -1,0 +1,100 @@
+/* The Linux app's window as libadwaita 1.9.4 draws it on GNOME and on KDE Plasma alike, light or
+   dark as the site is, since the window follows the desktop's scheme on both: its stylesheet's
+   colours (src/stylesheet/_colors.scss), shadows and type. A standalone colour is its
+   `oklab(from <bg> min(l, 0.5) a b)` in light and `max(l, 0.85)` in dark, computed; the accent
+   is blue on both desktops, as the KDE portal hands libadwaita Breeze's #3daee9 and libadwaita
+   takes its nearest, blue (research/kde-portal.md). */
+
+/* KDE Plasma, where the window takes Plasma's font and Breeze's icons through the portal */
+@custom-variant kde (&:where(:root[data-desktop="kde"] *));
+
+@theme {
+  --color-adw-window: light-dark(#fafafb, #222226);
+  --color-adw-text: light-dark(rgb(0 0 6 / 0.8), #ffffff);
+  --color-adw-view: light-dark(#ffffff, #1d1d20);
+  --color-adw-card: light-dark(#ffffff, rgb(255 255 255 / 0.08));
+  --color-adw-card-shade: light-dark(rgb(0 0 6 / 0.07), rgb(0 0 6 / 0.36));
+  --color-adw-dialog: light-dark(#fafafb, #36363a);
+  --color-adw-popover: light-dark(#ffffff, #36363a);
+  /* floating-sheet's dimming, the shade colour at twice its alpha */
+  --color-adw-dimming: light-dark(rgb(0 0 6 / 0.14), rgb(0 0 6 / 0.5));
+  --color-adw-accent-bg: #3584e4;
+  --color-adw-accent: light-dark(#0461be, #81d0ff);
+  --color-adw-error-bg: light-dark(#e01b24, #c01c28);
+  --color-adw-error: light-dark(#c30000, #ff938c);
+  --color-adw-success-bg: light-dark(#2ec27e, #26a269);
+  --color-adw-success: light-dark(#007c3d, #78e9ab);
+  --color-adw-warning-bg: light-dark(#e5a50a, #cd9309);
+  --color-adw-warning: light-dark(#905400, #ffc252);
+  /* a switch's slider, white mixed 80% into the view's ground, and a toggle group's active toggle */
+  --color-adw-slider: light-dark(#ffffff, #d2d2d3);
+  --color-adw-toggle: light-dark(#ffffff, rgb(255 255 255 / 0.2));
+  /* a window's and a dialog's rim, which shows in dark */
+  --color-adw-outline: rgb(255 255 255 / 0.07);
+
+  /* the UI font each desktop gives GTK: GNOME 50's Adwaita Sans 11, a variant of Inter, and Fedora
+     KDE's Noto Sans 10 through kde-gtk-config; neither is shipped, so Inter stands in */
+  --font-gnome: "Adwaita Sans", "Inter", system-ui, sans-serif;
+  --font-kde: "Noto Sans", "Inter", system-ui, sans-serif;
+}
+
+@theme inline {
+  /* $button_radius, and a switch's trough */
+  --radius-u-9: calc(9 * var(--u));
+  --radius-u-14: calc(14 * var(--u));
+  --shadow-adw-card:
+    0 0 0 calc(1 * var(--u)) rgb(0 0 6 / 0.03),
+    0 calc(1 * var(--u)) calc(3 * var(--u)) calc(1 * var(--u)) rgb(0 0 6 / 0.07),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) calc(2 * var(--u)) rgb(0 0 6 / 0.03);
+  --shadow-adw-popover:
+    0 calc(1 * var(--u)) calc(5 * var(--u)) calc(1 * var(--u)) rgb(0 0 0 / 0.09),
+    0 calc(2 * var(--u)) calc(14 * var(--u)) calc(3 * var(--u)) rgb(0 0 0 / 0.05);
+  --shadow-adw-sheet:
+    0 0 calc(14 * var(--u)) calc(2 * var(--u)) rgb(0 0 6 / 0.03),
+    0 0 calc(5 * var(--u)) calc(2 * var(--u)) rgb(0 0 6 / 0.1),
+    0 0 0 calc(1 * var(--u)) rgb(0 0 0 / 0.05);
+  --shadow-adw-slider: 0 calc(2 * var(--u)) calc(4 * var(--u)) rgb(0 0 6 / 0.2);
+  --shadow-adw-toggle:
+    0 calc(1 * var(--u)) calc(3 * var(--u)) calc(1 * var(--u)) rgb(0 0 6 / 0.07),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) calc(2 * var(--u)) rgb(0 0 6 / 0.03);
+}
+
+/* A libadwaita surface's type: 11 points on GNOME and 10 on KDE Plasma, 96 to the inch, with the
+   font's own line height as Pango gives it. Inside, sizes are libadwaita's percentages of it. */
+@utility adw-type {
+  font-family: var(--font-gnome);
+  font-size: calc(44 / 3 * var(--u));
+  line-height: normal;
+  :where(:root[data-desktop="kde"]) & {
+    font-family: var(--font-kde);
+    font-size: calc(40 / 3 * var(--u));
+  }
+}
+
+/* _labels.scss: .title-1, .title-2, .heading, .caption, and a row's subtitle, `smaller` */
+@utility adw-title-1 {
+  font-weight: 800;
+  font-size: 181%;
+}
+@utility adw-title-2 {
+  font-weight: 800;
+  font-size: 136%;
+}
+@utility adw-heading {
+  font-weight: 700;
+}
+@utility adw-caption {
+  font-size: 82%;
+  line-height: 140%;
+}
+@utility adw-smaller {
+  font-size: smaller;
+}
+
+/* _drawing.scss `focus-ring`: 2 pixels of the accent at half strength, inside the control */
+@utility focus-adw {
+  &:focus-visible {
+    outline: calc(2 * var(--u)) solid color-mix(in srgb, var(--color-adw-accent) 50%, transparent);
+    outline-offset: calc(-2 * var(--u));
+  }
+}

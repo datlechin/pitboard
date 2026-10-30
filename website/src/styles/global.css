@@ -247,7 +247,6 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-mac: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
-  --font-linux: "Adwaita Sans", "Cantarell", "Ubuntu Sans", "Inter", system-ui, sans-serif;
   --font-win:
     "Segoe UI Variable", "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
   --font-win-mono: "Cascadia Mono", "Cascadia Code", Consolas, var(--font-mono);
@@ -402,6 +401,7 @@
   --inset-shadow-win-layer-edge: inset 0 0 0 calc(1 * var(--u)) var(--color-win-layer-edge);
   --inset-shadow-win-strong: inset 0 0 0 calc(1 * var(--u)) var(--color-win-strong);
 }
+@import "./adwaita.css";
 
 @font-face {
   font-family: "Inter";

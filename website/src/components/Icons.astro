@@ -4,7 +4,9 @@ import tray from "../../../apps/windows/Icon/icon-16.svg?raw";
 import trayPlenty from "../../../apps/windows/Icon/tray-plenty-16.svg?raw";
 import trayLow from "../../../apps/windows/Icon/tray-low-16.svg?raw";
 import trayOut from "../../../apps/windows/Icon/tray-out-16.svg?raw";
-import { bar, fluent, heavy, line, menuSymbol, symbolic } from "../data/glyphs.ts";
+import linuxApp from "../../../apps/linux/data/icons/scalable/apps/com.usepitboard.Pitboard.svg?raw";
+import { bar, fluent, heavy, line, menuSymbol } from "../data/glyphs.ts";
+import { symbolOf, symbolsOf } from "../lib/symbolic.ts";
 
 const paths = [...template.matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)];
 if (paths.length !== 2) throw new Error("template.svg is not the kit's two paths");
@@ -24,6 +26,15 @@ const trays = {
   "pb-tray-low": trayLow,
   "pb-tray-out": trayOut,
 };
+// the Linux desktops' icons, as GTK draws each theme's (assets/icons/<theme>/), and the Linux app's
+const themes = symbolsOf(
+  import.meta.glob<string>("../assets/icons/*/*.svg", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+);
+const linux = symbolOf(linuxApp, false);
 ---
 
 <svg class="absolute size-0 overflow-hidden" aria-hidden="true" focusable="false">
@@ -86,9 +97,10 @@ const trays = {
   {Object.entries(bar).map(([id, g]) => (
     <symbol id={id} viewBox={g.viewBox} set:html={g.body} />
   ))}
-  {Object.entries(symbolic).map(([id, body]) => (
-    <symbol id={id} viewBox="0 0 16 16" set:html={body} />
+  {themes.map(([id, s]) => (
+    <symbol id={id} viewBox={s.viewBox} fill="currentColor" set:html={s.body} />
   ))}
+  <symbol id="pb-linux-app" viewBox={linux.viewBox} set:html={linux.body} />
   {Object.entries(trays).map(([id, svg]) => (
     <symbol id={id} viewBox="0 0 16 16" set:html={body(svg, id)} />
   ))}
