@@ -1,5 +1,6 @@
 //! What the welcome window shows at the first launch, driven through `State::apply` by hand.
 
+use super::signing::signs_in;
 use super::state::Job;
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{claude_code, codex, refusal, status};
@@ -8,7 +9,7 @@ use crate::Front;
 use crate::Tool;
 use crate::present::testing::account;
 use crate::present::words;
-use crate::{Choice, SetupLink, WelcomeLogin, WelcomeStep, WelcomeTool};
+use crate::{Choice, NextStep, SetupLink, WelcomeLogin, WelcomeStep, WelcomeTool};
 use pitboard_core::provider::ProviderId;
 
 fn welcomed(machine: &mut Stub) -> Hand {
@@ -234,6 +235,52 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
             "once the welcome has gone on to them"
         );
     }
+}
+
+// As on Debian 13's first session, whose login collection was listed but not there: what the
+// sheet says over the welcome, where an alert would be under it.
+#[test]
+fn an_enrol_refused_after_the_welcomes_sign_in_is_said_in_its_sheet() {
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
+    let mut model = Hand::on(Front::Gnome);
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    let [claude] = model.shown().welcome.tools.try_into().expect("one tool");
+    let WelcomeStep::Add { choice } = claude.step else {
+        panic!("{:?}", claude.step);
+    };
+    model.send(choice.intent);
+    model.run(&mut machine);
+    machine.enrolling = Err(refusal(
+        "credential_store_unreadable",
+        "The login keyring could not be read.",
+        Vec::new(),
+    ));
+    signs_in(&mut model, &mut machine, Tool::Claude, None, &[]);
+
+    let shown = model.shown();
+    assert_eq!(
+        shown.sheet,
+        Some(Sheet::Add {
+            tool: Some(Tool::Claude)
+        })
+    );
+    let failure = shown.sheet_failure.expect("said in the sheet");
+    assert_eq!(failure.message, "The login keyring could not be read.");
+    assert_eq!(
+        failure.next,
+        NextStep::Act {
+            choice: Choice {
+                title: words::show_diagnostics(Front::Gnome),
+                intent: Intent::Show {
+                    place: Some(Place::Checks)
+                },
+                enabled: true,
+            }
+        }
+    );
+    assert_eq!(shown.window_request.place, Some(Place::Welcome));
+    assert_eq!(shown.failure_alert, None, "not behind the welcome");
 }
 
 // Where Pitboard stays once the window is closed follows the status item the desktop gives it,

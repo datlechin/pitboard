@@ -40,6 +40,14 @@ use shortcuts::Shortcuts;
 use sign_in::SignIn;
 use welcome::Welcome;
 
+// An AdwDialog keeps the height it measured as it was presented (docs/facts/linux-app.md, The
+// dialogs).
+fn fit_height(dialog: &adw::Dialog) {
+    if dialog.root().is_some() {
+        dialog.set_content_height(-1);
+    }
+}
+
 // The dialog up for the model's sheet.
 enum Up {
     SignIn(SignIn),

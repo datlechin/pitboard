@@ -208,6 +208,7 @@ impl SheetDialog {
         imp.cancel.set_sensitive(!saving);
         self.show_failure(snapshot.sheet_failure.as_ref());
         self.enable(snapshot);
+        super::fit_height(self.upcast_ref());
     }
 
     fn show_failure(&self, failure: Option<&FailureText>) {
@@ -250,6 +251,7 @@ impl SheetDialog {
             .set_label(check.problem.as_deref().unwrap_or_default());
         imp.confirm
             .set_sensitive(check.intent.is_some() && !imp.saving.get());
+        super::fit_height(self.upcast_ref());
     }
 
     fn check(&self, tool: Tool) -> NameCheck {

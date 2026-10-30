@@ -547,6 +547,178 @@ mod tests {
         );
     }
 
+    fn iterate_until(what: &str, done: impl Fn() -> bool) {
+        let context = glib::MainContext::default();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !done() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "{what}: not within 30 s"
+            );
+            if !context.iteration(false) {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+    }
+
+    // A widget is laid out at a frame, so where it is shows only once one is drawn.
+    fn drawn(window: &Window) {
+        iterate_until("the window mapped", || window.is_mapped());
+        let clock = window.frame_clock().expect("a mapped window's clock");
+        for _ in 0..3 {
+            let next = clock.frame_counter() + 1;
+            window.queue_draw();
+            iterate_until("its frame drawn", || clock.frame_counter() >= next);
+        }
+    }
+
+    // Inside the view of the scrolled window it is in, which is all a dialog shows of it.
+    fn in_sight(widget: &impl IsA<gtk::Widget>) -> bool {
+        let widget = widget.upcast_ref::<gtk::Widget>();
+        let Some(scrolled) = widget
+            .ancestor(gtk::ScrolledWindow::static_type())
+            .and_downcast::<gtk::ScrolledWindow>()
+        else {
+            return false;
+        };
+        let Some(bounds) = widget.compute_bounds(&scrolled) else {
+            return false;
+        };
+        widget.is_mapped()
+            && bounds.y() >= 0.0
+            && bounds.y() + bounds.height() <= scrolled.height() as f32
+    }
+
+    fn sheet_tool(tool: pitboard_model::Tool, code: &str, name: &str) -> pitboard_model::SheetTool {
+        pitboard_model::SheetTool {
+            tool,
+            code: code.into(),
+            name: name.into(),
+            message: format!("Sign in to {name} in your browser. Pitboard adds the account."),
+            confirm: "Sign In…".into(),
+            missing: None,
+            steps: Vec::new(),
+        }
+    }
+
+    fn adding(revision: u64) -> pitboard_model::Snapshot {
+        use pitboard_model::{Sheet, SheetText, Tool};
+        let mut snapshot = crate::testing::snapshot(revision);
+        snapshot.sheet = Some(Sheet::Add {
+            tool: Some(Tool::Claude),
+        });
+        snapshot.sheet_text = Some(SheetText {
+            title: "Add Account".into(),
+            message: "Sign in to Claude Code in your browser. Pitboard adds the account.".into(),
+            tools: vec![
+                sheet_tool(Tool::Claude, "claude", "Claude Code"),
+                sheet_tool(Tool::Codex, "codex", "Codex"),
+            ],
+            tool: Tool::Claude,
+            account: None,
+            name: String::new(),
+            prompt: "Name".into(),
+            confirm: "Sign In…".into(),
+            saving: false,
+            progress: None,
+        });
+        snapshot
+    }
+
+    // An enrol refused after the browser's sign-in, as on Debian 13's first session
+    // (docs/facts/linux-app.md, The dialogs): the dialog was up before either was said.
+    #[gtk::test]
+    fn a_failure_said_after_a_sign_in_is_in_sight() {
+        use pitboard_model::{
+            Choice, FailureText, NextStep, RunningSignIn, SigningInText, Snapshot,
+        };
+        adw::init().unwrap();
+        crate::resources::register();
+        let scratch = tempfile::tempdir().unwrap();
+        let host = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let shown = Shown::new(crate::testing::snapshot(1));
+        let window = Window::new(None, &shown, host);
+        window.present();
+        drawn(&window);
+        shown.take(adding(2));
+        drawn(&window);
+        let dialog = window.visible_dialog().expect("Add Account");
+
+        shown.take(Snapshot {
+            signing_in: Some(RunningSignIn {
+                id: 1,
+                url: Some("https://claude.ai/oauth/authorize?code=true".into()),
+                wants_code: true,
+            }),
+            signing_in_text: Some(SigningInText {
+                title: "Signing In to Claude Code".into(),
+                message: "Finish signing in in your browser.".into(),
+                code_note: "If the browser shows a code, paste it here.".into(),
+                refused: None,
+                waiting: "Waiting for the browser".into(),
+                offers_link: true,
+                cancel: Choice {
+                    title: "Cancel".into(),
+                    intent: Intent::CancelSignIn,
+                    enabled: true,
+                },
+                escape_cancels: true,
+                undo: None,
+                announce: None,
+                steps: Vec::new(),
+            }),
+            ..adding(3)
+        });
+        drawn(&window);
+        let code = descendants::<adw::EntryRow>(dialog.upcast_ref()).remove(0);
+        assert!(in_sight(&code), "the code's field under the dialog's fold");
+        let words = pitboard_model::app_words(Front::Gnome).sheet;
+        for label in [&words.copy_link, &words.open] {
+            let button = descendants::<gtk::Button>(dialog.upcast_ref())
+                .into_iter()
+                .find(|button| button.label().as_deref() == Some(label.as_str()))
+                .expect(label);
+            assert!(in_sight(&button), "{label} under the dialog's fold");
+        }
+
+        let next = Choice {
+            title: "Show Diagnostics".into(),
+            intent: Intent::Show {
+                place: Some(Place::Checks),
+            },
+            enabled: true,
+        };
+        let failure = FailureText {
+            id: 1,
+            title: "Couldn’t add the account".into(),
+            message: "The credential store could not be read: the Secret Service: Object does \
+                      not exist at path “/org/freedesktop/secrets/collection/login”."
+                .into(),
+            warnings: Vec::new(),
+            next: NextStep::Act {
+                choice: next.clone(),
+            },
+        };
+        shown.take(Snapshot {
+            sheet_failure: Some(failure.clone()),
+            ..adding(4)
+        });
+        drawn(&window);
+
+        let row = descendants::<adw::ActionRow>(dialog.upcast_ref())
+            .into_iter()
+            .find(|row| row.title() == failure.title.as_str())
+            .expect("the failure's row");
+        assert_eq!(row.subtitle().as_deref(), Some(failure.message.as_str()));
+        assert!(in_sight(&row), "the failure under the dialog's fold");
+        let button = descendants::<gtk::Button>(row.upcast_ref())
+            .into_iter()
+            .find(|button| button.label().as_deref() == Some(next.title.as_str()))
+            .expect("its next step");
+        assert!(in_sight(&button), "its next step under the dialog's fold");
+        window.destroy();
+    }
+
     fn descendants<T: IsA<gtk::Widget>>(widget: &gtk::Widget) -> Vec<T> {
         let mut found = Vec::new();
         let mut child = widget.first_child();
