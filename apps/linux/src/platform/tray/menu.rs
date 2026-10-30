@@ -265,9 +265,9 @@ impl Menu {
         let children: Vec<glib::Variant> = if parent == ROOT && depth != 0 {
             self.entries
                 .iter()
+                // Not boxed here: the layout's `to_variant` puts each in the variant `av` holds.
                 .map(|entry| {
-                    let child = (entry.number, only(&entry.properties, names), no_children());
-                    glib::Variant::from_variant(&child.to_variant())
+                    (entry.number, only(&entry.properties, names), no_children()).to_variant()
                 })
                 .collect()
         } else {

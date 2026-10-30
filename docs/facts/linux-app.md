@@ -402,6 +402,17 @@ what changed, a new entry raises the revision by one with `LayoutUpdated` while 
 their numbers, and a radio entry chosen or an entry enabled is said with `ItemsPropertiesUpdated`
 alone (`tests/presence`).
 
+Measured on 30 October 2026 on the Ubuntu 26.04 session machine, with GNOME Shell 50.1, GLib
+2.88.0, the AppIndicator extension `ubuntu-appindicators@ubuntu.com` of
+gnome-shell-ubuntu-extensions 50.26.04.8ubuntu and the session bundle's app at db03f566: its
+`GetLayout(0, -1, ["type"])` answered each child of the root as a variant inside a variant. The
+extension takes a child out of one variant and reads it as `[id, properties, children]`
+(`dbusMenu.js:382-383`), so it threw `TypeError: (destructured parameter) is not iterable` 861
+times in 5 s and made a new client each time (`indicatorStatusIcon.js:337-347`). In 2 s the app
+answered 263 `AboutToShow` and 263 `GetLayout` with no click, GNOME Shell took about 91% CPU and
+the app 22%, and a click opened no menu. Plasma 6.7.5 read the same menu with no error. So each
+child is the entry in one variant, and the tests' host reads it as the extension does.
+
 ## Search and KRunner
 
 `src/platform/search.rs` and `src/platform/krunner.rs` answer on the app's own connection,
