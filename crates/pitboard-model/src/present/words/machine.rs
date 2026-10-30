@@ -318,14 +318,17 @@ pub(crate) const NOT_INSTALLED: &str = "Not installed";
 pub(crate) const NEW_TERMINALS: &str =
     "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
-/// How the `pitboard` a terminal runs is kept up to date: with the app when it is the one
-/// inside it, and otherwise the way it was installed. No other way of installing it updates
-/// it by itself, and saying it "updates on its own" read as though one did.
-pub(crate) fn update_note(bundled: bool) -> &'static str {
-    if bundled {
-        "The one inside this app, so it updates with the app."
-    } else {
-        "Installed apart from this app, so update it the way you installed it."
+pub(crate) fn update_note(front: Front, bundled: bool) -> &'static str {
+    match (front, bundled) {
+        (Front::MacMenuBar | Front::WindowsNotificationArea, true) => {
+            "The one inside this app, so it updates with the app."
+        }
+        // The app's package needs the `pitboard` package, which puts it beside the app.
+        (Front::Gnome, true) => {
+            "The one from the pitboard package this app needs, so your package manager updates \
+             it with the app."
+        }
+        (_, false) => "Installed apart from this app, so update it the way you installed it.",
     }
 }
 
@@ -504,14 +507,27 @@ mod tests {
     /// needed doing, until the app moved on and the command line refused its newer files.
     #[test]
     fn a_command_line_installed_apart_says_how_to_update_it() {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+            assert_eq!(
+                update_note(front, true),
+                "The one inside this app, so it updates with the app."
+            );
+        }
         assert_eq!(
-            update_note(true),
-            "The one inside this app, so it updates with the app."
+            update_note(Front::Gnome, true),
+            "The one from the pitboard package this app needs, so your package manager updates \
+             it with the app."
         );
-        assert_eq!(
-            update_note(false),
-            "Installed apart from this app, so update it the way you installed it."
-        );
+        for front in [
+            Front::MacMenuBar,
+            Front::WindowsNotificationArea,
+            Front::Gnome,
+        ] {
+            assert_eq!(
+                update_note(front, false),
+                "Installed apart from this app, so update it the way you installed it."
+            );
+        }
     }
 
     /// The activity list names a change by the verb the log keeps, in words, and one it does

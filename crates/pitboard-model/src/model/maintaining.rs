@@ -964,13 +964,13 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
             FoundCommandLine::Bundled {
                 path: "/usr/local/bin/pitboard".into(),
             },
-            words::update_note(true),
+            words::update_note(Front::MacMenuBar, true),
         ),
         (
             FoundCommandLine::Another {
                 path: "/Users/x/.cargo/bin/pitboard".into(),
             },
-            words::update_note(false),
+            words::update_note(Front::MacMenuBar, false),
         ),
     ] {
         machine.command_line = found.clone();
@@ -987,6 +987,21 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
         assert_eq!(command_line.terminal_note, None);
     }
     assert_eq!(machine.command_line_asks, 3);
+
+    machine.command_line = FoundCommandLine::Bundled {
+        path: "/usr/bin/pitboard".into(),
+    };
+    model.send(Intent::LookForCommandLine);
+    model.run(&mut machine);
+    assert_eq!(
+        present_on(Front::Gnome, &model.state, model.now.epoch(), &Utc)
+            .machine
+            .command_line
+            .update_note
+            .as_deref(),
+        Some(words::update_note(Front::Gnome, true)),
+        "the Linux app's packages put it beside the app, in a package of its own"
+    );
 }
 
 /// A copy run from a temporary place is not offered a link, and is told why: a link to that

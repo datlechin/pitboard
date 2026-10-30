@@ -510,8 +510,12 @@ fn command_line(seen: &Seen) -> CommandLineShown {
             FoundCommandLine::Nowhere => words::NOT_INSTALLED.into(),
         }),
         update_note: match machine.command_line {
-            Some(FoundCommandLine::Bundled { .. }) => Some(words::update_note(true).to_owned()),
-            Some(FoundCommandLine::Another { .. }) => Some(words::update_note(false).to_owned()),
+            Some(FoundCommandLine::Bundled { .. }) => {
+                Some(words::update_note(seen.front, true).to_owned())
+            }
+            Some(FoundCommandLine::Another { .. }) => {
+                Some(words::update_note(seen.front, false).to_owned())
+            }
             Some(FoundCommandLine::Nowhere) | None => None,
         },
         offers_link: nowhere && own.lasting(),
