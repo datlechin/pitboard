@@ -10,7 +10,8 @@ description: "Which Pitboard files are signed, who approves a signature and how 
 | The macOS app and command line | A Developer ID of team `D7HJ5TFYCU`, and notarised by Apple |
 | Windows files Pitboard builds, from the first signed release on | SignPath, with a certificate issued to SignPath Foundation |
 | Windows betas published before that | Not signed |
-| Linux files | Not signed |
+| Linux RPM packages, and the indices of [Pitboard's repository](/install/linux-repository) | Pitboard's repository key: primary key `22DCF748069770D807A1804F47C507760C9A97E3`, signing subkey `C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` |
+| Other Linux files, the Debian packages and tarballs among them | Not signed |
 | Files Pitboard did not build | Their own publishers, or not signed |
 
 SignPath has signed no Pitboard file. [Verify a download](/install/verify) checks the macOS signatures.
@@ -31,6 +32,10 @@ Each member signs in to GitHub and to SignPath with multi-factor authentication.
 ## How a Windows file is signed
 
 The release workflow, [`release.yml`](https://github.com/datlechin/pitboard/blob/main/.github/workflows/release.yml), builds each Windows release on GitHub-hosted runners, from the commit its `v*` tag names, with no cache. SignPath checks where the files came from, and signs them only after an approver approves the request.
+
+## How a Linux file is signed
+
+The release workflow builds each Linux release on GitHub-hosted runners, from the commit its `v*` tag names, with no cache. Its `linux-sign` job signs the RPM packages, and its `linux-repository` job the repository's indices, with the repository key's signing subkey. Only a `v*` tag reaches the `linux-packages` environment that holds the subkey. The primary key is kept offline.
 
 ## Privacy
 

@@ -1,0 +1,6 @@
+Types: deb
+URIs: https://packages.usepitboard.com/deb
+Suites: stable
+Components: main
+Architectures: amd64 arm64
+Signed-By: /usr/share/keyrings/pitboard-archive-keyring.pgp

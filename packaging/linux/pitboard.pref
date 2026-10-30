@@ -1,0 +1,3 @@
+Package: *
+Pin: origin packages.usepitboard.com
+Pin-Priority: 100

@@ -1,6 +1,6 @@
 import { REPO, SLUG } from "../data/site.ts";
 import { compareVersions } from "./changelog.ts";
-import type { Platform } from "./platform.ts";
+import { platformNames, platforms, type Platform } from "./platform.ts";
 
 const API = `https://api.github.com/repos/${SLUG}`;
 
@@ -269,13 +269,29 @@ export interface FileRow {
   platforms: Platform[];
 }
 
+// Each Linux package's file name ends in its machine and format.
+const LINUX_PACKAGES = [
+  ["amd64.deb", "a Debian package for x86_64"],
+  ["arm64.deb", "a Debian package for aarch64"],
+  ["x86_64.rpm", "an RPM package for x86_64"],
+  ["aarch64.rpm", "an RPM package for aarch64"],
+] as const;
+
 // A file the release gains fails the build until it is described here.
 export function fileRows(release: Release): FileRow[] {
   const v = release.version;
+  const packaged = release.assets.some((a) => /\.(deb|rpm)$/.test(a.name));
   const known: [string, string, Platform[]][] = [
     [`Pitboard-v${v}-macos.zip`, "The app, for Apple silicon and Intel", ["macos"]],
     [`Pitboard-v${v}-windows-x64.msi`, "The app, Windows on x64", ["windows"]],
     [`Pitboard-v${v}-windows-arm64.msi`, "The app, Windows on ARM64", ["windows"]],
+    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
+      `pitboard-app-v${v}-${file}`,
+      `The app, ${what}`,
+      ["linux"],
+    ]),
+    [`pitboard-plasma-widget-v${v}-all.deb`, "The Plasma widget, a Debian package", ["linux"]],
+    [`pitboard-plasma-widget-v${v}-noarch.rpm`, "The Plasma widget, an RPM package", ["linux"]],
     [
       `pitboard-v${v}-aarch64-apple-darwin.tar.gz`,
       "Command line, macOS on Apple silicon",
@@ -288,12 +304,20 @@ export function fileRows(release: Release): FileRow[] {
       "Command line, Linux on aarch64",
       ["linux"],
     ],
+    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
+      `pitboard-v${v}-${file}`,
+      `Command line, ${what}`,
+      ["linux"],
+    ]),
+    [`pitboard-archive-keyring-v${v}-all.deb`, "The repository's key, a Debian package", ["linux"]],
     [`pitboard-v${v}-x86_64-pc-windows-msvc.zip`, "Command line, Windows on x64", ["windows"]],
     [`pitboard-v${v}-aarch64-pc-windows-msvc.zip`, "Command line, Windows on ARM64", ["windows"]],
     ["install.sh", "The install script", ["macos", "linux"]],
     [
       "SHA256SUMS",
-      "Checksums of the apps, the command line archives and <code>install.sh</code>",
+      packaged
+        ? "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>"
+        : "Checksums of the apps, the command line archives and <code>install.sh</code>",
       ["macos", "windows", "linux"],
     ],
     ["appcast.xml", "The feed the app updates from", ["macos"]],
@@ -359,10 +383,31 @@ export function windowsRelease(latest: Release, betas: Iterable<Release>): Relea
   return newest;
 }
 
-export function windowsAhead(windows: Release, latest: Release): string | null {
-  return windows.version === latest.version
-    ? null
-    : `Until 1.0.0, Windows gets betas, and macOS and Linux get ${latest.version}.`;
+// The app's package for each machine, in both formats.
+export function linuxApp(release: Release): boolean {
+  return LINUX_PACKAGES.every(([file]) =>
+    release.assets.some((a) => a.name === `pitboard-app-v${release.version}-${file}`),
+  );
+}
+
+// Linux files come from the latest release once it carries the app's packages, and from the newest
+// published beta that does until then, as Windows files do. While none does, from the latest.
+export function linuxRelease(latest: Release, betas: Iterable<Release>): Release {
+  if (linuxApp(latest)) return latest;
+  const [newest] = [...betas]
+    .filter(linuxApp)
+    .sort((a, b) => compareVersions(b.version, a.version));
+  return newest ?? latest;
+}
+
+// macOS takes the latest release, and a system whose files come from a beta is named.
+export function ahead(latest: Release, releases: Record<Platform, Release>): string | null {
+  const early = platforms.filter((p) => releases[p].version !== latest.version);
+  if (early.length === 0) return null;
+  const rest = platforms.filter((p) => !early.includes(p));
+  const named = (ps: Platform[]) =>
+    `${ps.map((p) => platformNames[p]).join(" and ")} ${ps.length === 1 ? "gets" : "get"}`;
+  return `Until 1.0.0, ${named(early)} betas, and ${named(rest)} ${latest.version}.`;
 }
 
 // From 1.0.0 the release workflow refuses an unsigned rc or full release, and signs a beta once

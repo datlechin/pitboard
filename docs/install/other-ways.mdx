@@ -1,7 +1,7 @@
 ---
 title: "Other ways to install"
 sidebarTitle: "Other ways"
-description: "Install the command line with Cargo or from a release file, or build the app from source."
+description: "Install Pitboard with Cargo or from a release file, or build the app from source."
 ---
 
 [Install Pitboard](/install) gives the app, the install script and Homebrew, and how to update each way.
@@ -33,11 +33,36 @@ To update, replace the files with the next release's.
 
 The macOS app's zip and the Windows installers install the app, as [Install the app](/install#install-the-app) says.
 
+## A Linux package
+
+Each release has Debian and RPM packages for x86_64 and aarch64, which [Pitboard's repository](/install/linux-repository) also serves:
+
+| File | Holds |
+| --- | --- |
+| `pitboard-v<version>-<machine>.deb` and `.rpm` | The command line, its man page and its completions |
+| `pitboard-app-v<version>-<machine>.deb` and `.rpm` | The app, which needs the `pitboard` package of its version |
+| `pitboard-plasma-widget-v<version>-all.deb` and `-noarch.rpm` | The [Plasma widget](/reference/linux-app#plasma-widget), which needs the `pitboard-app` package of its version and KDE Plasma 6.4 or later |
+| `pitboard-archive-keyring-v<version>-all.deb` | The repository's key, for apt |
+
+`<machine>` is `amd64` or `arm64` in a Debian package's name, and `x86_64` or `aarch64` in an RPM package's.
+
+Install the app and its command line together, here on Debian or Ubuntu on x86_64:
+
+```sh
+sudo apt install ./pitboard-app-v<version>-amd64.deb ./pitboard-v<version>-amd64.deb
+```
+
+On Fedora and openSUSE, give `sudo dnf install` or `sudo zypper install` the two `.rpm` files the same way. dnf installs them without checking their signature, so check it first, as [Check the signature](/install/verify#check-the-signature) shows. zypper stops with `Signature verification failed` until you import the key, as that section does.
+
+A package installed from a file never updates. Install the next release's packages, or set up the repository.
+
 ## Build the app
 
 In a clone of [Pitboard's repository](https://github.com/datlechin/pitboard), `./apps/macos/scripts/build-app.sh` writes `apps/macos/build/Pitboard.app`. Copy it to your Applications folder. [The macOS app](https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md#the-macos-app) lists what it needs.
 
 The Windows app builds only on Windows, from `apps/windows`, as [The Windows app](https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md#the-windows-app) says.
+
+The Linux app builds with Meson from `apps/linux`, as [The Linux app](https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md#the-linux-app) says.
 
 An app you build has no updater. Build it again to update it.
 

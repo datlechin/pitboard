@@ -1,7 +1,7 @@
-# The command line and the app. build-linux-packages.sh defines pitboard_version, the release's
-# own version, pitboard_rpm_version and pitboard_rpm_release, as linux-versions.sh prints them,
-# and pitboard_date, the commit's day, for the changelog. Source0 is the commit as git archive
-# writes it, and Source1 the release's command line tarball.
+# The command line, the app and its Plasma widget. build-linux-packages.sh defines
+# pitboard_version, the release's own version, pitboard_rpm_version and pitboard_rpm_release, as
+# linux-versions.sh prints them, and pitboard_date, the commit's day, for the changelog. Source0
+# is the commit as git archive writes it, and Source1 the release's command line tarball.
 
 # Cargo's release profile strips both programs, so there is no debug information to split off.
 %global debug_package %{nil}
@@ -64,12 +64,27 @@ without signing you out, and shows what each account has left of its limits.
 
 This package holds the desktop app.
 
+%package -n pitboard-plasma-widget
+Summary: KDE Plasma widget that switches AI coding tools between your accounts
+BuildArch: noarch
+Requires: pitboard-app = %{version}-%{release}
+# Plasma 6.4's org.kde.plasma.workspace.dbus is the first to follow the app's D-Bus feed. Fedora
+# names Plasma's package plasma-workspace, openSUSE plasma6-workspace.
+Requires: (plasma-workspace >= 6.4 or plasma6-workspace >= 6.4)
+
+%description -n pitboard-plasma-widget
+Pitboard switches Claude Code and OpenAI's Codex CLI between your own accounts
+without signing you out, and shows what each account has left of its limits.
+
+This package holds the widget for KDE Plasma 6.4 or later, which shows the
+account in use and its limits, and switches accounts through the app.
+
 %prep
 %autosetup -c -a 1
 
 %build
-# The Plasma widget, which needs Plasma 6.4, is not part of the app's package.
-%meson -Dpackage=rpm -Dplasma_widget=false
+# The Plasma widget, which needs Plasma 6.4, is a package of its own.
+%meson -Dpackage=rpm -Dplasma_widget=true
 %meson_build
 
 %install
@@ -119,6 +134,10 @@ install -D -m 0644 %{command_line}/completions/pitboard.fish \
 %dir %{_datadir}/krunner/dbusplugins
 %{_datadir}/krunner/dbusplugins/com.usepitboard.Pitboard.desktop
 %{_datadir}/metainfo/com.usepitboard.Pitboard.metainfo.xml
+
+%files -n pitboard-plasma-widget
+%license LICENSE NOTICE
+%{_datadir}/plasma/plasmoids/com.usepitboard.Pitboard/
 
 %changelog
 * %{pitboard_date} Ngo Quoc Dat <datlechin@gmail.com> - %{version}-%{release}

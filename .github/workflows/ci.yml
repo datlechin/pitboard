@@ -191,6 +191,10 @@ jobs:
           apps/linux/plasmoid/tests/run-tests.sh
           .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
           .github/scripts/test-linux-packages.sh .github/scripts/pack-linux-session-bundle.sh
+          .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh
+          .github/scripts/sign-linux-repository.sh .github/scripts/test-linux-repository.sh
+          packaging/linux/repository-test.sh .github/scripts/linux-release.sh
+          .github/scripts/with-linux-signing-key.sh .github/scripts/upload-linux-repository.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1227,7 +1231,8 @@ jobs:
   # contributor runs them: the command line packed as a release packs it, the packages built on
   # Debian 13 or Fedora 43 from the commit and checked, the check's own tests, and the packages
   # installed on fresh Debian 13 and Ubuntu 26.04, or Fedora 43, Fedora 44 and Tumbleweed, images
-  # and removed again.
+  # and removed again. in-container.sh hands the builds the workflow's RUSTFLAGS, so a warning
+  # fails them here, where a release's builds deny none.
   linux-packaging:
     name: linux-packaging (${{ matrix.format }}, ${{ matrix.arch }})
     strategy:
@@ -1276,6 +1281,32 @@ jobs:
           path: ${{ runner.temp }}/packages/*.${{ matrix.format }}
           if-no-files-found: ignore
           retention-days: 7
+
+  # The repository a release writes, built and signed from both formats' packages of each machine
+  # with keys the test makes, and set up from fresh systems as the docs set it up.
+  linux-packaging-repository:
+    name: linux-packaging-repository (${{ matrix.arch }})
+    needs: linux-packaging
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: linux-packages-*-${{ matrix.arch }}
+          path: ${{ runner.temp }}/packages
+          merge-multiple: true
+      - run: sh .github/scripts/test-linux-repository.sh "$RUNNER_TEMP/packages"
 
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
   msrv:
@@ -1492,6 +1523,7 @@ jobs:
       - linux-app-floor
       - linux-app-fedora
       - linux-packaging
+      - linux-packaging-repository
       - msrv
       - semver
       - deny

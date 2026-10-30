@@ -1,0 +1,8 @@
+[pitboard-beta]
+name=Pitboard beta
+baseurl=https://packages.usepitboard.com/rpm/beta/$basearch
+type=rpm-md
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.usepitboard.com/pitboard-archive-keyring.asc

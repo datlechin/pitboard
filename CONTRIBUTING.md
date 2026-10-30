@@ -159,7 +159,8 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
 `windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh`, `linux-versions.sh`,
-`linux-repository-key.sh`, `pack-command-line.sh` and `pack-linux-session-bundle.sh` in
+`linux-repository-key.sh`, `pack-command-line.sh`, `pack-linux-session-bundle.sh`,
+`linux-release.sh`, `with-linux-signing-key.sh` and `upload-linux-repository.sh` in
 `.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
 `crates/pitboard/Cargo.toml`, the Linux repository's key in `packaging/linux`, or a workflow's
 call of a PowerShell script in `.github/scripts`:
@@ -170,7 +171,8 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
   .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh \
   .github/scripts/pack-command-line.sh .github/scripts/pack-linux-session-bundle.sh \
-  apps/macos/scripts/build-number.sh
+  .github/scripts/linux-release.sh .github/scripts/with-linux-signing-key.sh \
+  .github/scripts/upload-linux-repository.sh apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
 ```
 
@@ -204,6 +206,17 @@ For a change to the Linux packages, `packaging/linux/debian`, `packaging/linux/p
 ```sh
 shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh \
   .github/scripts/test-linux-packages.sh
+```
+
+For a change to the Linux repository, `packaging/linux/repository`, its setup files and its
+`repository-test*` images and script there, or `linux-repository.sh`, `sign-linux-packages.sh`,
+`sign-linux-repository.sh` and `test-linux-repository.sh` in `.github/scripts`, run the steps
+[The Linux repository](#the-linux-repository) lists, and:
+
+```sh
+shellcheck -s sh .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh \
+  .github/scripts/sign-linux-repository.sh .github/scripts/test-linux-repository.sh \
+  packaging/linux/repository-test.sh
 ```
 
 The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
@@ -790,10 +803,10 @@ With no step it runs the steps of the distribution's job on CI: `lint`, `test`, 
 `widget` on `fedora-44`. `fedora-43` builds the RPM packages, and runs only the steps
 [Linux packages](#linux-packages) names. A container runs as uid 1000, sees the repository and
 this machine's Cargo registry read only, and keeps Cargo's and Meson's folders in the volume
-`pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Only a `cargo fetch`
-before the steps has the network, for Cargo's git checkouts. The release's link, at more than
-one job, takes most of 8 GiB: where the machine or Docker's VM has less, set
-`CARGO_BUILD_JOBS=1`.
+`pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Each of these steps
+builds with `RUSTFLAGS=-D warnings`, as CI does. Only a `cargo fetch` before the steps has the
+network, for Cargo's git checkouts. The release's link, at more than one job, takes most of 8
+GiB: where the machine or Docker's VM has less, set `CARGO_BUILD_JOBS=1`.
 
 `apps/linux/scripts/headless.sh <command>` runs a command as the app's tests run: as a user,
 never root, in a headless mutter with one virtual monitor, on a private session bus, with
@@ -879,10 +892,11 @@ fixture empties first.
 Each format's packages are built on the oldest system of the floor that uses it, over the Meson
 install: the Debian packages on Debian 13 by debhelper from `packaging/linux/debian`, the RPM
 packages on Fedora 43 by rpmbuild from `packaging/linux/pitboard.spec`. Both build `pitboard`,
-the release tarball's command line byte for byte with its man page and completions, and
-`pitboard-app`, which depends on the `pitboard` of its own version. Debian's add
-`pitboard-archive-keyring`, the repository's key. Build, check and install them in containers,
-into a folder `out` of your choosing:
+the release tarball's command line byte for byte with its man page and completions,
+`pitboard-app`, which depends on the `pitboard` of its own version, and
+`pitboard-plasma-widget`, the Plasma widget, which depends on that `pitboard-app` and on Plasma
+6.4. Debian's add `pitboard-archive-keyring`, the repository's key. Build, check and install
+them in containers, into a folder `out` of your choosing:
 
 ```sh
 apps/linux/scripts/in-container.sh debian-13 command-line out
@@ -898,14 +912,20 @@ apps/linux/scripts/in-container.sh fedora-43 packages-test
   release does.
 - `deb` and `rpm` build the packages with `build-linux-packages.sh` from the commit
   `git archive` writes, not the working tree, and from the tarball named, then check them with
-  `check-linux-packages.sh`. Each goes to `out` as
+  `check-linux-packages.sh` as the release `Cargo.toml` names, or as the version given after
+  `out`, which a release candidate's release passes. Each goes to `out` as
   `<package>-v<version>-<architecture>.<deb|rpm>`, since GitHub renames a release file whose name
   holds the `~` of a package version.
+- `command-line`, `deb` and `rpm` build with your `RUSTFLAGS`, none unless you set it, as a
+  release's builds do. CI's `linux-packaging` sets `-D warnings`: set it too to build as CI
+  does.
 - `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
   the check, with the tools of the system's format.
 - `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
   images, or the RPM packages on fresh Fedora 43, Fedora 44 and openSUSE Tumbleweed images,
-  checks them there and removes them.
+  checks them there and removes them. Each system but Debian 13 has its Plasma first, as a Plasma
+  desktop does, and takes the widget. On Debian 13, whose Plasma is 6.3, the test checks that apt
+  refuses the widget for it, and installs the rest.
 
 The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
 more. A failed step's files are copied out too.
@@ -918,6 +938,8 @@ more. A failed step's files are copied out too.
 - whose app does not depend on the `pitboard` of its own version and on the floor's libadwaita,
   GTK and GLib, at 1.7, 4.18 and 2.84, or whose tree, as Meson installed it, `check-linux-app.sh`
   fails;
+- whose widget does not depend on the app of its own version and on Plasma 6.4, or holds more
+  than the widget's folder, which with the app's tree `check-linux-app.sh` holds to its files;
 - whose keyring is not `packaging/linux/pitboard-archive-keyring.asc`, unarmored;
 - that are not in RPM's format 4, which Tumbleweed's RPM reads;
 - that lintian or rpmlint warns about. rpmlint takes the filters in
@@ -930,6 +952,45 @@ before and no package holds.
 
 CI's `linux-packaging` job runs the four of each format on `ubuntu-26.04` and
 `ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<format>-<arch>` for 7 days.
+
+### The Linux repository
+
+A release writes Pitboard's apt and dnf repository from its packages, as
+[The Linux repository](RELEASING.md#the-linux-repository) says, with three scripts in
+`.github/scripts`:
+
+- `linux-repository.sh` builds the tree of a release's suites from its Debian and RPM packages:
+  apt's indices and AppStream catalog, dnf's and zypper's repository of each machine with the
+  same catalog, the key, and the setup files in `packaging/linux`. It refuses a beta or a
+  release candidate in `stable`, packages of two versions, an error among
+  appstream-generator's hints, and a catalog without the app. It runs on Ubuntu 26.04 with
+  `install-deps.sh`'s `repository` set, whose appstream-generator alone of the floor's runs its
+  rpmmd backend.
+- `sign-linux-packages.sh` signs each RPM package on Fedora 43, then checks it against the key
+  alone.
+- `sign-linux-repository.sh` signs each suite's `Release` and each `repomd.xml`, then checks
+  each signature against the key alone with sqv, as apt does, and with gpgv.
+
+Both sign with the signing subkey of the key named, from the `GNUPGHOME` the caller made, and
+leave nothing in place that the key does not verify. In a release, `with-linux-signing-key.sh`
+makes that `GNUPGHOME` from the `linux-packages` environment's key, and
+`upload-linux-repository.sh` puts the signed tree in the bucket. `test-release.py` tests both,
+the upload against a stand-in `aws`. Test the three on the packages of one
+machine, built into `out` as [Linux packages](#linux-packages) shows:
+
+```sh
+.github/scripts/test-linux-repository.sh out
+```
+
+It runs `test-linux-packages.py`'s repository cases in the repository's own image. Then
+`packaging/linux/repository-test.sh` builds and signs the trees it serves, with keys made in the
+build, and fresh Debian 13, Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed images set the
+repository up from them on 127.0.0.1 as the docs set up `packages.usepitboard.com`, while each
+image builds. Each installs the app and the catalog holds it, keeps the app from indices another
+key signed, and moves from a beta to the final release above it, which on apt brings the keyring
+with its signing subkey extended. `packages-test` on `fedora-43` runs the cases of
+`sign-linux-packages.sh`. CI's `linux-packaging-repository` job runs the test on `ubuntu-26.04`
+and `ubuntu-26.04-arm` with `linux-packaging`'s packages of that machine.
 
 ### The Linux session bundle
 

@@ -4,17 +4,20 @@ A tag releases Pitboard through `.github/workflows/release.yml`. Its `guard` job
 tag with `version` under `[workspace.package]` in `Cargo.toml`, as
 `.github/scripts/release-kind.sh` does, and refuses any other pair:
 
-| Tag | `Cargo.toml` | Kind | crates.io | Latest | Windows files |
-| --- | --- | --- | --- | --- | --- |
-| `v1.2.0` | `1.2.0` | Full release | Yes | When no published full release is higher | Signed |
-| `v1.2.0-rc1` | `1.2.0` | Release candidate, a GitHub pre-release | No | No | Signed |
-| `v1.3.0-beta.1` | `1.3.0-beta.1` | Beta, a GitHub pre-release | Yes | No | Signed once a signer is set |
+| Tag | `Cargo.toml` | Kind | crates.io | Latest | Windows files | Linux repository |
+| --- | --- | --- | --- | --- | --- | --- |
+| `v1.2.0` | `1.2.0` | Full release | Yes | When no published full release is higher | Signed | When latest, `stable`, and `beta` unless a beta with packages is higher |
+| `v1.2.0-rc1` | `1.2.0` | Release candidate, a GitHub pre-release | No | No | Signed | No suite |
+| `v1.3.0-beta.1` | `1.3.0-beta.1` | Beta, a GitHub pre-release | Yes | No | Signed once a signer is set | `beta`, when higher than every release with packages |
 
 An rc's number starts at 1, a beta's runs from 1 to 98, and a beta's major version is 1 or
 more. `usepitboard.com/install.sh` and the apps' feeds lead to GitHub's latest release, so a
 0.x release made after 1.0.0 never moves them back. A release ships Windows files from major
 version 1, and the guard refuses an rc or a full release while no signer is set
-([Windows signing](#windows-signing)).
+([Windows signing](#windows-signing)). It ships the Linux packages from major version 1 once
+`docs/facts/linux-session.md` is committed, and writes the suites the last column names
+([Before the first release with the Linux app](#before-the-first-release-with-the-linux-app)).
+`.github/scripts/linux-release.sh` decides both in the guard.
 
 ## Prepare a release
 
@@ -56,9 +59,11 @@ that signs Pitboard for Windows, and 1.0.0, also rewrite what
 
    A release candidate builds, signs and attests everything, and runs its own install script
    on each target. It also exchanges the crates.io token, so a wrong Trusted Publishing
-   registration fails here, where it costs nothing. It uploads nothing to crates.io, has no
-   release notes or update feeds, and skips the `feed`, `windows-feed-key`, `windows-feed`,
-   `tap`, `brew`, `scoop` and `winget` jobs.
+   registration fails here, where it costs nothing, and signs the Linux packages with the
+   repository's key. It uploads nothing to crates.io, has no release notes or update feeds,
+   writes no suite of the Linux repository, and skips the `feed`, `windows-feed-key`,
+   `windows-feed`, `tap`, `brew`, `scoop`, `winget`, `linux-repository` and
+   `linux-repository-install` jobs.
 
 8. Tag the same commit `v<version>` and push the tag.
 
@@ -68,22 +73,26 @@ that signs Pitboard for Windows, and 1.0.0, also rewrite what
    ```
 
    The `guard` job refuses a tag the table above does not allow, a full release or a beta
-   with no section in `CHANGELOG.md`, and a `pitboard-core` that changed while its version
-   stayed. Releases run one at a time, so this run waits until the candidate's has ended.
+   with no section in `CHANGELOG.md`, a `pitboard-core` that changed while its version
+   stayed, and, once a release has shipped the Linux packages, a commit without
+   `docs/facts/linux-session.md`. Releases run one at a time, so this run waits until the candidate's has ended.
 
 9. Approve the `publish` job when it waits in the `release` environment.
-10. Watch the run to the end. A re-run fixes nine failures:
+10. Watch the run to the end. A re-run fixes twelve failures:
 
 | Job | Failed | Do |
 | --- | --- | --- |
 | `windows-sign` | Anywhere | Re-run it. SignPath evaluates at most three re-runs of a run, and fails the fourth |
 | `windows-sign-msi` | Anywhere | Re-run it, as `windows-sign` |
 | `windows-update-sign` | Anywhere | Re-run it. It signs the MSIs `windows-msi` checked again and, for the latest full release, replaces the feed it handed on |
+| `linux-sign` | Anywhere | Re-run it. It signs the packages `linux-build` handed on again, and hands them over again. Where `with-linux-signing-key.sh` refused the key, export it again as [the Linux repository key](#the-linux-repository-key) says first |
 | `publish` | After the crates reached crates.io | Re-run it. It skips each crate whose version is there |
 | `tap` | At the push | Re-run it. It reads the run's own `SHA256SUMS`. Never write the tap by hand: its checksums would come from a second download |
 | `scoop` | At the push | Re-run it, as `tap`. Never write the bucket by hand |
 | `winget` | Before "Submit" | Re-run it |
 | `install-script` | At "Install the way the README says to" | Check [the redirect](#the-redirect), then re-run it |
+| `linux-repository` | At "Upload" | Re-run it. It builds the same tree from the run's own packages and puts each file up again, and the bucket only gains files. Never write the bucket by hand |
+| `linux-repository-install` | Waiting for `packages.usepitboard.com` | Check how the zone caches it ([Before the first release with the Linux app](#before-the-first-release-with-the-linux-app)), then re-run it |
 | `site` | Anywhere | Re-run it. Workers Builds answers a second request with the build already queued |
 
 Never re-run `winget` once its "Submit" step has started: komac may have opened a pull request
@@ -124,8 +133,28 @@ Tag the first release with Windows files only once each of these holds:
 
 ## Before the first release with the Linux app
 
-The first release with the Linux packages is a `1.0.0-beta.N`, tagged only once a session on
-[the Linux session machines](AGENTS.md#the-linux-session-machines) has measured them:
+The first release with the Linux packages is a `1.0.0-beta.N`. Before its tag, the owner makes
+these, by these names, which `release.yml` and its scripts use:
+
+| Name | What it is |
+| --- | --- |
+| `pitboard-packages` | The Cloudflare R2 bucket the repository is in, on the owner's account |
+| `packages.usepitboard.com` | The bucket's custom domain on the `usepitboard.com` zone, its only address: the bucket's `r2.dev` URL is off |
+| The R2 token | An R2 API token with Object Read & Write on `pitboard-packages` alone, and an expiry you will notice |
+| `linux-packages` | The GitHub environment of `linux-sign` and `linux-repository`, with a deployment rule for `v*` tags only |
+| `PACKAGES_R2_ACCESS_KEY_ID`, `PACKAGES_R2_SECRET_ACCESS_KEY` | Secrets of `linux-packages`: the token's access key ID and secret access key |
+| `PACKAGES_R2_ENDPOINT` | A variable of `linux-packages`: `https://<account id>.r2.cloudflarestorage.com` |
+| `PACKAGES_SIGNING_KEY`, `PACKAGES_SIGNING_PASSPHRASE` | Secrets of `linux-packages`, as [the Linux repository key](#the-linux-repository-key) says |
+
+The zone has no Cache Rule for `packages.usepitboard.com`, so each file's own `Cache-Control`
+holds there: `upload-linux-repository.sh` gives the packages and the indices named by their
+hash a year, and every other file `no-cache`. A rule that caches the rest would serve an old
+`InRelease` or `repomd.xml` after a release. How the zone treats each is
+[not measured](docs/facts/not-measured.md#the-linux-repository) until the first release writes
+the bucket.
+
+Tag it only once a session on
+[the Linux session machines](AGENTS.md#the-linux-session-machines) has measured the packages:
 
 1. Build the session bundle from the branch that holds `Release <version>`, its draft pull
    request's branch once one is open ([Prepare a release](#prepare-a-release)):
@@ -195,9 +224,25 @@ The MSI is built with WiX v7. The owner accepted its Open Source Maintenance Fee
 Nothing is owed while Pitboard's revenue stays under US$10,000 a year and sponsorships stay
 donations: WiX v7.0.0's `OSMFEULA.txt`, lines 12 to 23, and `.github/FUNDING.yml`.
 
+From the first release after a Linux session, each release also has the Linux packages:
+`pitboard` and `pitboard-app` as `.deb` for amd64 and arm64 and as `.rpm` for x86_64 and
+aarch64, `pitboard-v<version>-<arch>` and `pitboard-app-v<version>-<arch>`, each with a bill of
+materials, the Plasma widget as `pitboard-plasma-widget-v<version>-all.deb` and `-noarch.rpm`,
+and `pitboard-archive-keyring-v<version>-all.deb`. `linux-build` builds and checks them on each
+machine as CI's `linux-packaging` job does, with the `build` job's tarball as the command line,
+and installs and removes them on fresh images. `linux-sign` signs the RPM packages with
+[the Linux repository key](#the-linux-repository-key), and only its packages reach `publish`.
+A release that writes a suite then writes [the Linux repository](#the-linux-repository), and
+`linux-repository-install` installs the app from `packages.usepitboard.com` on fresh Debian 13,
+Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed images on both machines, as the docs set it up.
+`publish` uploads them in the same 15 minutes.
+
 Once a full release or a beta is published, the `site` job asks Workers Builds to build
 usepitboard.com from `main` again, through `SITE_DEPLOY_HOOK`. The site lists the releases it
-found when it was built, and Workers Builds builds only on a push to `main`.
+found when it was built, and Workers Builds builds only on a push to `main`. Its Linux files and
+its Linux app follow the release that holds the app's packages, as its Windows files follow the
+installers: the latest once it has them, the newest published beta until then, with the beta
+channel's commands, and no app while none has.
 
 Immutable releases are on, and only the owner changes that setting. A published release's
 files and tag cannot change; its title, notes and marks can. Only the next version fixes a
@@ -256,10 +301,15 @@ Keep the signer's account apart from the update key and the Developer ID certifi
 | `SCOOP_BUCKET_TOKEN` | The same, for `datlechin/scoop-bucket` |
 | `WINDOWS_UPDATE_PUBLIC_KEY`, `WINDOWS_UPDATE_PRIVATE_KEY` | As [the Windows update key](#the-windows-update-key) says. The private key is a secret of the `windows-update` environment alone |
 | `SITE_DEPLOY_HOOK` | In Cloudflare, the `pitboard` Worker's **Settings** > **Builds** > **Deploy Hooks**: a hook that builds `main`. The secret is the whole URL. Anyone with it can start a build |
+| `PACKAGES_SIGNING_KEY`, `PACKAGES_SIGNING_PASSPHRASE` | As [the Linux repository key](#the-linux-repository-key) says. Secrets of the `linux-packages` environment alone |
+| `PACKAGES_R2_ACCESS_KEY_ID`, `PACKAGES_R2_SECRET_ACCESS_KEY` | The R2 token [Before the first release with the Linux app](#before-the-first-release-with-the-linux-app) names. Secrets of the `linux-packages` environment alone |
 | `WINGET_TOKEN` | A classic token with the `public_repo` scope, of a GitHub account kept for it alone, which holds the fork of `microsoft/winget-pkgs` and can write to no `datlechin` repository. A classic token writes to every public repository its account can, the tap and the bucket among them. komac 2.16.0's README says a fine-grained token fails to open the pull request |
 
 Without the Apple secrets, everything is signed ad hoc and not notarised, and Gatekeeper
-warns about the app on first launch. The `app` job fails without the Sparkle secrets. The
+warns about the app on first launch. The `app` job fails without the Sparkle secrets, and
+`linux-sign` and `linux-repository` without the `linux-packages` ones, which
+`with-linux-signing-key.sh` and `upload-linux-repository.sh` name. `PACKAGES_R2_ENDPOINT` is a
+variable of `linux-packages`, not a secret. The
 `tap` job fails without `HOMEBREW_TAP_TOKEN`, and the `site` job without `SITE_DEPLOY_HOOK`. Without `SCOOP_BUCKET_TOKEN` or the bucket, the
 `scoop` job writes nothing and says which is missing.
 
@@ -273,10 +323,11 @@ API token, then its own registration under **Settings** > **Trusted Publishing**
 The `release` environment has required reviewers, and the `publish` job waits in it.
 Renaming it breaks the crates.io registration. The `homebrew-tap` environment holds
 `HOMEBREW_TAP_TOKEN`, `scoop-bucket` holds `SCOOP_BUCKET_TOKEN`, `winget` holds
-`WINGET_TOKEN` and `windows-update` holds `WINDOWS_UPDATE_PRIVATE_KEY`. Give `release`,
-`homebrew-tap`, `scoop-bucket`, `winget`, `windows-signing` and `windows-update` each a
-deployment rule for `v*` tags, under **Settings** > **Environments** > **Deployment branches
-and tags**, so a job run from a branch never reaches them.
+`WINGET_TOKEN`, `windows-update` holds `WINDOWS_UPDATE_PRIVATE_KEY`, and `linux-packages`
+holds the repository key and the R2 token. Give `release`, `homebrew-tap`, `scoop-bucket`,
+`winget`, `windows-signing`, `windows-update` and `linux-packages` each a deployment rule for
+`v*` tags, under **Settings** > **Environments** > **Deployment branches and tags**, so a job
+run from a branch never reaches them.
 
 [Rotate the update key](#rotate-the-update-key) covers the repository variable
 `SPARKLE_KEY_ROTATION`, [the Windows update key](#the-windows-update-key)
@@ -387,6 +438,11 @@ At 1.0.0, rewrite:
   each zip against the checksum the release wrote into the bucket, so add it to the Homebrew
   sentence and the Windows sentence of Check the checksums in `docs/install/verify.mdx`, and
   to the checksum bullet of `SECURITY.md`.
+- The sentences of `docs/install.mdx` and `docs/install/linux-repository.mdx` that say the Linux
+  app comes from the beta channel alone, or that `stable` holds no release: from 1.0.0, `stable`
+  holds it. The setup steps of `docs/install/linux-repository.mdx` then name `pitboard.sources`
+  and `pitboard.repo`, and moving channels goes from `stable` to `beta`. usepitboard.com's
+  commands follow by themselves.
 
 Once `microsoft/winget-pkgs` holds both packages, add their `winget install` lines to
 `docs/install/other-ways.mdx`, and to `windowsWays` in `website/src/data/commands.ts`, which
@@ -530,6 +586,42 @@ The release workflow cannot make rung one: `windows-update-sign` checks each sig
 key the release carries, and `windows-feed` with the key in the published MSIs, which rung one
 has moved on from.
 
+## The Linux repository
+
+`packages.usepitboard.com` serves Pitboard's apt and dnf repository from the bucket
+`pitboard-packages`. A release writes it from its own packages, through
+`.github/scripts/linux-repository.sh`, `sign-linux-packages.sh` and `sign-linux-repository.sh`,
+in its `linux-repository` job, and `upload-linux-repository.sh` puts each file in the bucket:
+the packages first, then the indices named by their hash, the other indices, the signed ones,
+and the key and the setup files last, so a reader never meets an index whose files are not
+there yet. Nobody writes it by hand, and nothing deletes from it.
+
+| Path | What it holds |
+| --- | --- |
+| `deb/pool/main/p/pitboard/` | Every Debian package a release has put there, named from its own fields |
+| `deb/dists/<suite>/` | `Release`, `InRelease` and `Release.gpg`, and in `main` the `Packages` and `Contents` of amd64 and arm64 and the AppStream catalog in `dep11`, each also under `by-hash` |
+| `rpm/<suite>/<x86_64 or aarch64>/` | The RPM packages in `Packages`, and `repodata` with `repomd.xml.asc` and the AppStream catalog |
+| `pitboard-archive-keyring.pgp` and `.asc` | [The repository key](#the-linux-repository-key), unarmored for apt and armored for dnf and zypper |
+| `pitboard.sources`, `pitboard-beta.sources`, `pitboard.pref` | apt's setup: each channel's source, and the preferences file that keeps the repository to its own packages |
+| `pitboard.repo`, `pitboard-beta.repo` | dnf's and zypper's setup, one for each channel |
+
+- `stable` holds the latest full release, and `beta` whichever is highest of the betas and the
+  full releases. A release candidate writes neither. `linux-repository.sh` refuses a version
+  with `~`, a beta's or a release candidate's, in `stable`.
+- A suite lists the packages of the release that wrote it and nothing else. The pool and
+  `by-hash` only grow, so a client that holds an earlier index still finds its files.
+- No `Release` has a `Valid-Until`: releases come weeks apart.
+- The build stops on an error in the app's AppStream metadata, and where a catalog lacks the
+  app. The signing stops on an index or an RPM package the committed key does not verify.
+
+Each part is built on the system its tools need, by digest:
+
+| Part | System | Moves |
+| --- | --- | --- |
+| The Debian packages | Debian 13 | With the floor |
+| The RPM packages and their signatures | Fedora 43 | To Fedora 44 at Fedora 43's end of life |
+| The indices, the catalogs and their signatures | Ubuntu 26.04 | To a Debian whose appstream-generator runs its rpmmd backend, which Debian 13's 0.9.1 and Fedora's builds do not ([the facts](docs/facts/linux-packages.md#the-repository)) |
+
 ## The Linux repository key
 
 Pitboard's apt and dnf repository at `packages.usepitboard.com` and its rpm packages are signed
@@ -562,9 +654,44 @@ On the offline machine, with the offline copy:
    C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` binds the subkey again, to two years from that day.
 2. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
    `packaging/linux/pitboard-archive-keyring.asc`. The same pull request gives
-   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry
-   and RELEASING.md the new dates.
+   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry,
+   and RELEASING.md and the `gpg --show-keys` output in `docs/install/linux-repository.mdx` the
+   new dates.
 3. Export the subkey again, as above, into `PACKAGES_SIGNING_KEY`. The copy there carries the
    old binding, and gpg signs nothing with a subkey whose binding has expired.
+   `with-linux-signing-key.sh` refuses it until then, before `linux-sign` signs anything.
 
 The primary is extended the same way, without the subkey's fingerprint.
+
+The next release carries the extension to installed systems. Its `pitboard-archive-keyring`
+package brings apt the extended key, which `test-linux-repository.sh` measured, and
+`linux-repository` serves it as `pitboard-archive-keyring.asc`. dnf5 and zypper keep the copy
+they imported first, with its first binding, after the extended key has signed. An extension
+reaches them only if they import the key again once that copy expires, which is
+[not measured](docs/facts/not-measured.md#the-linux-repository). So extend well before the 180
+days run out.
+
+### Replace the signing subkey
+
+Where the subkey's secret is lost, or someone else may hold it, revoke it and sign with a new
+one. On the offline machine, with the offline copy:
+
+1. `gpg --edit-key 22DCF748069770D807A1804F47C507760C9A97E3`, then `key 1`, `revkey` with the
+   reason that applies, and `save`.
+2. `gpg --quick-add-key 22DCF748069770D807A1804F47C507760C9A97E3 rsa4096 sign 2y` adds the new
+   signing subkey.
+3. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
+   `packaging/linux/pitboard-archive-keyring.asc`. The checks leave the revoked subkey out and
+   sign with the new one. The same pull request gives `test_the_committed_key_is_the_owners`,
+   the table above, `docs/install/code-signing-policy.mdx` and the `gpg --show-keys` output in
+   `docs/install/linux-repository.mdx` the new subkey.
+4. `gpg --armor --export-secret-subkeys <new subkey>!` replaces `PACKAGES_SIGNING_KEY`, and its
+   passphrase `PACKAGES_SIGNING_PASSPHRASE`.
+
+An installed system's copy of the key has the old subkey alone, so what the new one signs is to
+it signed by another key: apt and dnf5 keep the indices they had, and zypper refuses the
+refresh, as `test-linux-repository.sh` measured for another key's indices. No keyring package
+reaches apt through those indices. So the release that first signs with the new subkey says in
+its notes to fetch the key again, as the setup steps in `docs/install/linux-repository.mdx` do.
+What each package manager does with the replaced key is
+[not measured](docs/facts/not-measured.md#the-linux-repository).

@@ -8,8 +8,9 @@ description: "Check that a release file came from Pitboard's release workflow, u
 An attestation is a signed record, kept by GitHub, of the workflow and commit that built a file. Every release attests:
 
 - each command line archive, the macOS app's zip and the Windows app's installers, each with a CycloneDX bill of materials (`.cdx.json`)
+- each Linux package, each with a bill of materials but the keyring's
 - `install.sh`, the [install script](/install#install-with-the-script)
-- `SHA256SUMS`, the checksums of the archives, the app's zip, the installers and `install.sh`
+- `SHA256SUMS`, the checksums of the archives, the app's zip, the installers, the Linux packages and `install.sh`
 - `appcast.xml` and `appcast-windows.xml`, the feeds the apps update from
 
 Only a full release published as the latest carries the feeds. A release candidate, tagged like `v1.2.0-rc1`, or a beta, tagged like `v1.3.0-beta.1`, has neither.
@@ -89,7 +90,7 @@ sh install.sh
 
 ## Check the signature
 
-The macOS command line and app are signed with a Developer ID and notarised by Apple. Linux files are not signed. The [code signing policy](/install/code-signing-policy) says which Windows files are signed, and from which release.
+The macOS command line and app are signed with a Developer ID and notarised by Apple. On Linux, each RPM package is signed with [the repository key](/install/linux-repository), and the other files are not signed. The [code signing policy](/install/code-signing-policy) says which Windows files are signed, and from which release.
 
 <Tabs>
   <Tab title="macOS">
@@ -127,6 +128,22 @@ The macOS command line and app are signed with a Developer ID and notarised by A
     ```
 
     For a file that is not signed, its `Status` reads `NotSigned`. The release workflow checks each program of a release with no signer this way.
+  </Tab>
+  <Tab title="Linux">
+    On Fedora or openSUSE, import the repository key, then check an RPM package in its folder:
+
+    ```sh
+    sudo rpm --import https://packages.usepitboard.com/pitboard-archive-keyring.asc
+    rpm -K pitboard-app-v<version>-x86_64.rpm
+    ```
+
+    ```text
+    pitboard-app-v<version>-x86_64.rpm: digests signatures OK
+    ```
+
+    Without the key, it prints `digests SIGNATURES NOT OK`. Setting up [the repository](/install/linux-repository) imports the same key.
+
+    A Debian package is not signed on its own. apt checks the signature of the repository's indices at each `apt update`, and they hold each package's checksum. Check a Debian package from a release file against `SHA256SUMS`.
   </Tab>
 </Tabs>
 

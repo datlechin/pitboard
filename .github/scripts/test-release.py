@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import io
+import json
 import os
 import re
 import shutil
@@ -29,6 +30,9 @@ LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
 LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
 PACK_COMMAND_LINE = REPO / ".github" / "scripts" / "pack-command-line.sh"
 PACK_LINUX_SESSION_BUNDLE = REPO / ".github" / "scripts" / "pack-linux-session-bundle.sh"
+LINUX_RELEASE = REPO / ".github" / "scripts" / "linux-release.sh"
+WITH_LINUX_SIGNING_KEY = REPO / ".github" / "scripts" / "with-linux-signing-key.sh"
+UPLOAD_LINUX_REPOSITORY = REPO / ".github" / "scripts" / "upload-linux-repository.sh"
 REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
@@ -1301,6 +1305,19 @@ class RepositoryKey(unittest.TestCase):
         self.assertPasses(self.checked(REPOSITORY_KEY, "1840705212"))
         self.assertRefused(self.checked(REPOSITORY_KEY, "1840705213"), "has 179 days left")
 
+    def test_the_docs_and_releasing_name_the_committed_keys_fingerprints(self):
+        found = self.assertPasses(self.checked(REPOSITORY_KEY, "1793145600"))
+        for page, keys in (
+            ("RELEASING.md", ("primary", "signing")),
+            ("docs/install/linux-repository.mdx", ("primary",)),
+            ("docs/install/code-signing-policy.mdx", ("primary", "signing")),
+        ):
+            path = REPO / page
+            text = path.read_text() if path.is_file() else ""
+            for key in keys:
+                with self.subTest(page=page, key=key):
+                    self.assertTrue(found[key] in text, f"{page} does not name {found[key]}")
+
     def test_a_signing_subkey_with_fewer_than_180_days_left_is_refused(self):
         key = self.exported(self.key(subkeys=(("sign", 400),)))
         found = self.assertPasses(self.checked(key, self.at(400 - 180)))
@@ -1647,6 +1664,694 @@ esac
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage:", done.stderr)
                 self.assertFalse((folder / "SHA256SUMS").exists())
+
+
+class LinuxRelease(unittest.TestCase):
+    # The Linux session's record as RELEASING.md has it written, its bundle's sentence wrapped.
+    RECORD = """# The Linux session machines
+
+Measured by hand on 2 November 2026 on the four machines. The bundle was
+`linux-facts.yml` session run 41234567890 at 1a2b3c4d, the commit that holds
+`Release {version}`, its sums checked on the Mac and on each machine.
+
+The bundle was `linux-facts.yml` session run 41234567891 at 5e6f7a8b, the commit that holds
+`Release 9.0.0`.
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        self.record = self.work / "linux-session.md"
+
+    def recorded(self, version="1.0.0-beta.8"):
+        self.record.write_text(self.RECORD.format(version=version))
+
+    def decided(self, version, kind, latest, published=()):
+        lines = self.work / "published"
+        lines.write_text("".join(f"{line}\n" for line in published))
+        return run(LINUX_RELEASE, version, kind, latest, self.record, lines)
+
+    def assertShips(self, done, linux, suites):
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout, f"linux={linux}\nsuites={suites}\n")
+
+    def assertRefused(self, done, said):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertEqual(done.stdout, "")
+        self.assertIn(said, done.stderr)
+
+    def test_a_0_x_release_ships_no_linux_package(self):
+        self.recorded()
+        for version, kind, latest in (
+            ("0.15.3", "full", "true"),
+            ("0.15.3", "full", "false"),
+            ("0.16.0-rc1", "rc", "false"),
+        ):
+            with self.subTest(version=version, latest=latest):
+                done = self.decided(version, kind, latest, ["v1.0.0-beta.8 true true"])
+                self.assertShips(done, "false", "")
+
+    def test_without_a_session_record_nothing_ships(self):
+        published = ["v0.15.2 false false", "v1.0.0-beta.7 true false", "v1.0.0-rc1 true false"]
+        for version, kind, latest in (
+            ("1.0.0-beta.8", "beta", "false"),
+            ("1.0.0", "full", "true"),
+        ):
+            with self.subTest(version=version):
+                self.assertShips(self.decided(version, kind, latest, published), "false", "")
+
+    def test_a_missing_record_after_packages_shipped_is_refused(self):
+        for shipped in ("v1.0.0-beta.8 true true", "v1.0.0-rc1 true true", "v1.0.0 false true"):
+            with self.subTest(shipped=shipped):
+                done = self.decided("1.0.1", "full", "true", ["v0.15.2 false false", shipped])
+                self.assertRefused(
+                    done, f"{self.record} is gone, and {shipped.split()[0]} shipped the Linux packages"
+                )
+
+    def test_a_record_that_names_no_bundle_or_a_later_one_is_refused(self):
+        no_bundle = "names no bundle as 'The bundle was `linux-facts.yml` session run <run id> at"
+        for record, said in (
+            ("", no_bundle),
+            ("# The Linux session machines\n", no_bundle),
+            # The sentence in the second paragraph only.
+            ("# The Linux session machines\n\nMeasured by hand.\n\n"
+             + self.RECORD.split("\n\n", 1)[1], no_bundle),
+            (self.RECORD.format(version="1.0.0-beta.8").replace("linux-facts", "windows-facts"),
+             no_bundle),
+            (self.RECORD.format(version="1.0.0-beta.8").replace("at 1a2b3c4d", "at main"),
+             no_bundle),
+            (self.RECORD.format(version="1.0.0-rc1"), "names the bundle of 1.0.0-rc1, which no"),
+            (self.RECORD.format(version="0.15.2"), "names the bundle of 0.15.2, before 1.0.0-beta.1"),
+            (self.RECORD.format(version="1.0.0-beta.9"),
+             "names the bundle of 1.0.0-beta.9, above this release's 1.0.0-beta.8"),
+        ):
+            with self.subTest(record=record[-90:]):
+                self.record.write_text(record)
+                self.assertRefused(self.decided("1.0.0-beta.8", "beta", "false"), said)
+        # An rc is measured on its release's bundle, and a later release on an earlier one.
+        for version, kind, bundle in (
+            ("1.0.0-rc1", "rc", "1.0.0"),
+            ("1.0.0", "full", "1.0.0-beta.8"),
+            ("1.10.0", "full", "1.9.0"),
+        ):
+            with self.subTest(version=version, bundle=bundle):
+                self.recorded(bundle)
+                self.assertEqual(self.decided(version, kind, "false").returncode, 0)
+
+    def test_a_full_latest_release_writes_stable_and_beta_unless_a_beta_is_above_it(self):
+        self.recorded()
+        for published, suites in (
+            ([], "stable beta"),
+            (["v1.0.0-beta.8 true true", "v0.15.2 false false"], "stable beta"),
+            (["v1.0.0-beta.8 true true", "v1.1.0-beta.1 true true"], "stable"),
+            # A beta that shipped no packages is in no suite, and an rc never is.
+            (["v1.1.0-beta.1 true false", "v1.1.0-rc1 true true"], "stable beta"),
+            # This release, run again.
+            (["v1.0.0 false true"], "stable beta"),
+        ):
+            with self.subTest(published=published):
+                self.assertShips(self.decided("1.0.0", "full", "true", published), "true", suites)
+        done = self.decided("1.0.1", "full", "false", ["v1.1.0 false true"])
+        self.assertShips(done, "true", "")
+
+    def test_a_beta_above_every_release_writes_beta_and_never_stable(self):
+        self.recorded("1.0.0-beta.8")
+        for version, published, suites in (
+            ("1.0.0-beta.8", ["v0.15.2 false false", "v1.0.0-beta.7 true false"], "beta"),
+            ("1.1.0-beta.1", ["v1.0.0 false true", "v1.0.0-beta.9 true true"], "beta"),
+            ("1.1.0-beta.2", ["v1.1.0-beta.10 true true"], ""),
+            ("1.1.0-beta.10", ["v1.1.0-beta.9 true true", "v1.1.0-rc1 true true"], "beta"),
+            ("1.0.1-beta.1", ["v1.1.0 false true"], ""),
+            ("1.1.0-beta.1", ["v1.1.0-beta.2 true true"], ""),
+            ("1.1.0-beta.1", ["v1.1.0 false true"], ""),
+        ):
+            with self.subTest(version=version, published=published):
+                done = self.decided(version, "beta", "false", published)
+                self.assertShips(done, "true", suites)
+
+    def test_a_release_candidate_writes_no_suite(self):
+        self.recorded("1.0.0")
+        for published in ([], ["v1.0.0-beta.8 true true"]):
+            with self.subTest(published=published):
+                self.assertShips(self.decided("1.0.0-rc1", "rc", "false", published), "true", "")
+
+    def test_a_published_release_it_cannot_read_is_refused(self):
+        self.recorded()
+        for line in (
+            "v1.0.0-beta.8 true",
+            "v1.0.0-beta.8 true true more",
+            "v1.0.0-beta.8 yes true",
+            "1.0.0-beta.8 true true",
+            "v1.0.0-beta.8 false true",
+            "v1.0.0 true true",
+        ):
+            with self.subTest(line=line):
+                done = self.decided("1.0.0", "full", "true", [line])
+                self.assertRefused(done, f"cannot read the published release '{line}'")
+
+    def test_a_release_it_was_not_given_is_refused(self):
+        self.recorded()
+        for version, kind, latest in (
+            ("1.0.0", "beta", "true"),
+            ("1.0.0-rc1", "full", "false"),
+            ("1.0.0-beta.8", "rc", "false"),
+            ("1.0.0", "full", "yes"),
+            ("1.0", "full", "true"),
+            ("1.0.0\n2.0.0", "full", "true"),
+        ):
+            with self.subTest(version=version, kind=kind, latest=latest):
+                done = self.decided(version, kind, latest)
+                self.assertRefused(done, "is not a release as release-kind.sh prints it")
+
+    def test_it_takes_five_arguments(self):
+        self.recorded()
+        given = ("1.0.0", "full", "true", self.record, self.work / "published")
+        for args in (given[:4], (*given, "more")):
+            with self.subTest(args=len(args)):
+                done = run(LINUX_RELEASE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+
+
+class LinuxSigningKey(unittest.TestCase):
+    PASSPHRASE = "a passphrase with spaces"
+    # A stand-in for sign-linux-packages.sh and sign-linux-repository.sh: it keeps its GNUPGHOME
+    # and environment, and signs its message with the subkey from that home, as gpg is asked
+    # there, with nobody to ask for a passphrase.
+    COMMAND = """printf '%s\\n' "$GNUPGHOME" >"$1"
+env >"$2"
+gpg --batch --yes --local-user "$3!" --output "$4.sig" --detach-sign "$4"
+exit "${5:-0}"
+"""
+
+    def setUp(self):
+        needs(self, "gpg", "gpgconf")
+        self.work = Path(tempfile.mkdtemp(prefix="k"))
+        self.addCleanup(shutil.rmtree, self.work)
+        self.tmp = self.work / "t"
+        self.tmp.mkdir()
+        self.made = 0
+        self.home = None
+
+    def tearDown(self):
+        for home in self.work.glob("maker-*"):
+            subprocess.run(["gpgconf", "--kill", "all"], env={**os.environ, "GNUPGHOME": str(home)},
+                           capture_output=True)
+
+    def gpg(self, home, *args, given=None):
+        done = subprocess.run(
+            ["gpg", "--batch", "--quiet", "--pinentry-mode", "loopback", "--passphrase",
+             self.PASSPHRASE, *args],
+            input=given,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GNUPGHOME": str(home)},
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    # A key laid out as the repository's, made now, its secrets under PASSPHRASE: the public key,
+    # the signing subkey's secret alone as PACKAGES_SIGNING_KEY holds it, and the whole secret.
+    def key(self):
+        self.made += 1
+        home = self.work / f"maker-{self.made}"
+        home.mkdir(mode=0o700)
+        made = self.gpg(home, "--status-fd", "1", "--quick-gen-key", f"Test {self.made}",
+                        "ed25519", "cert", "10y")
+        primary = re.search(r"KEY_CREATED [PB] ([0-9A-F]{40})", made).group(1)
+        self.gpg(home, "--quick-add-key", primary, "ed25519", "sign", "2y")
+        listed = self.gpg(home, "--with-colons", "--with-subkey-fingerprints", "--list-keys")
+        signing = re.findall(r"^fpr:+([0-9A-F]{40}):", listed, re.M)[1]
+        public = self.work / f"{self.made}.asc"
+        public.write_text(self.gpg(home, "--armor", "--export", primary))
+        subkey = self.gpg(home, "--armor", "--export-secret-subkeys", f"{signing}!")
+        whole = self.gpg(home, "--armor", "--export-secret-keys", primary)
+        return home, primary, signing, public, subkey, whole
+
+    def signed(self, public, secret, signing, passphrase=PASSPHRASE, exit=0, **env):
+        self.message = self.work / "message"
+        self.message.write_text("Release\n")
+        self.kept, self.environment = self.work / "kept", self.work / "env"
+        for path in (self.kept, self.environment, Path(f"{self.message}.sig")):
+            path.unlink(missing_ok=True)
+        given = {
+            **{n: v for n, v in os.environ.items() if not n.startswith(("PACKAGES_", "GNUPGHOME"))},
+            "TMPDIR": str(self.tmp),
+            "PACKAGES_SIGNING_KEY": secret,
+            "PACKAGES_SIGNING_PASSPHRASE": passphrase,
+            **env,
+        }
+        done = subprocess.run(
+            ["sh", WITH_LINUX_SIGNING_KEY, public, "sh", "-c", self.COMMAND, "sh", self.kept,
+             self.environment, signing, self.message, str(exit)],
+            capture_output=True,
+            text=True,
+            env={n: v for n, v in given.items() if v is not None},
+        )
+        self.assertEqual(os.listdir(self.tmp), [], "it left a GNUPGHOME behind")
+        return done
+
+    def assertRefused(self, done, said):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(said, done.stderr)
+        self.assertFalse(self.kept.exists(), "the command ran")
+
+    def test_the_command_signs_with_the_subkey_unasked_and_its_folder_goes(self):
+        needs(self, "gpgv")
+        _, _, signing, public, subkey, _ = self.key()
+        done = self.signed(public, subkey, signing)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        home = Path(self.kept.read_text().strip())
+        self.assertEqual(home.parent, self.tmp)
+        self.assertFalse(home.exists())
+        environment = self.environment.read_text()
+        self.assertNotIn("PACKAGES_SIGNING", environment)
+        self.assertNotIn(self.PASSPHRASE, environment)
+        keyring = self.work / "key.pgp"
+        keyring.write_bytes(subprocess.run(["gpg", "--dearmor"], input=public.read_bytes(),
+                                           capture_output=True, check=True).stdout)
+        verified = subprocess.run(
+            ["gpgv", "--keyring", keyring, f"{self.message}.sig", self.message],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+
+    def test_a_key_whose_subkey_was_replaced_signs_with_the_new_one(self):
+        needs(self, "gpgv")
+        home, primary, old, public, _, _ = self.key()
+        # As RELEASING.md's Replace the signing subkey has the owner do it.
+        self.gpg(home, "--command-fd", "0", "--edit-key", primary,
+                 given="key 1\nrevkey\ny\n0\n\ny\nsave\n")
+        self.gpg(home, "--quick-add-key", primary, "ed25519", "sign", "2y")
+        listed = self.gpg(home, "--with-colons", "--with-subkey-fingerprints", "--list-keys")
+        new = re.findall(r"^fpr:+([0-9A-F]{40}):", listed, re.M)[2]
+        public.write_text(self.gpg(home, "--armor", "--export", primary))
+        subkey = self.gpg(home, "--armor", "--export-secret-subkeys", f"{new}!")
+        done = self.signed(public, subkey, new)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        keyring = self.work / "key.pgp"
+        keyring.write_bytes(subprocess.run(["gpg", "--dearmor"], input=public.read_bytes(),
+                                           capture_output=True, check=True).stdout)
+        verified = subprocess.run(
+            ["gpgv", "--status-fd", "1", "--keyring", keyring, f"{self.message}.sig",
+             self.message],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertIn(f"VALIDSIG {new} ", verified.stdout)
+        self.assertNotEqual(old, new)
+
+    def test_the_commands_exit_is_its_own(self):
+        _, _, signing, public, subkey, _ = self.key()
+        done = self.signed(public, subkey, signing, exit=3)
+        self.assertEqual(done.returncode, 3, done.stderr)
+        self.assertFalse(Path(self.kept.read_text().strip()).exists())
+
+    def test_a_secret_that_is_not_the_committed_subkey_is_refused(self):
+        _, _, signing, public, _, _ = self.key()
+        _, _, other_signing, _, other, _ = self.key()
+        done = self.signed(public, other, other_signing)
+        self.assertRefused(done, f"PACKAGES_SIGNING_KEY is not the signing subkey of {public}")
+        self.assertIn(f"signing={other_signing}", done.stderr)
+        self.assertIn(f"signing={signing}", done.stderr)
+
+    def test_a_secret_with_an_older_binding_than_the_committed_key_is_refused(self):
+        home, primary, signing, public, subkey, _ = self.key()
+        # The key extended and committed, and PACKAGES_SIGNING_KEY not exported again.
+        self.gpg(home, "--quick-set-expire", primary, "3y", signing)
+        public.write_text(self.gpg(home, "--armor", "--export", primary))
+        done = self.signed(public, subkey, signing)
+        self.assertRefused(done, f"PACKAGES_SIGNING_KEY is not the signing subkey of {public}")
+        self.assertIn("export it again", done.stderr)
+
+    def test_a_secret_that_holds_the_primarys_is_refused(self):
+        _, primary, signing, public, _, whole = self.key()
+        done = self.signed(public, whole, signing)
+        self.assertRefused(done, f"PACKAGES_SIGNING_KEY holds the secret of the primary {primary}")
+
+    def test_a_passphrase_that_does_not_unlock_it_is_refused(self):
+        _, _, signing, public, subkey, _ = self.key()
+        done = self.signed(public, subkey, signing, passphrase="not the passphrase")
+        self.assertRefused(done, f"PACKAGES_SIGNING_PASSPHRASE does not unlock {signing}")
+
+    def test_a_missing_secret_or_passphrase_is_named(self):
+        _, _, signing, public, subkey, _ = self.key()
+        for name in ("PACKAGES_SIGNING_KEY", "PACKAGES_SIGNING_PASSPHRASE"):
+            for value in (None, ""):
+                with self.subTest(name=name, value=value):
+                    done = self.signed(public, subkey, signing, **{name: value})
+                    self.assertRefused(done, f"{name} is not set in the linux-packages environment")
+
+    def test_it_takes_a_key_and_a_command(self):
+        for args in ((), (REPOSITORY_KEY,)):
+            with self.subTest(args=len(args)):
+                done = run(WITH_LINUX_SIGNING_KEY, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+
+
+class UploadLinuxRepository(unittest.TestCase):
+    ENDPOINT = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
+    SECRETS = {
+        "PACKAGES_R2_ACCESS_KEY_ID": "an access key id",
+        "PACKAGES_R2_SECRET_ACCESS_KEY": "a secret access key",
+        "PACKAGES_R2_ENDPOINT": ENDPOINT,
+    }
+    HASH = "0" * 63
+    # A tree as linux-repository.sh lays it out and sign-linux-repository.sh signs it, by class.
+    PACKAGES = (
+        "deb/pool/main/p/pitboard/pitboard_1.0.0~beta.8_arm64.deb",
+        "deb/pool/main/p/pitboard/pitboard-app_1.0.0~beta.8_arm64.deb",
+        "deb/pool/main/p/pitboard/pitboard-archive-keyring_1.0.0~beta.8_all.deb",
+        "rpm/beta/aarch64/Packages/pitboard-1.0.0~beta.8-1.aarch64.rpm",
+        "rpm/beta/aarch64/Packages/pitboard-app-1.0.0~beta.8-1.aarch64.rpm",
+    )
+    HASHED = (
+        f"deb/dists/beta/main/binary-arm64/by-hash/SHA256/{HASH}1",
+        f"deb/dists/beta/main/binary-amd64/by-hash/SHA256/{HASH}2",
+        f"deb/dists/beta/main/by-hash/SHA256/{HASH}3",
+        f"deb/dists/beta/main/dep11/by-hash/SHA256/{HASH}4",
+        f"rpm/beta/aarch64/repodata/{HASH}5-primary.xml.zst",
+        f"rpm/beta/aarch64/repodata/{HASH}6-appstream.xml.gz",
+        f"rpm/beta/x86_64/repodata/{HASH}7-primary.xml.zst",
+    )
+    INDICES = (
+        "deb/dists/beta/main/binary-arm64/Packages",
+        "deb/dists/beta/main/binary-arm64/Packages.xz",
+        "deb/dists/beta/main/binary-amd64/Packages.gz",
+        "deb/dists/beta/main/Contents-arm64.gz",
+        "deb/dists/beta/main/dep11/Components-arm64.yml",
+        "deb/dists/beta/main/dep11/icons-64x64.tar",
+    )
+    SIGNED = (
+        "deb/dists/beta/Release",
+        "deb/dists/beta/Release.gpg",
+        "deb/dists/beta/InRelease",
+        "rpm/beta/aarch64/repodata/repomd.xml.asc",
+        "rpm/beta/aarch64/repodata/repomd.xml",
+        "rpm/beta/x86_64/repodata/repomd.xml.asc",
+        "rpm/beta/x86_64/repodata/repomd.xml",
+    )
+    SETUP = (
+        "pitboard-archive-keyring.asc",
+        "pitboard-archive-keyring.pgp",
+        "pitboard-beta.repo",
+        "pitboard-beta.sources",
+        "pitboard.pref",
+        "pitboard.repo",
+        "pitboard.sources",
+    )
+    KEPT = "public, max-age=31536000, immutable"
+    # A stand-in for the AWS CLI on PATH that keeps each call's arguments and the credentials it
+    # was given, one JSON line a call, and fails the call STAND_IN_AWS_FAILS counts to.
+    STAND_IN = f"""#!{sys.executable}
+import json, os, sys
+with open(os.environ["STAND_IN_AWS_ASKED"], "a") as asked:
+    asked.write(json.dumps({{
+        "args": sys.argv[1:],
+        "id": os.environ.get("AWS_ACCESS_KEY_ID"),
+        "secret": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        "leaked": sorted(n for n in os.environ if n.startswith("PACKAGES_R2_")),
+    }}) + "\\n")
+with open(os.environ["STAND_IN_AWS_ASKED"]) as asked:
+    calls = len(asked.readlines())
+sys.exit(1 if str(calls) == os.environ.get("STAND_IN_AWS_FAILS") else 0)
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        tools = self.work / "bin"
+        tools.mkdir()
+        (tools / "aws").write_text(self.STAND_IN)
+        (tools / "aws").chmod(0o755)
+        self.asked = self.work / "asked"
+        self.env = {
+            **{n: v for n, v in os.environ.items() if not n.startswith(("PACKAGES_", "AWS_"))},
+            **self.SECRETS,
+            "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+            "STAND_IN_AWS_ASKED": str(self.asked),
+        }
+        self.tree = self.work / "tree"
+        for name in (*self.PACKAGES, *self.HASHED, *self.INDICES, *self.SIGNED, *self.SETUP):
+            path = self.tree / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"{name}\n")
+
+    def uploaded(self, **env):
+        done = subprocess.run(
+            ["sh", UPLOAD_LINUX_REPOSITORY, self.tree],
+            capture_output=True,
+            text=True,
+            env={**self.env, **env},
+        )
+        calls = []
+        if self.asked.exists():
+            calls = [json.loads(line) for line in self.asked.read_text().splitlines()]
+        return done, calls
+
+    # Each call as the file it put and its Cache-Control, each to the same name in the bucket.
+    def puts(self, calls):
+        puts = []
+        for call in calls:
+            args = call["args"]
+            self.assertEqual(args[:2], ["s3", "cp"], args)
+            name = Path(args[2]).relative_to(self.tree).as_posix()
+            self.assertEqual(
+                args[3:],
+                [
+                    f"s3://pitboard-packages/{name}",
+                    "--endpoint-url", self.ENDPOINT,
+                    "--region", "auto",
+                    "--cache-control", args[-2],
+                    "--no-progress",
+                ],
+            )
+            puts.append((name, args[-2]))
+        return puts
+
+    def order(self):
+        done, calls = self.uploaded()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return [name for name, _ in self.puts(calls)]
+
+    def test_files_go_up_before_the_indices_that_name_them(self):
+        classes = (self.PACKAGES, self.HASHED, self.INDICES, self.SIGNED, self.SETUP)
+        steps = [next(i for i, names in enumerate(classes) if name in names) for name in self.order()]
+        self.assertEqual(steps, sorted(steps))
+
+    def test_the_signed_indices_go_up_last(self):
+        order = self.order()
+        self.assertEqual(sorted(order[-len(self.SETUP) :]), sorted(self.SETUP))
+        # A suite's Release before its signatures, and each repomd.xml after its own.
+        self.assertEqual(
+            order[-len(self.SETUP) - len(self.SIGNED) : -len(self.SETUP)],
+            [
+                "deb/dists/beta/Release",
+                "deb/dists/beta/Release.gpg",
+                "deb/dists/beta/InRelease",
+                "rpm/beta/aarch64/repodata/repomd.xml.asc",
+                "rpm/beta/aarch64/repodata/repomd.xml",
+                "rpm/beta/x86_64/repodata/repomd.xml.asc",
+                "rpm/beta/x86_64/repodata/repomd.xml",
+            ],
+        )
+
+    def test_only_what_never_changes_is_kept_a_year(self):
+        done, calls = self.uploaded()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for name, kept in self.puts(calls):
+            with self.subTest(name=name):
+                lasting = name in self.PACKAGES or name in self.HASHED
+                self.assertEqual(kept, self.KEPT if lasting else "no-cache")
+
+    def test_nothing_is_deleted(self):
+        done, calls = self.uploaded()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        names = [name for name, _ in self.puts(calls)]
+        self.assertEqual(
+            sorted(names),
+            sorted((*self.PACKAGES, *self.HASHED, *self.INDICES, *self.SIGNED, *self.SETUP)),
+        )
+        for call in calls:
+            self.assertFalse({"rm", "mv", "sync", "--delete", "--recursive"} & set(call["args"]))
+            self.assertEqual((call["id"], call["secret"]), ("an access key id", "a secret access key"))
+            self.assertEqual(call["leaked"], [])
+
+    def test_a_failed_upload_stops_before_the_indices(self):
+        done, calls = self.uploaded(STAND_IN_AWS_FAILS="2")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(name in self.PACKAGES for name, _ in self.puts(calls)))
+
+    def test_an_unsigned_tree_is_refused(self):
+        for signature in ("deb/dists/beta/InRelease", "deb/dists/beta/Release.gpg",
+                          "rpm/beta/x86_64/repodata/repomd.xml.asc"):
+            with self.subTest(signature=signature):
+                (self.tree / signature).rename(self.work / "kept")
+                done, calls = self.uploaded()
+                (self.work / "kept").rename(self.tree / signature)
+                self.assertEqual(done.returncode, 1, done.stdout)
+                self.assertIn(f"{self.tree}/{signature} is missing", done.stderr)
+                self.assertEqual(calls, [])
+
+    def test_a_missing_secret_or_endpoint_is_named(self):
+        for name in self.SECRETS:
+            for value in (None, ""):
+                with self.subTest(name=name, value=value):
+                    env = {**self.env}
+                    if value is None:
+                        del env[name]
+                    else:
+                        env[name] = value
+                    done = subprocess.run(
+                        ["sh", UPLOAD_LINUX_REPOSITORY, self.tree],
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    self.assertEqual(done.returncode, 1, done.stdout)
+                    self.assertIn(f"{name} is not set in the linux-packages environment", done.stderr)
+                    self.assertFalse(self.asked.exists())
+        for endpoint in (
+            "http://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
+            "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/pitboard-packages",
+            "https://s3.amazonaws.com",
+            "https://0123456789abcdef.r2.cloudflarestorage.com",
+        ):
+            with self.subTest(endpoint=endpoint):
+                done, calls = self.uploaded(PACKAGES_R2_ENDPOINT=endpoint)
+                self.assertEqual(done.returncode, 1, done.stdout)
+                self.assertIn("PACKAGES_R2_ENDPOINT is not an R2 account's endpoint", done.stderr)
+                self.assertEqual(calls, [])
+
+    def test_it_takes_one_argument(self):
+        for args in ((), (self.tree, self.tree)):
+            with self.subTest(args=len(args)):
+                done = run(UPLOAD_LINUX_REPOSITORY, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
+
+
+class LinuxJobs(unittest.TestCase):
+    # release.yml runs on a tag alone, and linux-packages takes deployments from v* tags only, so
+    # what these hold of the workflows' text is what keeps the repository key and the bucket's
+    # token off every pull request and branch.
+    SECRETS = (
+        "PACKAGES_SIGNING_KEY",
+        "PACKAGES_SIGNING_PASSPHRASE",
+        "PACKAGES_R2_ACCESS_KEY_ID",
+        "PACKAGES_R2_SECRET_ACCESS_KEY",
+        "PACKAGES_R2_ENDPOINT",
+    )
+    CACHES = re.compile(
+        r"actions/cache\b|Swatinem/rust-cache|sccache|^\s*cache:\s*(?!\"?false\"?\s*$)\S|--cache-from",
+        re.M,
+    )
+
+    # Each job of a workflow, by name, as the lines of its block.
+    @staticmethod
+    def jobs(workflow):
+        lines = (WORKFLOWS / workflow).read_text().splitlines()
+        start = lines.index("jobs:") + 1
+        jobs, name = {}, None
+        for line in lines[start:]:
+            found = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+            if found:
+                name = found.group(1)
+                jobs[name] = []
+            elif name and (not line.strip() or line.startswith("   ")):
+                jobs[name].append(line)
+        return {name: "\n".join(block) for name, block in jobs.items()}
+
+    @staticmethod
+    def needs(block):
+        found = re.search(r"^    needs:\s*(.+)$", block, re.M)
+        if not found:
+            return []
+        return [n.strip() for n in found.group(1).strip("[] ").split(",") if n.strip()]
+
+    @staticmethod
+    def environment(block):
+        found = re.search(r"^    environment:\s*(\S*)\s*$(?:\n      name:\s*(\S+))?", block, re.M)
+        return found and (found.group(1) or found.group(2))
+
+    def test_only_linux_sign_and_linux_repository_reach_linux_packages(self):
+        reaching = sorted(
+            (workflow.name, job)
+            for workflow in WORKFLOWS.glob("*.yml")
+            for job, block in self.jobs(workflow.name).items()
+            if self.environment(block) == "linux-packages"
+        )
+        self.assertEqual(reaching, [("release.yml", "linux-repository"), ("release.yml", "linux-sign")])
+        text = (WORKFLOWS / "release.yml").read_text()
+        self.assertIn('on:\n  push:\n    tags: ["v*"]\n\n', text)
+        self.assertNotRegex(text, r"(?m)^  (pull_request|workflow_dispatch|workflow_call|schedule)")
+
+    def test_no_job_on_the_linux_signing_path_takes_a_cache(self):
+        jobs = self.jobs("release.yml")
+        self.assertLessEqual({"linux-sign", "linux-repository"}, set(jobs))
+        path, waiting = set(), ["linux-sign", "linux-repository"]
+        while waiting:
+            job = waiting.pop()
+            if job not in path:
+                path.add(job)
+                waiting.extend(self.needs(jobs[job]))
+        self.assertLessEqual({"guard", "build", "linux-build", "linux-sign", "publish"}, path)
+        for job in sorted(path):
+            with self.subTest(job=job):
+                block = jobs[job]
+                self.assertIsNone(self.CACHES.search(block), job)
+                # The action restores main's Cargo cache unless told not to.
+                uncached = r"uses: \./\.github/actions/rust\n\s+with:\n\s+cache: \"?false\"?"
+                self.assertEqual(
+                    block.count("uses: ./.github/actions/rust"), len(re.findall(uncached, block))
+                )
+
+    def test_publish_waits_for_the_signed_packages(self):
+        jobs = self.jobs("release.yml")
+        publish = jobs["publish"]
+        self.assertIn("linux-sign", self.needs(publish))
+        condition = re.search(r"^    if: >-\n((?:      .*\n)+)", publish + "\n", re.M).group(1)
+        condition = " ".join(condition.split())
+        self.assertIn(
+            "((needs.guard.outputs.linux == 'false' && needs.linux-sign.result == 'skipped') || "
+            "needs.linux-sign.result == 'success')",
+            condition,
+        )
+        self.assertIn("pattern: dist-*", publish)
+        uploads = {
+            job: re.findall(r"uses: actions/upload-artifact@\S+.*\n\s+with:\n\s+name: (.+)", block)
+            for job, block in jobs.items()
+        }
+        self.assertEqual(
+            uploads["linux-build"], ["unsigned-linux-${{ matrix.format }}-${{ matrix.arch }}"]
+        )
+        handing = [job for job, names in uploads.items() if any("dist-linux" in n for n in names)]
+        self.assertEqual(handing, ["linux-sign"])
+        self.assertIn("linux-sign", self.needs(jobs["linux-repository"]) + self.needs(publish))
+        self.assertIn("publish", self.needs(jobs["linux-repository"]))
+
+    def test_no_workflow_but_release_names_the_packages_secrets(self):
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            text = workflow.read_text()
+            with self.subTest(workflow=workflow.name):
+                self.assertNotIn("secrets: inherit", text)
+                if workflow.name != "release.yml":
+                    for name in self.SECRETS:
+                        self.assertNotIn(name, text)
+        jobs = self.jobs("release.yml")
+        self.assertLessEqual({"linux-sign", "linux-repository"}, set(jobs))
+        for job, block in jobs.items():
+            named = sorted(name for name in self.SECRETS if name in block)
+            with self.subTest(job=job):
+                if job == "linux-sign":
+                    self.assertEqual(named, ["PACKAGES_SIGNING_KEY", "PACKAGES_SIGNING_PASSPHRASE"])
+                elif job == "linux-repository":
+                    self.assertEqual(named, sorted(self.SECRETS))
+                else:
+                    self.assertEqual(named, [])
 
 
 class ScriptCalls(unittest.TestCase):

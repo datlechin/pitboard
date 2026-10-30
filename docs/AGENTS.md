@@ -68,9 +68,8 @@ on macOS only. Pitboard for Windows is in beta, and only the install pages say s
   `%USERPROFILE%\AppData\Local\Pitboard`." Text that macOS and Linux share is written once,
   followed by an "On Windows," paragraph.
 - What differs by more than a paragraph goes in `<Tabs>`: steps, a picture of the app or a
-  reference section. The app's steps get a `macOS` and a `Windows` tab, and the command line
-  follows once, after the Tabs. Steps that differ on all three systems, such as installing,
-  get a `Linux` tab too.
+  reference section. The app's steps get a `macOS`, a `Windows` and a `Linux` tab, and the
+  command line follows once, after the Tabs.
 - Tab titles are exactly `macOS`, `Windows` and `Linux`, in that order, with a tab only for a
   system whose text differs. Mintlify opens the first tab and keeps one choice for every
   `<Tabs>` on the page.
@@ -170,15 +169,16 @@ and its pages keep the words in this table.
 ## UI and commands
 
 - UI text in bold, exactly as the system shows it, without a trailing ellipsis. The macOS
-  app writes labels in title case and the Windows app in sentence case: **Add Account** on
-  macOS, **Add account** on Windows. Quote UI text with its contraction:
+  and Linux apps write labels in title case and the Windows app in sentence case: **Add
+  Account** on macOS and Linux, **Add account** on Windows. Quote UI text with its contraction:
   **Couldn't Read Accounts**.
-- Mac verbs: choose a menu item; click a button, tab or pane; turn on or turn off a
-  switch; select a row; press a key; enter text. Paths: **Settings** > **General**.
+- Mac verbs, and Linux's: choose a menu item; click a button, tab or pane; turn on or turn
+  off a switch; select a row; press a key; enter text. Paths: **Settings** > **General**, and
+  on Linux **Preferences** > **General**.
 - Windows verbs: select a menu item, button or pane; right-click Pitboard's icon or a row;
   turn on or turn off a switch; press a key; enter text. Paths: **Settings** > **Limits**.
 - Shortcuts spelled out, no bold or code: Command-N and Command-Comma on macOS, Ctrl+N and
-  F5 on Windows.
+  F5 on Windows, Ctrl+N and Ctrl+Comma on Linux.
 - Commands are never verbs: "enrol it with `pitboard enroll`".
 - Code blocks always have a language: `sh` for commands, `powershell` for a command only
   PowerShell runs, `text` for output, `json`, `toml`. No `$` or `PS>` prompt. Commands and

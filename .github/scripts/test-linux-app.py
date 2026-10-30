@@ -15,6 +15,7 @@ DATA = REPO / "apps" / "linux" / "data"
 RELEASES = DATA / "metainfo-releases.py"
 TEMPLATE = DATA / "com.usepitboard.Pitboard.metainfo.xml.in"
 CHECK = REPO / ".github" / "scripts" / "check-linux-app.sh"
+IN_CONTAINER = REPO / "apps" / "linux" / "scripts" / "in-container.sh"
 APP_ID = "com.usepitboard.Pitboard"
 VALIDATORS = ("desktop-file-validate", "appstreamcli")
 SMALL_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -349,6 +350,80 @@ class InstallTreeCheck(unittest.TestCase):
         self.assertEqual(nothing.returncode, 1)
         self.assertIn(f"there is no install tree under {empty}", nothing.stderr)
 
+
+# in-container.sh with stand-ins on PATH for the engine, which writes each call's arguments to a
+# file of their own, and for Cargo.
+class InContainer(unittest.TestCase):
+    ENGINE = """#!/bin/sh
+calls=$(find "$ENGINE_CALLS" -type f | wc -l)
+printf '%s\\0' "$@" >"$ENGINE_CALLS/$((calls + 1))"
+case $1 in
+  create) echo made ;;
+  start) cat >/dev/null ;;
+esac
+"""
+    TARBALL = "pitboard-v1.0.0-beta.7-aarch64-unknown-linux-musl.tar.gz"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.folder.cleanup)
+        cls.tools = Path(cls.folder.name) / "tools"
+        cls.tools.mkdir()
+        for tool, script in (("podman", cls.ENGINE), ("cargo", "#!/bin/sh\n")):
+            (cls.tools / tool).write_text(script, encoding="utf-8")
+            (cls.tools / tool).chmod(0o755)
+
+    def ran(self, rustflags, *arguments):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        work = Path(folder.name)
+        calls = work / "calls"
+        calls.mkdir()
+        env = {name: value for name, value in os.environ.items() if name != "RUSTFLAGS"}
+        env |= {
+            "PATH": f"{self.tools}:{os.environ['PATH']}",
+            "CARGO_HOME": str(work / "cargo"),
+            "ENGINE_CALLS": str(calls),
+        }
+        if rustflags is not None:
+            env["RUSTFLAGS"] = rustflags
+        arguments = [str(work / a) if a in ("out", self.TARBALL) else a for a in arguments]
+        result = subprocess.run(
+            ["sh", IN_CONTAINER, *arguments], input="", capture_output=True, text=True, env=env
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        made = sorted(calls.iterdir(), key=lambda call: int(call.name))
+        return [call.read_text(encoding="utf-8").split("\0")[:-1] for call in made]
+
+    @staticmethod
+    def rustflags(call):
+        given = [call[at + 1] for at, word in enumerate(call) if word == "--env"]
+        return [value for value in given if value.startswith("RUSTFLAGS=")]
+
+    def test_a_check_denies_warnings_whatever_its_caller_sets(self):
+        for rustflags in (None, "-C opt-level=1"):
+            for step in ("lint", "packages-test"):
+                with self.subTest(rustflags=rustflags, step=step):
+                    calls = self.ran(rustflags, "debian-13", step)
+                    (checked,) = [call for call in calls if "apps/linux/scripts/check.sh" in call]
+                    self.assertEqual(self.rustflags(checked), ["RUSTFLAGS=-D warnings"])
+
+    def test_a_build_takes_its_callers_flags_as_a_releases_builds_do(self):
+        for rustflags, given, steps in (
+            (None, [], ("command-line", "deb", "rpm")),
+            ("", [], ("deb",)),
+            ("-C target-cpu=native", ["RUSTFLAGS=-C target-cpu=native"], ("command-line", "deb", "rpm")),
+        ):
+            for step in steps:
+                arguments = {
+                    "command-line": ("debian-13", "command-line", "out"),
+                    "deb": ("debian-13", "deb", self.TARBALL, "out"),
+                    "rpm": ("fedora-43", "rpm", self.TARBALL, "out", "1.0.0-rc1"),
+                }[step]
+                with self.subTest(rustflags=rustflags, step=step):
+                    (made,) = [call for call in self.ran(rustflags, *arguments) if call[0] == "create"]
+                    self.assertEqual(self.rustflags(made), given)
 
 if __name__ == "__main__":
     unittest.main()

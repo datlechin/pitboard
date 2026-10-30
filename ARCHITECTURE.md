@@ -224,14 +224,17 @@ The rest:
 - `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills, and in
   `linux/` the Linux repository's public key, the Debian packages' `debian/` recipe, which
   `build-linux-packages.sh` copies into the source it builds, the RPM packages' spec and
-  rpmlint's filters, and the images the packages' install test builds, one per package manager.
+  rpmlint's filters, and the images the packages' install test builds, one per package manager;
+  the repository's setup files, apt-ftparchive's and appstream-generator's configuration in
+  `repository/`, the images and steps its test builds, and the images the release installs the
+  app from `packages.usepitboard.com` in.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
-- `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
-  `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
-  session bundle, `linux-facts.yml` for the Linux runners and the Linux session bundle,
-  `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and `winsparkle.yml` for new
-  releases of the updaters and the Windows App SDK.
+- `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag
+  and the Linux repository it writes, `conformance.yml` for the registers, `windows-facts.yml`
+  for the Windows runners and the session bundle, `linux-facts.yml` for the Linux runners and the
+  Linux session bundle, `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and
+  `winsparkle.yml` for new releases of the updaters and the Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
 - `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
   `test-windows-app.ps1` and `test-windows-release.ps1`.
@@ -302,10 +305,31 @@ keeps it is in the header of the module named.
 - The app's package needs the floor's libadwaita, GTK and GLib by version, in a deb and in an
   rpm, where the libraries' own sonames name no floor
   (`an_app_without_the_floors_libraries_is_refused`).
+- The Plasma widget's package needs the app of its own version and Plasma 6.4
+  (`a_widget_that_does_not_depend_on_its_own_app_is_refused`,
+  `a_widget_package_that_does_not_need_plasma_6_4_is_refused`).
 - An RPM package is in RPM's format 4, which every RPM of the floor reads, whatever format the
   RPM that built it writes by default (`a_package_in_rpm_format_6_is_refused`).
-- A test installs a deb or an rpm only while it builds a container image, and runs Pitboard's
-  programs there only as uid 1000 with no network (`test-linux-packages.sh`).
+- A test installs a deb or an rpm, or sets the repository up, only while it builds a container
+  image, and runs Pitboard's programs there only as uid 1000 with no network
+  (`test-linux-packages.sh`, `test-linux-repository.sh`).
+- The Linux repository's stable suite never holds a beta or a release candidate
+  (`stable_never_lists_a_beta_or_a_release_candidate`).
+- Nothing the Linux repository serves goes out unverified: an index or an RPM package the
+  committed key does not verify stops the build
+  (`an_index_the_committed_key_does_not_verify_stops_the_build`,
+  `an_unsigned_or_wrongly_signed_rpm_stops_the_signing`).
+- A release ships the Linux packages only after a Linux session, and keeps shipping them once
+  one has: `linux-release.sh` in the guard gives no Linux job without
+  `docs/facts/linux-session.md`, and refuses the release once an earlier one shipped them
+  (`LinuxRelease`).
+- A release's Linux packages build with the Rust flags its other builds take, none, while every
+  check `in-container.sh` runs denies warnings (`InContainer`).
+- Only `linux-sign` and `linux-repository` reach the `linux-packages` environment, and no job on
+  their way takes a cache (`LinuxJobs`). Each signs only with the committed key's subkey at its
+  binding (`with-linux-signing-key.sh`, `LinuxSigningKey`).
+- The bucket only gains files, each index after the files it names and the signed indices last
+  (`upload-linux-repository.sh`, `UploadLinuxRepository`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`
@@ -890,6 +914,8 @@ on.
   Claude is closed, under an advisory lock on the folder, and deletes nothing of Claude's.
 - Pitboard and a running app meet at the process list and the app's `OtherApps`. The core
   tells that Claude runs by the bundle each program runs from, and neither starts nor quits it.
+- Pitboard and a Linux package manager meet at `packages.usepitboard.com`, which only
+  `release.yml` writes, and at the release's packages.
 - The code and the release meet at a `v` tag, which `.github/workflows/release.yml` turns
   into a release. [RELEASING.md](RELEASING.md) has the procedure.
 

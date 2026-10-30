@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  ahead,
   fileRows,
   formatSize,
+  linuxApp,
+  linuxRelease,
   parseSums,
   readPublished,
   readRelease,
   readStars,
-  windowsAhead,
   windowsMsi,
   windowsRelease,
   windowsSigned,
@@ -74,6 +76,14 @@ const installers = (version: string) =>
   made(version, [
     `Pitboard-v${version}-windows-x64.msi`,
     `Pitboard-v${version}-windows-arm64.msi`,
+    "SHA256SUMS",
+  ]);
+const linuxPackages = (
+  version: string,
+  machines = ["amd64.deb", "arm64.deb", "x86_64.rpm", "aarch64.rpm"],
+) =>
+  made(version, [
+    ...machines.flatMap((m) => [`pitboard-app-v${version}-${m}`, `pitboard-v${version}-${m}`]),
     "SHA256SUMS",
   ]);
 
@@ -371,6 +381,112 @@ test("lists a beta's files in order, each with the platforms it serves", async (
   );
 });
 
+test("describes every Linux package and its bill of materials, and SHA256SUMS names them", async () => {
+  const v = "1.0.0-beta.8";
+  const packages = [
+    `pitboard-app-v${v}-amd64.deb`,
+    `pitboard-app-v${v}-arm64.deb`,
+    `pitboard-app-v${v}-x86_64.rpm`,
+    `pitboard-app-v${v}-aarch64.rpm`,
+    `pitboard-v${v}-amd64.deb`,
+    `pitboard-v${v}-arm64.deb`,
+    `pitboard-v${v}-x86_64.rpm`,
+    `pitboard-v${v}-aarch64.rpm`,
+  ];
+  const keyring = `pitboard-archive-keyring-v${v}-all.deb`;
+  const widget = [
+    `pitboard-plasma-widget-v${v}-all.deb`,
+    `pitboard-plasma-widget-v${v}-noarch.rpm`,
+  ];
+  const release = made(v, [
+    `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
+    ...packages,
+    ...packages.map((name) => `${name}.cdx.json`),
+    ...widget,
+    keyring,
+    "install.sh",
+    "SHA256SUMS",
+  ]);
+  const rows = fileRows(release);
+  assert.deepEqual(
+    rows.map((row) => [row.asset.name, row.forHtml, row.bom?.name ?? null, row.platforms]),
+    [
+      [
+        `pitboard-app-v${v}-amd64.deb`,
+        "The app, a Debian package for x86_64",
+        `pitboard-app-v${v}-amd64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-arm64.deb`,
+        "The app, a Debian package for aarch64",
+        `pitboard-app-v${v}-arm64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-x86_64.rpm`,
+        "The app, an RPM package for x86_64",
+        `pitboard-app-v${v}-x86_64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-aarch64.rpm`,
+        "The app, an RPM package for aarch64",
+        `pitboard-app-v${v}-aarch64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [widget[0], "The Plasma widget, a Debian package", null, ["linux"]],
+      [widget[1], "The Plasma widget, an RPM package", null, ["linux"]],
+      [
+        `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
+        "Command line, Linux on x86_64",
+        null,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-amd64.deb`,
+        "Command line, a Debian package for x86_64",
+        `pitboard-v${v}-amd64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-arm64.deb`,
+        "Command line, a Debian package for aarch64",
+        `pitboard-v${v}-arm64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-x86_64.rpm`,
+        "Command line, an RPM package for x86_64",
+        `pitboard-v${v}-x86_64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-aarch64.rpm`,
+        "Command line, an RPM package for aarch64",
+        `pitboard-v${v}-aarch64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [keyring, "The repository's key, a Debian package", null, ["linux"]],
+      ["install.sh", "The install script", null, ["macos", "linux"]],
+      [
+        "SHA256SUMS",
+        "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>",
+        null,
+        ["macos", "windows", "linux"],
+      ],
+    ],
+  );
+  const without = fileRows(made(v, ["install.sh", "SHA256SUMS"]));
+  assert.equal(
+    without.at(-1)?.forHtml,
+    "Checksums of the apps, the command line archives and <code>install.sh</code>",
+  );
+  for (const name of [`pitboard-v${v}-riscv64.deb`, `pitboard-plasma-widget-v${v}-amd64.deb`]) {
+    assert.throws(() => fileRows(made(v, [name, "SHA256SUMS"])), /does not describe/);
+  }
+});
+
 test("gives each update feed to its own platform", async () => {
   const r = await latest();
   const feed = { name: "appcast-windows.xml", size: 1, sha256: null, url: "" };
@@ -398,14 +514,40 @@ test("takes Windows files from the latest release once it has both installers, a
   assert.throws(() => windowsRelease(r, []), /no published release has the Windows installers/);
 });
 
-test("says macOS and Linux stay behind only while Windows takes a beta", async () => {
+test("takes Linux files from the latest release once it has the app's packages, and until then from the newest published beta that has them", async () => {
   const r = await latest();
+  assert.equal(linuxRelease(r, [await beta()]), r);
+  assert.equal(linuxRelease(r, []), r);
+  const packaged = linuxPackages("1.0.0-beta.8");
+  const later = linuxPackages("1.0.0-beta.9");
+  assert.equal(linuxRelease(r, [await beta(), packaged]), packaged);
+  assert.equal(linuxRelease(r, [later, packaged]), later);
+  const half = linuxPackages("1.0.0-beta.10", ["amd64.deb", "x86_64.rpm"]);
+  assert.equal(linuxRelease(r, [packaged, half]), packaged);
+  const full = linuxPackages("1.0.0");
+  assert.equal(linuxRelease(full, [linuxPackages("1.1.0-beta.1")]), full);
+});
+
+test("offers the Linux app only from a release with its packages for both machines", async () => {
+  assert.equal(linuxApp(await latest()), false);
+  assert.equal(linuxApp(linuxPackages("1.0.0-beta.8")), true);
+  assert.equal(linuxApp(linuxPackages("1.0.0-beta.8", ["amd64.deb", "x86_64.rpm"])), false);
+});
+
+test("says which systems take betas while macOS stays behind, and nothing once none does", async () => {
+  const r = await latest();
+  const b = await beta();
   assert.equal(
-    windowsAhead(windowsRelease(r, [await beta()]), r),
+    ahead(r, { macos: r, windows: b, linux: r }),
     "Until 1.0.0, Windows gets betas, and macOS and Linux get 0.15.1.",
   );
+  const packaged = linuxPackages("1.0.0-beta.8");
+  assert.equal(
+    ahead(r, { macos: r, windows: b, linux: packaged }),
+    "Until 1.0.0, Windows and Linux get betas, and macOS gets 0.15.1.",
+  );
   const full = installers("1.0.0");
-  assert.equal(windowsAhead(windowsRelease(full, [installers("1.1.0-beta.1")]), full), null);
+  assert.equal(ahead(full, { macos: full, windows: full, linux: full }), null);
 });
 
 test("finds the Windows installer and zip of each architecture", async () => {

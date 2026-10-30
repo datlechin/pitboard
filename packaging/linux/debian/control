@@ -54,6 +54,21 @@ Description: app that switches AI coding tools between your accounts
  .
  This package holds the desktop app.
 
+Package: pitboard-plasma-widget
+Architecture: all
+# Plasma 6.4's org.kde.plasma.workspace.dbus is the first to follow the app's D-Bus feed.
+Depends:
+ pitboard-app (= ${source:Version}),
+ plasma-workspace (>= 4:6.4),
+ ${misc:Depends},
+Description: KDE Plasma widget that switches AI coding tools between your accounts
+ Pitboard switches Claude Code and OpenAI's Codex CLI between your own
+ accounts without signing you out, and shows what each account has left of
+ its limits.
+ .
+ This package holds the widget for KDE Plasma 6.4 or later, which shows the
+ account in use and its limits, and switches accounts through the app.
+
 Package: pitboard-archive-keyring
 Architecture: all
 Multi-Arch: foreign

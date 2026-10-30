@@ -5,9 +5,14 @@
 # image's uid 1000, on no network. With no step, the steps the distribution's CI job runs.
 #
 # in-container.sh <distro> command-line <out> and in-container.sh <distro> <deb|rpm> <command
-# line tarball> <out> run the one step, which writes files for this machine: the engine copies
-# the tarball in and the step's files out to <out>, and `deb` and `rpm` read the source tar on
-# this script's stdin, as `git archive HEAD |` writes it.
+# line tarball> <out> [<version>] run the one step, which writes files for this machine: the
+# engine copies the tarball in and the step's files out to <out>, and `deb` and `rpm` read the
+# source tar on this script's stdin, as `git archive HEAD |` writes it, and check the packages as
+# the release <version>, Cargo.toml's unless given.
+#
+# A check denies warnings, as CI's jobs do. command-line, deb and rpm build with this script's
+# RUSTFLAGS, none unless it is set, so that a release's packages are built as its other builds
+# are.
 #
 # A container sees the repository read only at /src, this machine's Cargo registry read only,
 # and the volume PITBOARD_TARGET_VOLUME names, pitboard-linux-app-target unless set, which keeps
@@ -22,7 +27,7 @@ repo=$(cd "$here/../../.." && pwd)
 
 usage() {
   echo "usage: in-container.sh <ubuntu-26.04|debian-13|fedora-43|fedora-44> [step... |" \
-    "command-line <out> | <deb|rpm> <command line tarball> <out>]" >&2
+    "command-line <out> | <deb|rpm> <command line tarball> <out> [<version>]]" >&2
   exit 2
 }
 
@@ -40,7 +45,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 case ${1-} in
   command-line) [ "$#" -eq 2 ] || usage ;;
-  deb | rpm) [ "$#" -eq 3 ] || usage ;;
+  deb | rpm) [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage ;;
   "")
     case $distro in
       ubuntu-26.04) set -- lint test ui release ;;
@@ -52,6 +57,10 @@ case ${1-} in
       *) set -- lint test widget ;;
     esac
     ;;
+esac
+case $1 in
+  command-line | deb | rpm) rustflags=${RUSTFLAGS-} ;;
+  *) rustflags='-D warnings' ;;
 esac
 volume=${PITBOARD_TARGET_VOLUME:-pitboard-linux-app-target}
 if command -v podman >/dev/null 2>&1; then
@@ -94,13 +103,16 @@ inside() {
   if [ -n "${CARGO_BUILD_JOBS-}" ]; then
     set -- --env "CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS" "$@"
   fi
+  if [ -n "$rustflags" ]; then
+    set -- --env "RUSTFLAGS=$rustflags" "$@"
+  fi
   set -- --user 1000:1000 \
     --mount "type=bind,src=$repo,dst=/src,readonly" \
     --mount type=tmpfs,dst=/cargo,tmpfs-mode=1777 \
     --mount "type=bind,src=$registry,dst=/cargo/registry,readonly" \
     --mount "type=volume,src=$volume,dst=/target" \
     --workdir /src --env CARGO_HOME=/cargo --env "CARGO_TARGET_DIR=/target/$distro" \
-    --env CARGO_INCREMENTAL=0 --env "RUSTFLAGS=-D warnings" \
+    --env CARGO_INCREMENTAL=0 \
     --env HOME=/tmp/home --env XDG_CONFIG_HOME=/tmp/home/.config \
     --env XDG_DATA_HOME=/tmp/home/.local/share --env XDG_CACHE_HOME=/tmp/home/.cache \
     --env XDG_STATE_HOME=/tmp/home/.local/state --env XDG_RUNTIME_DIR=/tmp/runtime \
@@ -111,15 +123,16 @@ inside() {
   esac
 }
 
-# handed <step> <out> [<file>]: the step in a fresh container that is given the file, in /tmp,
-# and this script's stdin, and whose /tmp/out the engine copies to <out> after, where a failed
-# step leaves one, so that what it refused can be read.
+# handed <step> <out> [<file> [<version>]]: the step in a fresh container that is given the file,
+# in /tmp, and the version, and this script's stdin, and whose /tmp/out the engine copies to
+# <out> after, where a failed step leaves one, so that what it refused can be read.
 handed() {
   step=$1
   out=$2
   file=${3-}
+  version=${4-}
   if [ -n "$file" ]; then
-    set -- "$step" "/tmp/$(basename "$file")" /tmp/out
+    set -- "$step" "/tmp/$(basename "$file")" /tmp/out ${version:+"$version"}
   else
     set -- "$step" /tmp/out
   fi
@@ -145,7 +158,7 @@ case $1 in
     ;;
   deb | rpm)
     echo "in-container.sh: $distro $1" >&2
-    handed "$1" "$3" "$2"
+    handed "$1" "$3" "$2" ${4:+"$4"}
     ;;
   *)
     for step in "$@"; do

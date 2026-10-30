@@ -2,19 +2,21 @@
 import Base from "../layouts/Base.astro";
 import Block from "../components/Block.astro";
 import CommandBox from "../components/CommandBox.astro";
+import CommandRows from "../components/CommandRows.astro";
 import Disclosure from "../components/Disclosure.astro";
 import DownloadButton from "../components/DownloadButton.astro";
 import Part from "../components/Part.astro";
 import PlatformTabs from "../components/PlatformTabs.astro";
-import { attestCommand, commands, windowsWays, type Command } from "../data/commands.ts";
+import { attestCommand, commands, linuxWays, windowsWays, type Command } from "../data/commands.ts";
 import { DOCS } from "../data/site.ts";
 import { escapeHtml, longDate } from "../lib/changelog.ts";
 import { siteData } from "../lib/data.ts";
 import {
+  ahead,
   appZip,
   fileRows,
   formatSize,
-  windowsAhead,
+  linuxApp,
   windowsMsi,
   windowsZip,
   type Asset,
@@ -68,7 +70,16 @@ const windowsStatus = !windows.prerelease
   : windowsSigned
     ? " Pitboard for Windows is in beta."
     : " Pitboard for Windows is in beta, and its files are not signed.";
-const ahead = windowsAhead(windows, downloads.macos.release);
+const early = ahead(downloads.macos.release, {
+  macos: downloads.macos.release,
+  windows,
+  linux: downloads.linux.release,
+});
+const aheadOn = (p: Platform) =>
+  early && downloads[p].release.version !== downloads.macos.release.version ? ` ${early}` : "";
+const linux = downloads.linux.release;
+const linuxHasApp = linuxApp(linux);
+const repository = linuxWays(linux);
 // Cells written as one string: on a phone their text follows a label drawn by CSS, so a space
 // from the template's line breaks would show.
 const none = '<span class="text-muted" data-none>None</span>';
@@ -102,7 +113,11 @@ const jsonLd = [application(Astro.site!, downloads)];
 
 <Base
   title="Download Pitboard for macOS, Windows and Linux"
-  description="Download the Pitboard app for macOS and Windows, and the command line for macOS, Windows and Linux."
+  description={
+    linuxHasApp
+      ? "Download the Pitboard app and its command line for macOS, Windows and Linux."
+      : "Download the Pitboard app for macOS and Windows, and the command line for macOS, Windows and Linux."
+  }
   current="download"
   path="/download"
   image="download"
@@ -176,7 +191,7 @@ const jsonLd = [application(Astro.site!, downloads)];
         <h2 class={panelHead}>{platformNames.windows}</h2>
         <div class={versionLine}>
           <p class="max-w-[40em] text-pretty">
-            {released("windows")}{windowsStatus}{ahead && ` ${ahead}`}
+            {released("windows")}{windowsStatus}{aheadOn("windows")}
           </p>
           <p><a href={`/changelog#v${windows.version}`}>Release notes</a></p>
         </div>
@@ -238,25 +253,48 @@ const jsonLd = [application(Astro.site!, downloads)];
       >
         <h2 class={panelHead}>{platformNames.linux}</h2>
         <div class={versionLine}>
-          <p>{released("linux")}</p>
-          <p><a href={`/changelog#v${downloads.linux.release.version}`}>Release notes</a></p>
+          <p class="max-w-[40em] text-pretty">
+            {released("linux")} Pitboard for Linux was run with real logins on GNOME and KDE Plasma
+            on 30 October 2026.{aheadOn("linux")}
+          </p>
+          <p><a href={`/changelog#v${linux.version}`}>Release notes</a></p>
         </div>
         <div class={columns}>
+          {linuxHasApp && <section class={column} aria-labelledby="linux-app-title">
+            <h3 class={head} id="linux-app-title">App</h3>
+            <div class="mt-7">
+              <p class={body}>
+                The app needs Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed,
+                and installs with its command line from Pitboard's repository:
+              </p>
+              <CommandRows
+                class="mt-5"
+                heading="System"
+                rows={[
+                  ["On Debian and Ubuntu", repository.apt],
+                  ["On Fedora", repository.dnf],
+                  ["On openSUSE", repository.zypper],
+                ]}
+              />
+              <p class:list={[body, "mt-5"]}>
+                Before you install,
+                <a href={`${DOCS}/install/linux-repository`}>check the repository's key</a>.
+              </p>
+            </div>
+          </section>}
           <section class={column} aria-labelledby="linux-cli-title">
             <h3 class={head} id="linux-cli-title">Command line</h3>
             <div class="mt-7">
               <p class={body}>
-                The app runs on macOS and Windows, so on Linux, install the command line:
+                {linuxHasApp
+                  ? "For the command line alone, run the install script:"
+                  : "The app runs on macOS and Windows, so on Linux, install the command line:"}
               </p>
               <CommandBox class="mt-4" command={commands.installScript} />
               <p class:list={[body, "mt-5"]}>
                 The script puts the command line of the most recent full release in
                 <code>~/.local/bin</code>, and you can
                 <a href={`${DOCS}/install/verify#check-the-install-script`}>check it first</a>.
-              </p>
-              <p class:list={[body, "mt-4"]}>
-                On Linux, Pitboard builds and passes its tests but has not been run with real
-                logins.
               </p>
               <p class:list={[body, lead]}>Or install it with Homebrew:</p>
               <CommandBox class="mt-2" command={commands.brewCli} />
@@ -272,33 +310,7 @@ const jsonLd = [application(Astro.site!, downloads)];
         flush
       >
         {ways.map(({ on, shell, rows }) => <Part on={on}>
-          <table class="block w-full border-collapse" role="table">
-            <thead class="sr-only" role="rowgroup">
-              <tr class="block" role="row">
-                <th class="block p-0" scope="col" role="columnheader">Way</th>
-                <th class="block p-0" scope="col" role="columnheader">Command</th>
-              </tr>
-            </thead>
-            <tbody class="block" role="rowgroup">
-              {rows.map(([way, lines], i) => <tr
-                class:list={["block", { "mt-5": i > 0 }]}
-                role="row"
-              >
-                <th
-                  class="mb-2 block p-0 text-left text-note/[1.5] font-normal text-fg"
-                  scope="row"
-                  role="rowheader"
-                >
-                  {way}
-                </th>
-                <td class="block space-y-2 p-0" role="cell">
-                  {lines.map((command) => (
-                    <CommandBox command={command} shell={shell} />
-                  ))}
-                </td>
-              </tr>)}
-            </tbody>
-          </table>
+          <CommandRows heading="Way" rows={rows} shell={shell} />
         </Part>)}
       </Disclosure>
     </div>
@@ -438,7 +450,15 @@ const jsonLd = [application(Astro.site!, downloads)];
           )}
         </Part>
         <Part class="mt-7 max-w-measure text-pretty" on={["linux"]}>
-          <p>Linux files are not signed.</p>
+          {linuxHasApp ? (
+            <p>
+              Each RPM package is signed with Pitboard's repository key, as the
+              <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says, and
+              other Linux files are not signed.
+            </p>
+          ) : (
+            <p>Linux files are not signed.</p>
+          )}
         </Part>
         <p>The docs <a href={`${DOCS}/install/verify`}>explain each check</a>.</p>
       </div>

@@ -5,3 +5,7 @@
 # every Linux whatever its C library, as install.sh installs it too. Rust's
 # aarch64-unknown-linux-musl target links it at a fixed address, its x86_64 one as static-pie.
 addFilter("^pitboard\.\w+: E: (statically-linked-binary|position-independent-executable-suggested) /usr/bin/pitboard$")
+
+# The Plasma widget's package holds the widget's QML and its licence. What the widget does is the
+# app's manual page and docs.usepitboard.com's to say, as the Debian package leaves it.
+addFilter("^pitboard-plasma-widget\.noarch: E: no-documentation$")

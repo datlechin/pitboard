@@ -36,6 +36,7 @@
         "pages": [
           "install",
           "install/script",
+          "install/linux-repository",
           "install/other-ways",
           "install/from-another-switcher",
           "install/verify",

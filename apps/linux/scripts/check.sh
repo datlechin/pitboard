@@ -20,11 +20,15 @@
 #                             need Plasma 6.4's QML modules, the pictures kept as ui keeps its own
 #   command-line <out>        the command line built for musl and packed into <out> as a
 #                             release builds and packs it
-#   deb <tarball> <out>       the Debian packages built into <out> from the source tar on stdin
+#   deb <tarball> <out> [<version>]
+#                             the Debian packages built into <out> from the source tar on stdin
 #                             and the command line tarball, then check-linux-packages.sh on them
-#   rpm <tarball> <out>       the same for the RPM packages
+#                             as the release <version>, Cargo.toml's unless given: a release
+#                             candidate's tag goes beyond it
+#   rpm <tarball> <out> [<version>]
+#                             the same for the RPM packages
 #   packages-test             test-linux-packages.py, with the packaging tools of this system's
-#                             format, Debian's or Fedora's
+#                             format, Debian's or Fedora's, and on Fedora rpmsign's
 #
 # Meson's build folder and its install tree are `meson` and `destdir` in Cargo's target folder.
 # The build folder holds Cargo's release target, so a run sets it up again and never removes it.
@@ -37,7 +41,7 @@ target=${CARGO_TARGET_DIR:-$repo/target}
 usage() {
   echo "usage: check.sh <lint | test [<archive> <folder>] | ui [<archive> <folder>] |" \
     "archive <file> | release | floor | scripts | widget | command-line <out> |" \
-    "<deb|rpm> <tarball> <out> | packages-test>" >&2
+    "<deb|rpm> <tarball> <out> [<version>] | packages-test>" >&2
   exit 2
 }
 
@@ -122,9 +126,9 @@ case $step in
       "pitboard-v$(manifest_version)-$triple" "$1"
     ;;
   deb | rpm)
-    [ "$#" -eq 2 ] || usage
+    [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || usage
     sh .github/scripts/build-linux-packages.sh "$step" "$1" "$2"
-    sh .github/scripts/check-linux-packages.sh "$step" "$2" "$1" "$(manifest_version)"
+    sh .github/scripts/check-linux-packages.sh "$step" "$2" "$1" "${3:-$(manifest_version)}"
     ;;
   packages-test)
     [ "$#" -eq 0 ] || usage
@@ -132,7 +136,7 @@ case $step in
     . /etc/os-release
     case $ID in
       debian) tools='dpkg dpkg-deb lintian gpg' ;;
-      fedora) tools='rpm rpmbuild rpmlint rpm2archive' ;;
+      fedora) tools='rpm rpmbuild rpmlint rpm2archive rpmsign rpmkeys gpg' ;;
       *)
         echo "check.sh packages-test runs on Debian or Fedora, not $ID" >&2
         exit 2

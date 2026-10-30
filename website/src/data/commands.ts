@@ -72,6 +72,54 @@ export function windowsWays(release: { version: string; prerelease: boolean }) {
   } satisfies Record<string, Command | Command[] | null>;
 }
 
+// A path or URL that may break after each slash, its last part never.
+function slashed(path: string): string {
+  const [scheme, rest] = path.includes("://") ? path.split("://") : [null, path];
+  const parts = rest.split("/");
+  const last = parts.pop();
+  return `${scheme ? `${scheme}://<wbr>` : ""}${parts.map((p) => `${p}/<wbr>`).join("")}<span class="${word}">${last}</span>`;
+}
+
+const PACKAGES = "https://packages.usepitboard.com";
+
+// sudo curl, saving a file the repository serves where the system reads it.
+function fetched(to: string, file: string): Command {
+  return {
+    copy: `sudo curl -fsSL -o ${to} ${PACKAGES}/${file}`,
+    html: `sudo curl -fsSL -o <wbr>${slashed(to)} <wbr>${slashed(`${PACKAGES}/${file}`)}`,
+  };
+}
+
+const said = (copy: string): Command => ({ copy, html: copy });
+
+// The repository's beta channel until a full release has the Linux app, which stable then holds.
+export function linuxWays(release: { prerelease: boolean }) {
+  const setup = release.prerelease ? "pitboard-beta" : "pitboard";
+  return {
+    apt: [
+      fetched("/usr/share/keyrings/pitboard-archive-keyring.pgp", "pitboard-archive-keyring.pgp"),
+      fetched(`/etc/apt/sources.list.d/${setup}.sources`, `${setup}.sources`),
+      fetched("/etc/apt/preferences.d/pitboard.pref", "pitboard.pref"),
+      said("sudo apt update"),
+      said("sudo apt install pitboard-app"),
+    ],
+    dnf: [
+      {
+        copy: `sudo dnf config-manager addrepo --from-repofile=${PACKAGES}/${setup}.repo`,
+        html: `sudo dnf config-manager <wbr>addrepo <wbr>--from-repofile=<wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
+      },
+      said("sudo dnf install pitboard-app"),
+    ],
+    zypper: [
+      {
+        copy: `sudo zypper addrepo --refresh ${PACKAGES}/${setup}.repo`,
+        html: `sudo zypper addrepo <wbr>--refresh <wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
+      },
+      said("sudo zypper install pitboard-app"),
+    ],
+  } satisfies Record<string, Command[]>;
+}
+
 export function attestCommand(file: string): Command {
   const dot = file.lastIndexOf(".");
   const [stem, ext] = [file.slice(0, dot), file.slice(dot)];

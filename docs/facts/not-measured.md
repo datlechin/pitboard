@@ -238,3 +238,43 @@ Mac. Not measured:
 
 - An x86_64 build or install of either format. rpmlint's verdict on the x86_64 command line was
   read from an rpm `rpmbuild --target x86_64` made of the released binary.
+
+## The Linux repository
+
+Every build, signature and setup in [the repository's facts](linux-packages.md#the-repository) is
+arm64, in Docker on a Mac, with keys a test made. Not measured:
+
+- `test-linux-repository.sh` on x86_64, under podman, which it prefers and GitHub's Ubuntu
+  images carry, or as CI's `linux-packaging-repository` job, which runs only once
+  `linux-packaging` passes.
+- Whether GNOME Software and Plasma Discover list Pitboard, with its icon, from the catalog: on
+  Debian 13 and Ubuntu 26.04, where gnome-software does not bring apt-config-icons and Discover
+  does, on Fedora through PackageKit's dnf backend, and on Tumbleweed. The Linux session machines
+  measure it once a release has written the repository.
+- What dnf and zypper do once the first binding of an extended signing subkey expires, which no
+  test reaches before its date. Both kept the copy they first imported once the extended key
+  signed, and `test-linux-repository.sh` prints its expiry. libdnf5 5.2.18.0's expired-pgp-keys
+  plugin offers to remove an expired key before a transaction, so that `gpgkey=` imports it
+  again, and libzypp's changelog for 17.25.4 says "Fix update of gpg keys with elongated expire
+  date (bsc#1179222)"; neither has run on this key.
+- What apt, dnf5 and zypper do with indices and rpms a new signing subkey signs, once
+  RELEASING.md's Replace the signing subkey revokes the old one, and how each takes the key with
+  the new subkey when it is fetched again. `test-linux-repository.sh` measured only indices
+  another key signed: apt and dnf5 kept the ones they had, and zypper refused them.
+- The real key's signatures, and `packages.usepitboard.com` serving the tree: no release has
+  written it. Until the first one does:
+  - which `Cache-Control` the zone honours for R2 behind `packages.usepitboard.com`, whether it
+    caches a file without an extension, `InRelease` and `Packages` among them, and how soon a
+    `no-cache` index that changed is served;
+  - whether R2 takes AWS CLI 2.38.1's upload, `aws-chunked` with its
+    `x-amz-checksum-crc64nvme` trailer ([the release](linux-packages.md#r2-and-the-aws-cli)),
+    which R2's S3 page neither lists nor refuses, and whether it then serves each object
+    without that `Content-Encoding`.
+- The install docs' commands on x86_64, on a desktop install rather than a container image, and
+  against `packages.usepitboard.com` with the real key's signatures
+  ([the install docs](linux-packages.md#the-install-docs)). Among them whether `curl` and `gpg`
+  come with a desktop install of Debian 13 and Ubuntu 26.04, and how long zypper keeps indices
+  before `zypper dup` fetches them again.
+- Every Linux job of `release.yml`: none has run, and their steps ran on the Mac alone
+  ([the release](linux-packages.md#the-release)). Among them a `docker://` step in a job that
+  runs in a container, which the upload is, and the rpm build of an rc.

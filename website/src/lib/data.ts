@@ -5,6 +5,7 @@ import { highlights } from "../data/highlights.ts";
 import { WINDOWS_SIGNED_FROM } from "../data/site.ts";
 import { parseChangelog, plainText, renderInline, type Version } from "./changelog.ts";
 import {
+  linuxRelease,
   readPublished,
   readRelease,
   readStars,
@@ -45,7 +46,8 @@ export interface Download {
 
 export interface SiteData {
   versions: Version[];
-  // macOS and Linux files come from the latest release, Windows files from windowsRelease
+  // macOS files come from the latest release, Windows and Linux files from windowsRelease and
+  // linuxRelease
   downloads: Record<Platform, Download>;
   windowsSigned: boolean;
   stars: number | null;
@@ -89,10 +91,11 @@ async function load(): Promise<SiteData> {
   );
   const versions = shown(all, latest.version, new Set(betas.keys()));
   const windows = download(windowsRelease(latest, betas.values()));
+  const linux = download(linuxRelease(latest, betas.values()));
   const stars = await readStars({ fetch, token, offline, log });
   return {
     versions,
-    downloads: { macos, windows, linux: macos },
+    downloads: { macos, windows, linux },
     windowsSigned: windowsSigned(windows.release, WINDOWS_SIGNED_FROM),
     stars,
   };
