@@ -272,9 +272,12 @@ const RELEASE_FILE = /\/releases\/download\/v(\d+\.\d+\.\d+(?:-beta\.\d+)?)\/([^
 const INSTALLER = { macos: /-macos\.zip$/, windows: /-windows-(?:x64|arm64)\.msi$/ };
 const WINDOWS_FILE =
   /-windows-(?:x64|arm64)\.msi(?:\.cdx\.json)?$|-pc-windows-msvc\.zip(?:\.cdx\.json)?$|^appcast-windows\.xml$/;
+const LINUX_FILE = /-unknown-linux-musl\.tar\.gz(?:\.cdx\.json)?$|\.(?:deb|rpm)(?:\.cdx\.json)?$/;
+// listed under more than one system
+const SHARED_FILES = ["SHA256SUMS", "install.sh"];
 
-// macOS and Linux files come from the newest full release on /changelog, Windows files from it or
-// from a beta /changelog shows above it, and each SHA256SUMS from one of the two.
+// macOS files come from the newest full release on /changelog, Windows and Linux files from it or
+// from a beta /changelog shows above it, and each shared file from a version one of them names.
 export function checkVersions(pages) {
   const problems = [];
   const links = [...pages.values()].flatMap((p) =>
@@ -284,35 +287,39 @@ export function checkVersions(pages) {
     }),
   );
   const versionsOf = (want) => [...new Set(links.filter(want).map((l) => l.version))];
-  const isSums = (l) => l.file === "SHA256SUMS";
-  const isWindows = (l) => WINDOWS_FILE.test(l.file);
-  const macLinux = versionsOf((l) => !isSums(l) && !isWindows(l));
-  const windows = versionsOf(isWindows);
+  const early = [
+    ["Windows", versionsOf((l) => WINDOWS_FILE.test(l.file))],
+    ["Linux", versionsOf((l) => LINUX_FILE.test(l.file))],
+  ];
+  const macos = versionsOf(
+    (l) => !SHARED_FILES.includes(l.file) && !WINDOWS_FILE.test(l.file) && !LINUX_FILE.test(l.file),
+  );
 
   const articles = (pages.get("changelog.html")?.all ?? [])
     .filter((e) => e.tag === "article" && /^v\d+\.\d+\.\d+(?:-beta\.\d+)?$/.test(e.attrs.id ?? ""))
     .map((e) => e.attrs.id.slice(1));
   const at = articles.findIndex((v) => !v.includes("-"));
-  const newest = articles[at] ?? macLinux[0];
+  const newest = articles[at] ?? macos[0];
   const above = articles.slice(0, Math.max(at, 0));
 
-  if (macLinux.length !== 1)
-    problems.push(
-      `macOS and Linux downloads name ${macLinux.length} versions: ${macLinux.join(", ")}`,
-    );
-  else if (macLinux[0] !== newest)
-    problems.push(
-      `/changelog starts at ${newest}, the macOS and Linux downloads at ${macLinux[0]}`,
-    );
-  if (windows.length > 1)
-    problems.push(`Windows downloads name ${windows.length} versions: ${windows.join(", ")}`);
-  else if (windows.length === 1 && windows[0] !== newest && !above.includes(windows[0]))
-    problems.push(
-      `Windows downloads name ${windows[0]}, neither ${newest} nor a beta /changelog shows above it`,
-    );
-  for (const v of versionsOf(isSums)) {
-    if (!macLinux.includes(v) && !windows.includes(v))
-      problems.push(`SHA256SUMS links name ${v}, which no other download names`);
+  if (macos.length !== 1)
+    problems.push(`macOS downloads name ${macos.length} versions: ${macos.join(", ")}`);
+  else if (macos[0] !== newest)
+    problems.push(`/changelog starts at ${newest}, the macOS downloads at ${macos[0]}`);
+  for (const [system, versions] of early) {
+    if (versions.length > 1)
+      problems.push(`${system} downloads name ${versions.length} versions: ${versions.join(", ")}`);
+    else if (versions.length === 1 && versions[0] !== newest && !above.includes(versions[0]))
+      problems.push(
+        `${system} downloads name ${versions[0]}, neither ${newest} nor a beta /changelog shows above it`,
+      );
+  }
+  const named = [macos, ...early.map(([, versions]) => versions)].flat();
+  for (const file of SHARED_FILES) {
+    for (const v of versionsOf((l) => l.file === file)) {
+      if (!named.includes(v))
+        problems.push(`${file} links name ${v}, which no other download names`);
+    }
   }
   for (const { version, text } of links.filter((l) => l.text.startsWith("Download for"))) {
     const beta = version.includes("-");
