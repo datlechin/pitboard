@@ -24,7 +24,7 @@ import { sessions } from "../data/sessions.ts";
 import { DOCS, REPO, TAGLINE } from "../data/site.ts";
 import { longDate } from "../lib/changelog.ts";
 import { highlight, siteData } from "../lib/data.ts";
-import type { Platform } from "../lib/platform.ts";
+import type { Platform, System } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 import { recentReleases } from "../lib/shown.ts";
 import { tools, type Tool } from "../data/world.ts";
@@ -40,6 +40,8 @@ const version = {
   macos: downloads.macos.release.version,
   windows: downloads.windows.release.version,
 };
+// the systems each figure draws the app for, until Linux's are drawn
+const drawn: System[] = ["macos", "windows"];
 const recent = recentReleases(versions).map((v) => ({ ...v, highlight: highlight(v.version) }));
 // a row is one string: on a phone its cells run inline, where whitespace between them would show
 const cell = "border-b border-grid py-3.5 text-left align-baseline max-sm:border-0 max-sm:p-0";
@@ -157,6 +159,7 @@ const jsonLd = [
         </div>
         <Figure
           class="mt-8.75 max-xl:mt-8"
+          on={drawn}
           app={{
             macos: {
               caption: "Switching accounts in Pitboard's menu on macOS.",
@@ -188,7 +191,7 @@ const jsonLd = [
           }}
         >
           <Desk prefix="hero-mac" demo />
-          <WinDesk slot="win" prefix="hero-win" demo updates={updates} />
+          <WinDesk slot="windows" prefix="hero-win" demo updates={updates} />
           <Term slot="cli" prefix="hero-cli" session={sessions.status} />
         </Figure>
       </div>
@@ -201,6 +204,7 @@ const jsonLd = [
         >. Daily renewal keeps your other Claude Code logins from expiring.
       </p>
       <Figure
+        on={drawn}
         slot="fig"
         app={{
           macos: {
@@ -223,17 +227,24 @@ const jsonLd = [
         }}
       >
         <Accounts prefix="switch-mac" moment="after" crop version={version.macos} />
-        <WinAccounts slot="win" prefix="switch-win" moment="after" crop version={version.windows} />
+        <WinAccounts
+          slot="windows"
+          prefix="switch-win"
+          moment="after"
+          crop
+          version={version.windows}
+        />
         <Term slot="cli" prefix="switch-cli" session={sessions.use} />
       </Figure>
     </Feature>
-    <Feature id="desktop" title="Claude Desktop">
+    <Feature id="desktop" title="Claude Desktop" on={["macos"]}>
       <p>
         On macOS, Pitboard switches <a href={`${DOCS}/guides/claude-desktop`}>Claude Desktop</a>
         too, and the app offers to quit Claude and open it again. On Windows and Linux, it leaves
         Claude Desktop alone.
       </p>
       <Figure
+        on={["macos"]}
         slot="fig"
         app={{
           macos: {
@@ -263,6 +274,7 @@ const jsonLd = [
         status line.
       </p>
       <Figure
+        on={drawn}
         slot="fig"
         app={{
           macos: {
@@ -295,7 +307,7 @@ const jsonLd = [
         }}
       >
         <Accounts prefix="usage-mac" moment="before" />
-        <WinAccounts slot="win" prefix="usage-win" moment="before" />
+        <WinAccounts slot="windows" prefix="usage-win" moment="before" />
         <Term slot="cli" prefix="usage-cli" session={sessions.statusBefore} />
       </Figure>
     </Feature>
@@ -317,6 +329,7 @@ const jsonLd = [
             offers another account with room left once the account in use reaches 95% of a limit.
           </p>
           <Figure
+            on={drawn}
             slot="fig"
             app={{
               macos: {
@@ -332,7 +345,7 @@ const jsonLd = [
             }}
           >
             <Notice prefix="offer-mac" />
-            <WinNotice slot="win" prefix="offer-win" />
+            <WinNotice slot="windows" prefix="offer-win" />
           </Figure>
         </Row>
         <Row id="auto-title" title="Automatic switch" flip>
@@ -342,6 +355,7 @@ const jsonLd = [
             the app or from a background service that <code>pitboard watch install</code> sets up.
           </p>
           <Figure
+            on={drawn}
             slot="fig"
             app={{
               macos: {
@@ -374,7 +388,7 @@ const jsonLd = [
             }}
           >
             <Settings prefix="auto-mac" show="switch" version={version.macos} />
-            <WinSettings slot="win" prefix="auto-win" show="switch" />
+            <WinSettings slot="windows" prefix="auto-win" show="switch" />
             <Term slot="cli" prefix="auto-cli" session={sessions.watchInstall} />
           </Figure>
         </Row>
@@ -384,6 +398,7 @@ const jsonLd = [
             period when the last one ends, with one short message.
           </p>
           <Figure
+            on={drawn}
             slot="fig"
             app={{
               macos: {
@@ -406,20 +421,25 @@ const jsonLd = [
             }}
           >
             <Settings prefix="warm-mac" show="warm" />
-            <WinSettings slot="win" prefix="warm-win" show="warm" />
+            <WinSettings slot="windows" prefix="warm-win" show="warm" />
             <Term slot="cli" prefix="warm-cli" session={sessions.warm} />
           </Figure>
         </Row>
       </div>
     </section>
 
-    <Feature id="account-windows" title="claude.ai and chatgpt.com for each account">
+    <Feature
+      id="account-windows"
+      title="claude.ai and chatgpt.com for each account"
+      on={["macos", "windows"]}
+    >
       <p>
         The app opens claude.ai and chatgpt.com
         <a href={`${DOCS}/guides/account-windows`}>in a window for each account</a>. On macOS, a
         link shared from your browser opens as the account you choose.
       </p>
       <Figure
+        on={["macos", "windows"]}
         slot="fig"
         app={{
           macos: {
@@ -435,7 +455,7 @@ const jsonLd = [
         }}
       >
         <OpenLink prefix="windows-mac" />
-        <WinDesk slot="win" prefix="windows-win" submenu="claude.ai" updates={updates} />
+        <WinDesk slot="windows" prefix="windows-win" submenu="claude.ai" updates={updates} />
       </Figure>
     </Feature>
 
@@ -447,6 +467,7 @@ const jsonLd = [
         >. <b>Activity</b> and <code>pitboard log</code> list every change it makes.
       </p>
       <Figure
+        on={drawn}
         slot="fig"
         app={{
           macos: {
@@ -479,7 +500,7 @@ const jsonLd = [
         }}
       >
         <Activity prefix="security-mac" />
-        <WinActivity slot="win" prefix="security-win" />
+        <WinActivity slot="windows" prefix="security-win" />
         <Term slot="cli" prefix="security-cli" session={sessions.log} />
       </Figure>
     </Feature>

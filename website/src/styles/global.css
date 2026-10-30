@@ -6,10 +6,6 @@
 @custom-variant js (&:where(.js *));
 @custom-variant no-js (&:where(:root:not(.js) *));
 @custom-variant scrolled (&:where(.scrolled *));
-/* the platform head.js chose; without JavaScript, macOS */
-@custom-variant platform-macos (&:where(:root:not([data-platform="windows"], [data-platform="linux"]) *));
-@custom-variant platform-windows (&:where([data-platform="windows"] *));
-@custom-variant platform-linux (&:where([data-platform="linux"] *));
 @custom-variant os-mobile (&:where([data-os="mobile"] *));
 @custom-variant surface-app (&:where([data-surface="app"] *));
 @custom-variant surface-cli (&:where([data-surface="cli"] *));
@@ -465,6 +461,16 @@
   :focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+  /* what is for some systems shows to the one head.js chose, Linux by its desktop, and important
+     as preflight's [hidden] is, so no utility shows it to another; without JavaScript every part
+     shows, and a figure its macOS drawing alone */
+  :root[data-platform="macos"] [data-on]:not([data-on~="macos"]),
+  :root[data-platform="windows"] [data-on]:not([data-on~="windows"]),
+  :root[data-platform="linux"]:not([data-desktop="kde"]) [data-on]:not([data-on~="gnome"]),
+  :root[data-platform="linux"][data-desktop="kde"] [data-on]:not([data-on~="kde"]),
+  :root:not(.js) figure [data-on]:not([data-on~="macos"]) {
+    display: none !important;
   }
   @media (prefers-reduced-motion: reduce) {
     *,

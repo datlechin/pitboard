@@ -26,13 +26,15 @@ export abstract class LiveFigure extends HTMLElement {
       },
     });
     const figure = this.closest("figure");
-    // `data-drawing` is "<surface> <platform>", as Figure.astro and Term.astro mark each drawing
-    const [surface, platform] = (
-      this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? ""
-    ).split(" ");
+    // Figure.astro and Term.astro mark each drawing "<surface> <system>" and the systems it shows
+    // to, and each caption the systems whose drawing it describes
+    const drawing = this.closest<HTMLElement>("[data-drawing]");
+    const surface = drawing?.dataset.drawing?.split(" ")[0];
+    const mine = drawing?.dataset.on?.split(" ") ?? [];
     for (const words of figure?.querySelectorAll<HTMLElement>("[data-describes]") ?? []) {
-      const on = words.dataset.platforms?.split(" ") ?? [];
-      if (words.dataset.describes === surface && on.includes(platform)) words.hidden = true;
+      const on = words.closest<HTMLElement>("[data-on]")?.dataset.on?.split(" ") ?? [];
+      if (words.dataset.describes === surface && on.some((s) => mine.includes(s)))
+        words.hidden = true;
     }
     const again = figure?.querySelector<HTMLButtonElement>("[data-reset]");
     if (again)

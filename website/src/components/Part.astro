@@ -1,19 +1,17 @@
 ---
-// A part of a page for some platforms, named above it only when no JavaScript chooses one.
-import { partOf, platformNames, type Platform } from "../lib/platform.ts";
+// A part of a page for some systems, named above it only when no JavaScript chooses one.
+import { labelOf, onOf, type Desktop, type Platform } from "../lib/platform.ts";
 
 interface Props {
-  on: Platform[];
-  // false where the part names its platforms itself, as a table's caption does
+  on: (Platform | Desktop)[];
+  // false where the part names its systems itself, as a table's caption does
   label?: boolean;
   class?: string;
 }
 const { on, label = true, class: extra } = Astro.props;
 ---
 
-<div class:list={[partOf(on), extra]} data-for={on.join(" ")}>
-  {label && <p class="mb-2 hidden font-mono text-ui text-muted no-js:block">
-    On {on.map((p) => platformNames[p]).join(" and ")}:
-  </p>}
+<div class={extra} data-on={onOf(on)}>
+  {label && <p class="mb-2 hidden font-mono text-ui text-muted no-js:block">{labelOf(on)}</p>}
   <slot />
 </div>

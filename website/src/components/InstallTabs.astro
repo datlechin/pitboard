@@ -3,7 +3,7 @@ import { commands } from "../data/commands.ts";
 import { DOCS } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
 import { appZip, linuxApp, windowsMsi } from "../lib/github.ts";
-import { platforms, shownOn, type Platform } from "../lib/platform.ts";
+import { onOf, type Platform } from "../lib/platform.ts";
 import CommandBox from "./CommandBox.astro";
 import DownloadButton from "./DownloadButton.astro";
 import PlatformTabs from "./PlatformTabs.astro";
@@ -19,8 +19,6 @@ const windows = downloads.windows.release;
 const linuxHasApp = linuxApp(downloads.linux.release);
 const tabId = (p: Platform) => `tab-${p}-${n}`;
 const panelId = (p: Platform) => `tp-${p}-${n}`;
-// each platform's panel to its readers, macOS's without JavaScript
-const panel = (p: Platform) => shownOn(p, platforms);
 const note = "mt-4 max-w-measure text-note text-pretty text-muted";
 const lead = "mt-6 text-note text-fg";
 const after = "js:not-data-shown:hidden";
@@ -30,8 +28,8 @@ const after = "js:not-data-shown:hidden";
   <PlatformTabs label="Install Pitboard" tabId={tabId} panelId={panelId} />
   <div class="flow-root pt-7 no-js:pt-0">
     <div
-      class={panel("macos")}
       role="tabpanel"
+      data-on={onOf(["macos"])}
       id={panelId("macos")}
       aria-labelledby={tabId("macos")}
     >
@@ -49,8 +47,9 @@ const after = "js:not-data-shown:hidden";
       </p>
     </div>
     <div
-      class={panel("windows")}
+      class="no-js:hidden"
       role="tabpanel"
+      data-on={onOf(["windows"])}
       id={panelId("windows")}
       aria-labelledby={tabId("windows")}
     >
@@ -75,8 +74,9 @@ const after = "js:not-data-shown:hidden";
       <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
     <div
-      class={panel("linux")}
+      class="no-js:hidden"
       role="tabpanel"
+      data-on={onOf(["linux"])}
       id={panelId("linux")}
       aria-labelledby={tabId("linux")}
     >

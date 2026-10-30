@@ -22,7 +22,7 @@ import {
   type Asset,
   type FileRow,
 } from "../lib/github.ts";
-import { partOf, platformNames, platforms, type Platform } from "../lib/platform.ts";
+import { onOf, platformNames, platforms, type Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 
 const { downloads, windowsSigned } = await siteData();
@@ -133,13 +133,7 @@ const jsonLd = [application(Astro.site!, downloads)];
         panelId={(p) => p}
       />
 
-      <section
-        class={partOf(["macos"])}
-        id="macos"
-        data-for="macos"
-        role="tabpanel"
-        aria-labelledby="tab-macos"
-      >
+      <section id="macos" data-on={onOf(["macos"])} role="tabpanel" aria-labelledby="tab-macos">
         <h2 class={panelHead}>{platformNames.macos}</h2>
         <div class={versionLine}>
           <p>{released("macos")}</p>
@@ -182,9 +176,8 @@ const jsonLd = [application(Astro.site!, downloads)];
       </section>
 
       <section
-        class={partOf(["windows"])}
         id="windows"
-        data-for="windows"
+        data-on={onOf(["windows"])}
         role="tabpanel"
         aria-labelledby="tab-windows"
       >
@@ -244,13 +237,7 @@ const jsonLd = [application(Astro.site!, downloads)];
         </div>
       </section>
 
-      <section
-        class={partOf(["linux"])}
-        id="linux"
-        data-for="linux"
-        role="tabpanel"
-        aria-labelledby="tab-linux"
-      >
+      <section id="linux" data-on={onOf(["linux"])} role="tabpanel" aria-labelledby="tab-linux">
         <h2 class={panelHead}>{platformNames.linux}</h2>
         <div class={versionLine}>
           <p class="max-w-[40em] text-pretty">

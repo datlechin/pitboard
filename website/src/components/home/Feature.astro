@@ -1,12 +1,21 @@
 ---
+// A section of the home page, for every system unless `on` names some, as a Part does.
+import { labelOf, onOf, type Desktop, type Platform } from "../../lib/platform.ts";
+
 interface Props {
   id: string;
   title: string;
+  on?: (Platform | Desktop)[];
 }
-const { id, title } = Astro.props;
+const { id, title, on } = Astro.props;
 ---
 
-<section class="pt-(--block-space)" aria-labelledby={`${id}-title`} id={id}>
+<section
+  class="pt-(--block-space)"
+  aria-labelledby={`${id}-title`}
+  id={id}
+  data-on={on && onOf(on)}
+>
   <div class="wrap">
     <div
       class="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-x-12 border-t border-rule pt-(--block-in) max-xl:grid-cols-[minmax(0,1fr)]"
@@ -15,7 +24,8 @@ const { id, title } = Astro.props;
         <h2 class="font-mono text-h2 text-balance text-strong max-sm:text-h2-sm" id={`${id}-title`}>
           {title}
         </h2>
-        <div class="prose mt-6"><slot /></div>
+        {on && <p class="mt-6 hidden font-mono text-ui text-muted no-js:block">{labelOf(on)}</p>}
+        <div class:list={["prose mt-6", { "no-js:mt-2": on }]}><slot /></div>
       </div>
       <div class="min-w-0 max-xl:mt-8"><slot name="fig" /></div>
     </div>

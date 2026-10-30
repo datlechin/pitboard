@@ -1,4 +1,5 @@
 import { say } from "./live/say.ts";
+import { platformOf, type System } from "../lib/platform.ts";
 
 const d = document.documentElement;
 
@@ -172,8 +173,9 @@ function openTarget(showPlatform: (value: string) => void) {
   const target = id ? document.getElementById(id) : null;
   const box = target?.closest("details");
   if (box) box.open = true;
-  const on = target?.closest<HTMLElement>("[data-for]")?.dataset.for?.split(" ");
-  if (on && !on.includes(d.dataset.platform ?? "")) showPlatform(on[0]);
+  const on = target?.closest<HTMLElement>("[data-on]")?.dataset.on?.split(" ") as
+    System[] | undefined;
+  if (on && !on.some((s) => platformOf(s) === d.dataset.platform)) showPlatform(platformOf(on[0]));
 }
 
 function copying() {
