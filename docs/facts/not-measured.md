@@ -131,14 +131,15 @@ and date, or stays in the table of what was not measured, with what was seen.
 
 These were not measured. Each says what Pitboard does where it cannot know.
 
-- A running user manager. `host/linux/systemd.rs` was tested against a stand-in served on
-  a private socket in a test's own folder, never against systemd: whether systemd's private
-  socket takes zbus 5.19's peer to peer handshake, `UnitPath` and `Environment` as a running
-  manager answers them, a refused start and its restore, a mask made before an install, a
-  service skipped by its condition, and `uninstall`. `linux-facts.yml`'s `user-manager` job
-  measures each on GitHub's Ubuntu 26.04 runners, with a throwaway user's lingering manager.
-  Until a run is read, Pitboard does what systemd 262's source says
-  ([linux.md](linux.md#the-users-systemd)).
+- A running user manager on the session bus. The Linux session of 30 October 2026 measured
+  only that its private socket does not take zbus 5.19 ([linux.md](linux.md#the-users-systemd)).
+  `host/linux/systemd.rs` was tested against a stand-in on a bus a test started, never against
+  systemd: whether the manager answers `UnitPath` and `Environment` there as the stand-in does,
+  how soon it owns `org.freedesktop.systemd1` on a session bus socket activation has just
+  started, a refused start and its restore, a mask made before an install, a service skipped by
+  its condition, and `uninstall`. `linux-facts.yml`'s `user-manager` job measures each on
+  GitHub's Ubuntu 26.04 runners, with a throwaway user's lingering manager. Until a run is read,
+  Pitboard does what systemd 262's source says, and waits 5 seconds for the manager's name.
 - A timer across suspend: whether a calendar timer that came due while the computer slept runs
   once it wakes, as systemd.timer(5) says, and how late `RandomizedDelaySec=` makes that run.
   Renewal renews only what is due, so a run late or one more changes nothing else.

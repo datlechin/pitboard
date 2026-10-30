@@ -113,23 +113,66 @@ Read on 28 October 2026 in the desktop file each desktop's process monitor insta
 
 ## The user's systemd
 
-Read on 29 October 2026 in systemd's source at tag `v262` (commit
-`8cc40e0c5e9234bf45084751ac53b1fbfe70b492`), its man pages and the files named. No user manager
-was asked: a container has none without systemd as its first process, and no build for tests
-asks the person's ([not-measured.md](not-measured.md#linux)).
+Read on 29 and 30 October 2026 in systemd's source at tag `v262` (commit
+`8cc40e0c5e9234bf45084751ac53b1fbfe70b492`), its man pages and the files named, and measured on
+the Linux session machine as the first bullet says. No build for tests asks the person's manager
+([not-measured.md](not-measured.md#linux)).
 
-- `systemctl --user` reaches the manager in `bus_connect_transport_systemd`
-  (`src/shared/bus-util.c`). With `XDG_RUNTIME_DIR` set, `bus_connect_user_systemd` connects to
-  `unix:path=$XDG_RUNTIME_DIR/systemd/private` with `sd_bus_new`, which sends no `Hello`, and
-  `bus_check_peercred` refuses a peer that is neither root nor this user. A private socket that
-  does not answer is the error, with no fallback. Only with `XDG_RUNTIME_DIR` unset and
-  `DBUS_SESSION_BUS_ADDRESS` set does it take the session bus (`sd_bus_default_user`).
-- sd-bus finds the session bus in `DBUS_SESSION_BUS_ADDRESS`, else at
-  `unix:path=$XDG_RUNTIME_DIR/bus` (`bus_set_address_user` in
-  `src/libsystemd/sd-bus/sd-bus.c`), and waits 25 seconds for an answer (`BUS_DEFAULT_TIMEOUT`
-  in `bus-internal.h`). So `host/linux/bus.rs` and `Context::session_bus`
-  (`the_user_manager_is_reached_as_systemctl_reaches_it`,
-  `the_session_bus_is_found_as_sd_bus_finds_it`).
+- Measured on 30 October 2026 on the Linux session machine: Fedora 44 on aarch64, systemd 259.5,
+  a dbus-broker session bus and GNOME 50.6, with the 1.0.0-beta.8 rpm of `linux-facts.yml`'s
+  session run 40986051417. That build asked the manager on its private socket,
+  `$XDG_RUNTIME_DIR/systemd/private`, as `systemctl --user` reaches it. `pitboard schedule
+  install`, run as the desktop user with `XDG_RUNTIME_DIR=/run/user/1000` and
+  `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus`, wrote no unit: zbus 5.19.0's executor
+  thread panicked at `src/message/fields.rs:219` with "Invalid field reconstruction:
+  InvalidName("Invalid unique name. ...")", and the question timed out. The Linux app's Watch in
+  the Background and Keep Saved Sign-Ins Fresh switches refused the same way.
+- On the private socket systemd sends `org.freedesktop.systemd1` as the sender of each message:
+  `bus_on_connection` in `src/core/dbus.c` sets it with `sd_bus_set_sender`. zbus 5.19 reads a
+  sender only as a unique name (z-galaxy/zbus#1497), where its maintainer says zbus 6 refuses
+  such a message in place of panicking, and systemd/systemd#3610 says the private socket is not
+  an API for other programs. So Pitboard never connects to it
+  (`the_user_manager_is_asked_on_the_session_bus_for_its_folders_and_home`).
+- `sd_bus_open_user` (`src/libsystemd/sd-bus/sd-bus.c`) connects as a bus client to
+  `DBUS_SESSION_BUS_ADDRESS`, else to `unix:path=$XDG_RUNTIME_DIR/bus` (`bus_set_address_user`),
+  and waits 25 seconds for an answer (`BUS_DEFAULT_TIMEOUT` in `bus-internal.h`). The user
+  manager joins that bus with the same call in `bus_init_api`, and takes
+  `org.freedesktop.systemd1` there in `bus_setup_api` (`src/core/dbus.c`), once its
+  `dbus.socket` and `dbus.service` both run (`manager_dbus_is_running` in `src/core/manager.c`).
+  So `host/linux/bus.rs` asks the manager there, on the bus `Context::session_bus` finds
+  (`the_session_bus_is_found_as_sd_bus_finds_it`).
+- systemd installs `org.freedesktop.systemd1.service` only among the system bus's services
+  (`src/core/meson.build`), so on a session bus socket activation has just started nothing owns
+  the name until the manager joins. dbus-daemon at tag `dbus-1.16.2`, run with
+  `--systemd-activation` as its user `dbus.service` runs it (`bus/systemd-user/dbus.service.in`,
+  shipped so by Debian 13 and Ubuntu 26.04), holds a call to the name until systemd connects
+  (`bus_activation_activate_service` in `bus/activation.c`). dbus-broker at tag `v37`, Fedora's,
+  refuses it at once as not activatable (`driver_forward_unicast` in `src/bus/driver.c`). So
+  Pitboard waits up to
+  5 seconds for the name to have an owner, and past that says the manager was not reached
+  (`a_user_manager_that_joins_the_bus_late_is_waited_for`).
+- A user manager listens on the session bus's socket from its start, lingering with no session
+  or not: `dbus.socket`, `ListenStream=%t/bus`, is wanted by `sockets.target`, which systemd's
+  user `basic.target` wants and `default.target` requires. Its `ExecStartPost=` sets
+  `DBUS_SESSION_BUS_ADDRESS` in the manager's environment, so a unit's run is given the bus too.
+  Read on 30 October 2026 in each distribution's aarch64 packages:
+  - Debian 13: `dbus-user-session` 1.16.2-2 links it into `sockets.target.wants`. It is the
+    only `default-dbus-session-bus`, `libpam-systemd` 257.13-1~deb13u1 recommends it, and
+    `gnome-session-bin` 48.0-1+deb13u1 and `plasma-workspace` 4:6.3.6-2 depend on
+    `default-dbus-session-bus | dbus-session-bus`.
+  - Ubuntu 26.04: `dbus-user-session` 1.16.2-2ubuntu4, of priority important, ships the same
+    files, and `libpam-systemd` 259.5-0ubuntu3 recommends it.
+  - Fedora 44: `dbus-common` 1.16.2-1.fc44 has it `WantedBy=sockets.target`, and
+    `fedora-release-common` 44-17's `90-default-user.preset` enables it and
+    `dbus-broker.service`, which is `Alias=dbus.service`. `dbus-broker` 37-8 requires
+    `dbus-common`, and the specs on each package's `f44` branch have `dbus` require
+    `dbus-broker` where systemd is installed and `systemd` recommend `dbus`.
+- On Debian 13, a system whose session bus is `dbus-x11`'s, which provides only
+  `dbus-session-bus`, or one installed without recommends, has no `dbus.socket`: a lingering
+  manager there has no session bus, and Pitboard reaches no user manager.
+- Where `DBUS_SESSION_BUS_ADDRESS` names a bus the manager is not on, as one `dbus-run-session`
+  or `dbus-launch` starts, sd-bus looks no further, and neither does Pitboard. `systemctl
+  --user` reaches the manager there all the same, on its private socket.
 - org.freedesktop.systemd1(5): `Manager.UnitPath`, an `as`, "encodes the currently active unit
   file search path". `Manager.Environment`, an `as` of `NAME=value`, "encodes the environment
   block passed to all executed services". In `src/core/dbus-manager.c`, `UnitPath` is
@@ -138,7 +181,7 @@ asks the person's ([not-measured.md](not-measured.md#linux)).
   environment, `PATH` replaced and the session's variables dropped (`manager_default_environment`
   in `src/core/manager.c`), so the `HOME` there is the one its units run with. Pitboard asks both
   before it writes or removes a unit
-  (`the_user_manager_is_asked_on_its_private_socket_for_its_folders_and_home`).
+  (`the_user_manager_is_asked_on_the_session_bus_for_its_folders_and_home`).
 - systemd.unit(5) puts a user's own units in `$XDG_CONFIG_HOME/systemd/user`, else
   `~/.config/systemd/user`. `src/libsystemd/sd-path/path-lookup.c` builds `UnitPath` from the
   variables' text and resolves no link, and `SYSTEMD_UNIT_PATH` in the manager's environment
@@ -224,10 +267,10 @@ Read on 29 October 2026 in each crate as crates.io serves it.
 
 - zbus 6.0.0, of 16 October 2026, has "Remove the blocking API" in its `CHANGELOG.md`.
   zbus_systemd 0.26201.0 depends on zbus 6 and is async only. So the core takes zbus 5.19 with
-  `blocking-api` and `p2p`, and its own two-property proxy for the user manager.
-- In zbus 5.19.0, the blocking `Connection::peer_creds` is declared an `async fn`
-  (`src/blocking/connection/mod.rs`), and `peer_credentials`, deprecated since 5.13, is its
-  blocking form, which `host/linux/bus.rs` asks.
+  `blocking-api`, and its own two-property proxy for the user manager.
+- zbus 5.19.0 reads a message's sender as a `UniqueName` (`QuickFields::sender` in
+  `src/message/fields.rs`) and panics where it is a well-known name, as on systemd's private
+  socket ([The user's systemd](#the-users-systemd)).
 - `async-io` runs zbus's own executor, so the musl command line links no tokio:
   `cargo tree -p pitboard --target aarch64-unknown-linux-musl -e normal,build -i tokio` finds
   nothing.

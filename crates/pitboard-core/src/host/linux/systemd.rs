@@ -41,8 +41,8 @@ impl Reads {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Answer {
     Reads(Reads),
-    /// No runtime folder or bus names it, as in a shell `su` started, or nothing serves the one
-    /// named. `systemctl --user` reaches it the same way.
+    /// No runtime folder or bus names the session bus, as in a shell `su` started, or the user's
+    /// systemd is not on the one named.
     Unreached(String),
 }
 
@@ -83,7 +83,7 @@ trait SystemdManager {
 }
 
 // Both are typed arrays of strings in org.freedesktop.systemd1(5) at v262, `Environment` one
-// `NAME=value` each. No property is cached: a peer to peer connection gets no signal.
+// `NAME=value` each. Each is read once, so none is cached.
 fn asked(ctx: &Context) -> std::result::Result<Reads, String> {
     let connection = bus::user_manager(ctx)?;
     let manager = SystemdManagerProxy::builder(&connection)
@@ -1560,48 +1560,206 @@ mod tests {
         }
     }
 
-    /// The private socket in the runtime folder is reached peer to peer, as systemd serves it,
-    /// and `HOME` is read out of the manager's `Environment`. Served here by a stand-in in the
-    /// test's own folder: no build for tests asks the user's own systemd.
-    #[test]
-    fn the_user_manager_is_asked_on_its_private_socket_for_its_folders_and_home() {
-        let scratch = tempfile::tempdir().expect("a scratch folder");
-        let runtime = scratch.path().join("runtime");
-        std::fs::create_dir_all(runtime.join("systemd")).expect("made");
-        let listener = std::os::unix::net::UnixListener::bind(runtime.join("systemd/private"))
-            .expect("listening");
-        let folders = ["/home/x/.config/systemd/user", "/usr/lib/systemd/user"];
-        let plays = Plays {
-            unit_path: folders.map(String::from).to_vec(),
-            environment: ["LANG=C.UTF-8", "HOME=/home/x", "PATH=/usr/bin"]
-                .map(String::from)
-                .to_vec(),
-        };
-        let serving = std::thread::spawn(move || {
-            let (stream, _) = listener.accept().expect("asked");
-            let connection = zbus::blocking::connection::Builder::async_io_unix_stream(stream)
-                .server(zbus::Guid::generate())
-                .and_then(|builder| builder.p2p().serve_at("/org/freedesktop/systemd1", plays))
-                .and_then(zbus::blocking::connection::Builder::build)
-                .expect("a peer to peer connection");
-            connection.closed();
-        });
+    const FOLDERS: [&str; 2] = ["/home/x/.config/systemd/user", "/usr/lib/systemd/user"];
+    const ENVIRONMENT: [&str; 3] = ["LANG=C.UTF-8", "HOME=/home/x", "PATH=/usr/bin"];
+
+    fn plays() -> Plays {
+        Plays {
+            unit_path: FOLDERS.map(String::from).to_vec(),
+            environment: ENVIRONMENT.map(String::from).to_vec(),
+        }
+    }
+
+    fn as_played() -> Reads {
+        Reads {
+            unit_path: FOLDERS.map(PathBuf::from).to_vec(),
+            home: Some(PathBuf::from("/home/x")),
+        }
+    }
+
+    // The manager's stand-in on the test's bus, under the name the user manager takes there.
+    fn joins(bus: &str) -> zbus::blocking::Connection {
+        zbus::blocking::connection::Builder::address(bus)
+            .and_then(|builder| builder.name("org.freedesktop.systemd1"))
+            .and_then(|builder| builder.serve_at("/org/freedesktop/systemd1", plays()))
+            .and_then(zbus::blocking::connection::Builder::build)
+            .expect("the manager's stand-in on the test's bus")
+    }
+
+    // A desktop's session: its runtime folder, and the bus the test started as its session bus.
+    fn in_a_session(runtime: &Path, bus: &str) -> Context {
         let runtime = runtime.to_string_lossy().into_owned();
         let env = crate::context::Environment::on(
             crate::host::Os::Linux,
-            [("HOME", "/home/x"), ("XDG_RUNTIME_DIR", runtime.as_str())],
+            [
+                ("HOME", "/home/x"),
+                ("XDG_RUNTIME_DIR", runtime.as_str()),
+                ("DBUS_SESSION_BUS_ADDRESS", bus),
+            ],
         );
-        let reads = asked(&Context::read(&env, "cli")).expect("answered");
-        assert_eq!(
-            reads,
-            Reads {
-                unit_path: folders.map(PathBuf::from).to_vec(),
-                home: Some(PathBuf::from("/home/x")),
+        Context::read(&env, "cli").with_test_bus(bus.to_owned())
+    }
+
+    // systemd's private socket as sd-bus serves it at v262: `bus_on_connection` in
+    // `src/core/dbus.c` makes `org.freedesktop.systemd1` the sender of every message, which
+    // zbus 5.19 reads only as a unique name (z-galaxy/zbus#1497). Written by hand, since zbus
+    // builds no such message. It counts the connections it took.
+    struct Private {
+        done: Arc<std::sync::atomic::AtomicBool>,
+        serving: std::thread::JoinHandle<usize>,
+    }
+
+    impl Private {
+        fn serve(socket: &Path) -> Private {
+            std::fs::create_dir_all(socket.parent().expect("a folder")).expect("made");
+            let listener = std::os::unix::net::UnixListener::bind(socket).expect("listening");
+            listener.set_nonblocking(true).expect("polled");
+            let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let stop = Arc::clone(&done);
+            let serving = std::thread::spawn(move || {
+                let mut taken = 0;
+                while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            taken += 1;
+                            let _ = Private::answer(stream);
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                        Err(e) => panic!("the private socket stopped listening: {e}"),
+                    }
+                }
+                taken
+            });
+            Private { done, serving }
+        }
+
+        fn connections(self) -> usize {
+            self.done.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.serving.join().expect("served")
+        }
+
+        // sd-bus's side of the handshake, then each `Properties.Get` answered.
+        fn answer(stream: std::os::unix::net::UnixStream) -> std::io::Result<()> {
+            use std::io::{BufRead, Read, Write};
+            stream.set_nonblocking(false)?;
+            let mut out = stream.try_clone()?;
+            let mut from = std::io::BufReader::new(stream);
+            from.read_exact(&mut [0; 1])?;
+            loop {
+                let mut line = String::new();
+                if from.read_line(&mut line)? == 0 {
+                    return Ok(());
+                }
+                match line.split_whitespace().next() {
+                    Some("AUTH") => out.write_all(b"OK 0123456789abcdef0123456789abcdef\r\n")?,
+                    Some("NEGOTIATE_UNIX_FD") => out.write_all(b"AGREE_UNIX_FD\r\n")?,
+                    Some("BEGIN") => break,
+                    _ => out.write_all(b"ERROR\r\n")?,
+                }
             }
+            let ctxt = zbus::zvariant::serialized::Context::new_dbus(zbus::zvariant::LE, 0);
+            let mut serial = 0;
+            loop {
+                let mut fixed = [0; 16];
+                if from.read_exact(&mut fixed).is_err() {
+                    return Ok(());
+                }
+                assert_eq!(fixed[0], b'l', "zbus writes in this machine's order");
+                let at = |i: usize| {
+                    u32::from_le_bytes([fixed[i], fixed[i + 1], fixed[i + 2], fixed[i + 3]])
+                };
+                let (body, asked, fields) = (at(4) as usize, at(8), at(12) as usize);
+                let mut rest = vec![0; (16 + fields).next_multiple_of(8) - 16 + body];
+                from.read_exact(&mut rest)?;
+                let property =
+                    zbus::zvariant::serialized::Data::new(&rest[rest.len() - body..], ctxt)
+                        .deserialize::<(String, String)>()
+                        .map(|((_, property), _)| property)
+                        .unwrap_or_default();
+                let value = match property.as_str() {
+                    "UnitPath" => FOLDERS.to_vec(),
+                    "Environment" => ENVIRONMENT.to_vec(),
+                    _ => Vec::new(),
+                };
+                serial += 1;
+                out.write_all(&Private::reply(ctxt, serial, asked, value))?;
+            }
+        }
+
+        // A method return as sd-bus marks one, expecting no reply, with the sender it sets.
+        fn reply(
+            ctxt: zbus::zvariant::serialized::Context,
+            serial: u32,
+            asked: u32,
+            value: Vec<&str>,
+        ) -> Vec<u8> {
+            use zbus::zvariant::{Signature, Value};
+            let body = zbus::zvariant::to_bytes(ctxt, &Value::from(value)).expect("a body");
+            let fields = vec![
+                (5_u8, Value::U32(asked)),
+                (7, Value::from("org.freedesktop.systemd1")),
+                (8, Value::Signature(Signature::Variant)),
+            ];
+            let length = u32::try_from(body.len()).expect("a short body");
+            let header = (b'l', 2_u8, 1_u8, 1_u8, length, serial, fields);
+            let mut message = zbus::zvariant::to_bytes(ctxt, &header)
+                .expect("a header")
+                .to_vec();
+            message.resize(message.len().next_multiple_of(8), 0);
+            message.extend_from_slice(&body);
+            message
+        }
+    }
+
+    /// systemd's private socket answers as `org.freedesktop.systemd1`, which zbus 5.19 cannot
+    /// read as a sender: its executor panics and the question times out, as the Linux session
+    /// of 30 October 2026 measured. So the manager is asked on the session bus, where it owns
+    /// that name, and `HOME` is read out of its `Environment`. Both are stand-ins in the test's
+    /// own folder: no build for tests asks the user's own systemd.
+    #[test]
+    fn the_user_manager_is_asked_on_the_session_bus_for_its_folders_and_home() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let runtime = scratch.path().join("runtime");
+        let private = Private::serve(&runtime.join("systemd/private"));
+        let bus = crate::secret_service_testing::SecretService::without_a_provider(
+            &scratch.path().join("bus"),
+        )
+        .unwrap_or_else(|missing| panic!("{missing}"));
+        let _manager = joins(bus.address());
+        let reads = asked(&in_a_session(&runtime, bus.address())).expect("answered");
+        assert_eq!(reads, as_played());
+        assert_eq!(
+            private.connections(),
+            0,
+            "the private socket is never asked"
         );
-        serving
-            .join()
-            .expect("served until the question was answered");
+    }
+
+    /// A bus socket activation has just started carries no `org.freedesktop.systemd1` until the
+    /// manager joins it, and dbus-broker refuses a call to a name nobody owns. The manager is
+    /// waited for, and where it never joins, it was not reached.
+    #[test]
+    fn a_user_manager_that_joins_the_bus_late_is_waited_for() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let runtime = scratch.path().join("runtime");
+        let bus = crate::secret_service_testing::SecretService::without_a_provider(
+            &scratch.path().join("bus"),
+        )
+        .unwrap_or_else(|missing| panic!("{missing}"));
+        let ctx = in_a_session(&runtime, bus.address());
+
+        let refused = asked(&ctx).expect_err("nothing owns the name");
+        assert!(refused.contains("org.freedesktop.systemd1"), "{refused}");
+
+        let address = bus.address().to_owned();
+        let joining = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            joins(&address)
+        });
+        assert_eq!(asked(&ctx).expect("answered once it joined"), as_played());
+        drop(joining.join().expect("joined"));
     }
 
     /// The system's own manager, asked from a build for tests, refuses before it reaches a bus,
