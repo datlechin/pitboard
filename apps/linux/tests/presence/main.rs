@@ -202,6 +202,8 @@ impl Shown {
             .host
             .call(&self.menu, "GetLayout", (parent, depth, names).to_variant())
             .unwrap();
+        // `Vec<glib::Variant>` takes each child out of its one variant, as the AppIndicator
+        // extension does, so what is left must be the entry.
         let (revision, (number, properties, children)) = reply
             .get::<(u32, (i32, Properties, Vec<glib::Variant>))>()
             .unwrap_or_else(|| panic!("{}", reply.print(true)));
@@ -209,9 +211,10 @@ impl Shown {
             .iter()
             .map(|child| {
                 let (number, properties, grandchildren) = child
-                    .as_variant()
-                    .and_then(|child| child.get::<(i32, Properties, Vec<glib::Variant>)>())
-                    .unwrap();
+                    .get::<(i32, Properties, Vec<glib::Variant>)>()
+                    .unwrap_or_else(|| {
+                        panic!("a child is {}: {}", child.type_(), reply.print(true))
+                    });
                 assert!(grandchildren.is_empty(), "{number} has children");
                 (number, properties)
             })
@@ -489,6 +492,36 @@ fn the_layout_holds_each_entry_with_its_toggle_and_whether_it_is_enabled() {
                 ("IconThemePath", Vec::<String>::new().to_variant()),
             ])
         );
+    });
+}
+
+// Ubuntu 26.04's AppIndicator extension takes each child out of one variant and reads the entry
+// there (`dbusMenu.js:382-383`), and threw on a child boxed twice.
+#[test]
+fn the_layout_boxes_each_entry_once_as_the_appindicator_extension_reads_it() {
+    on_a_bus(None, |session| {
+        let (_, told) = collected();
+        let shown = Shown::new(session, told);
+
+        let reply = shown
+            .host
+            .call(
+                &shown.menu,
+                "GetLayout",
+                (0i32, -1i32, vec!["type"]).to_variant(),
+            )
+            .unwrap();
+        let children = reply.child_value(1).child_value(2);
+        assert_eq!(children.n_children(), face().menu.len());
+        for at in 0..children.n_children() {
+            let child = children.child_value(at).as_variant().unwrap();
+            assert_eq!(
+                child.type_().as_str(),
+                "(ia{sv}av)",
+                "{}",
+                reply.print(true)
+            );
+        }
     });
 }
 
