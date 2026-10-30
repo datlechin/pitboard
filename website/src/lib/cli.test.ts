@@ -404,7 +404,7 @@ test("pitboard warm says each Claude Code account's standing with the command li
     "  personal  on   warms up again at 22:00",
     "  work      off",
   ]);
-  assert.equal((await said("linux", "warm"))[0].includes("while `pitboard watch` runs."), true);
+  assert.deepEqual((await said("linux", "warm"))[0], (await said("macos", "warm"))[0]);
   assert.deepEqual(await said("macos", "warm now personal"), [
     "personal's 5-hour period runs already, until 22:00.",
   ]);
@@ -426,6 +426,7 @@ test("pitboard warm says each Claude Code account's standing with the command li
   const warm = joined("crates/pitboard/src/warm.rs");
   for (const words of [
     '"Pitboard warms up these accounts from {}, while {} runs.\\n",',
+    'pub(crate) const WARMERS: &str = "the app or `pitboard watch`";',
     '"{}\'s 5-hour period runs already, until {}.\\n",',
     '"Pitboard warms up {} from now on, within the span `pitboard warm` shows.\\n",',
     '(true, false) => format!("{} was warmed up already.\\n", paint(BOLD, label)),',
