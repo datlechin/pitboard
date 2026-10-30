@@ -1,6 +1,7 @@
 //! Each surface drawn in-process, as GTK's own reftests draw theirs: the window's paintable,
 //! rendered by the window's own renderer into a texture and saved as PNG, light and then dark,
-//! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads. Each is
+//! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads, with
+//! `linux-<surface>-<state>.boxes.json` beside them, the bounds of every widget drawn. Each is
 //! drawn with GNOME's default settings over a fixture's model, with every clock time said as one
 //! fixed time and animations off, so a picture is the same from one run to the next, which each
 //! holds (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up
@@ -14,7 +15,8 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::glib::translate::IntoGlib;
+use gtk::{gdk, gio, glib, pango};
 use pitboard_linux::data_folder::DataFolder;
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::stand_in;
@@ -25,6 +27,7 @@ use pitboard_model::{
     AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, Pane, PitboardModel,
     Place, PlatformError, Sheet, Snapshot, Surfaces, Tool,
 };
+use serde::Serialize;
 
 const PATIENCE: Duration = Duration::from_secs(30);
 
@@ -162,6 +165,83 @@ fn drawn(widget: &impl IsA<gtk::Widget>) -> glib::Bytes {
         .and_then(|native| native.renderer())
         .expect("a renderer");
     renderer.render_texture(&node, None).save_to_png_bytes()
+}
+
+// A widget as the boxes file beside its picture has it: where its parent is in the file, its
+// type, CSS node and style classes, its bounds in the window at scale 1, and a text's font.
+#[derive(Serialize)]
+struct Boxed {
+    parent: Option<usize>,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    css_name: String,
+    css_classes: Vec<String>,
+    bounds: Bounds,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    font: Option<Font>,
+}
+
+#[derive(Serialize)]
+struct Bounds {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+#[derive(Serialize)]
+struct Font {
+    family: String,
+    // In pixels, the CSS size GTK gives a widget's Pango context (gtk_css_style_get_pango_font).
+    size: f64,
+    weight: i32,
+}
+
+// Every widget `window` draws, each after its parent, from the corner its picture starts at. A
+// popover is a surface of its own, which the window's paintable leaves out.
+fn boxes(window: &Window) -> Vec<Boxed> {
+    let origin = window.compute_bounds(window).expect("the window's bounds");
+    let mut found = Vec::new();
+    let mut next = vec![(window.clone().upcast::<gtk::Widget>(), None)];
+    while let Some((widget, parent)) = next.pop() {
+        let bounds = widget
+            .compute_bounds(window)
+            .expect("a drawn widget's bounds");
+        let index = found.len();
+        found.push(Boxed {
+            parent,
+            kind: widget.type_().name(),
+            css_name: widget.css_name().into(),
+            css_classes: widget.css_classes().into_iter().map(Into::into).collect(),
+            bounds: Bounds {
+                x: bounds.x() - origin.x(),
+                y: bounds.y() - origin.y(),
+                width: bounds.width(),
+                height: bounds.height(),
+            },
+            font: font(&widget),
+        });
+        let mut child = widget.last_child();
+        while let Some(widget) = child {
+            child = widget.prev_sibling();
+            if widget.is_mapped() && !widget.is::<gtk::Native>() {
+                next.push((widget, Some(index)));
+            }
+        }
+    }
+    found
+}
+
+fn font(widget: &gtk::Widget) -> Option<Font> {
+    if !(widget.is::<gtk::Label>() || widget.is::<gtk::Text>() || widget.is::<gtk::Inscription>()) {
+        return None;
+    }
+    let font = widget.pango_context().font_description()?;
+    Some(Font {
+        family: font.family()?.into(),
+        size: f64::from(font.size()) / f64::from(pango::SCALE),
+        weight: font.weight().into_glib(),
+    })
 }
 
 // A spinner the window shows is drawn at the angle it starts at: AdwSpinnerPaintable follows the
@@ -352,7 +432,7 @@ fn picture(
 }
 
 /// `window` light and then dark, as `<name>.png` and `<name>-dark.png` in `folder`, each drawn
-/// twice and held the same.
+/// twice and held the same, with `<name>.boxes.json` beside them.
 fn draw(window: &Window, name: &str, folder: &Path) {
     std::fs::create_dir_all(folder).unwrap();
     let style = adw::StyleManager::default();
@@ -376,6 +456,8 @@ fn draw(window: &Window, name: &str, folder: &Path) {
             panic!("{name} differs from one drawing to the next");
         }
     }
+    let boxes = serde_json::to_vec_pretty(&boxes(window)).unwrap();
+    std::fs::write(folder.join(format!("{name}.boxes.json")), boxes).unwrap();
 }
 
 /// The accounts page over `world`, once what it shows in place of the list or the list is
