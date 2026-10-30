@@ -865,7 +865,7 @@ fn launching_a_search_opens_the_window() {
     });
 }
 
-// Each search hands on an id only it gave, and only while its search lasts.
+// Each search hands on an id only it gave, and only until the next search begins.
 #[test]
 fn an_id_never_given_activates_nothing() {
     on_a_bus(None, |session| {
@@ -878,6 +878,7 @@ fn an_id_never_given_activates_nothing() {
         searched.run("switch/home", "");
         searched.matched("wo");
         searched.krunner("Teardown", ().to_variant());
+        searched.matched("ho");
         searched.run("switch/work", "");
 
         assert!(searched.asked.borrow().is_empty(), "{:?}", searched.asked);
@@ -942,6 +943,29 @@ fn run_tells_the_id_after_its_token() {
                     token: None,
                 },
             ]
+        );
+    });
+}
+
+// KRunner tears its session down before it runs a match (docs/facts/linux-app.md, Search and
+// KRunner).
+#[test]
+fn a_run_after_teardown_tells_the_id_with_the_token_set_after_it() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+        searched.matched("w");
+        searched.matched("wo");
+
+        searched.krunner("Teardown", ().to_variant());
+        searched.krunner("SetActivationToken", ("token",).to_variant());
+        searched.run("switch/workshop", "");
+
+        assert_eq!(
+            searched.runs.take(),
+            [Run {
+                id: "switch/workshop".into(),
+                token: Some("token".into()),
+            }]
         );
     });
 }
