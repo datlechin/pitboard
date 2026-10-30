@@ -35,7 +35,7 @@ fn a_park_behind_a_locked_login_keyring_is_not_read_and_needs_no_sign_in() {
     assert_eq!(
         (park.detail.as_str(), park.advice.as_str()),
         (
-            words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+            words::not_read_the_keyring_is_locked(LOGIN).as_str(),
             words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR
         )
     );

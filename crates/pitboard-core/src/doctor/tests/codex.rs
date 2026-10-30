@@ -267,7 +267,7 @@ fn a_store_codex_uses_only_when_told_to_is_said_in_each_systems_words() {
     };
     let advice = |os| {
         check(
-            &judge_codex(os, None, &keyring, &[], NOW, &time::moment),
+            &judge_codex(os, None, &keyring, &[], NOW, LOGIN, &time::moment),
             "codex_backend",
         )
         .advice
@@ -462,7 +462,7 @@ fn a_codex_whose_version_cannot_be_read_is_not_called_missing() {
 fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
     let mut codex = with_codex();
     codex.auth_access = Some(mode(0o644));
-    let checks = judge_codex(Os::Linux, None, &codex, &[], NOW, &time::moment);
+    let checks = judge_codex(Os::Linux, None, &codex, &[], NOW, LOGIN, &time::moment);
     let file = check(&checks, "codex_auth_file");
     assert_eq!(file.level, Level::Warn);
     assert_eq!(
@@ -476,7 +476,15 @@ fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
 
     codex.auth_file = PathBuf::from(r"C:\Users\dana\.codex\auth.json");
     codex.auth_access = Some(open_to_users());
-    let checks = judge_codex(Os::Windows, Some(SID), &codex, &[], NOW, &time::moment);
+    let checks = judge_codex(
+        Os::Windows,
+        Some(SID),
+        &codex,
+        &[],
+        NOW,
+        LOGIN,
+        &time::moment,
+    );
     let file = check(&checks, "codex_auth_file");
     assert_eq!(file.level, Level::Warn);
     let [reset, grant] = crate::host::acl::icacls(false, r"C:\Users\dana\.codex\auth.json", SID);

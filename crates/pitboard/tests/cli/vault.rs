@@ -212,3 +212,36 @@ fn doctor_says_the_login_keyring_and_warns_once_it_is_locked() {
         )
     );
 }
+
+// windows: the Secret Service is Linux's own
+#[cfg(target_os = "linux")]
+#[test]
+fn vault_and_doctor_say_kwallet_where_ksecretd_answers_for_the_secret_service() {
+    let env = Env::with_ksecretd("vault-kwallet");
+
+    let (out, err, code) = env.run(&["vault"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        out,
+        format!(
+            "Parked logins are kept in KWallet, which every Pitboard directory of your session \
+             shares.\n\
+             `pitboard vault move files` keeps them in 0600 files in {} instead.\n",
+            env.root.join("pitboard").join("vault").display()
+        )
+    );
+    let (value, _) = json(&env, &["doctor"]);
+    let checks = value["data"]["checks"].as_array().expect("checks");
+    let vault = (checks.iter())
+        .find(|check| check["code"] == "vault")
+        .unwrap_or_else(|| panic!("no vault check: {value}"));
+    assert_eq!(
+        (vault["level"].clone(), vault["detail"].clone()),
+        (
+            "warn".into(),
+            "in KWallet, which is locked or which nothing answers for on this session's bus".into()
+        )
+    );
+    let said = value.to_string();
+    assert!(!said.contains("login keyring"), "{said}");
+}

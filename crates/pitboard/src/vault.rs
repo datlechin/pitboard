@@ -4,10 +4,11 @@
 
 use crate::{Report, changed};
 use clap::{Subcommand, ValueEnum};
-use pitboard_core::host::{Os, Vault};
+use pitboard_core::host::{Keyring, Os, Vault};
 use pitboard_core::service::Pitboard;
 use pitboard_core::state::VaultForm;
 use pitboard_core::switch::{Keeping, Moved};
+use pitboard_core::words;
 use serde_json::{Value, json};
 
 // Only Linux keeps parked logins more than one way.
@@ -74,7 +75,9 @@ fn status(pitboard: &Pitboard) -> Report {
 
 fn moved(pitboard: &Pitboard, to: VaultForm) -> Report {
     let outcome = pitboard.vault_move(to);
-    let folder = folder(pitboard.vault().ok().as_ref(), pitboard);
+    let kept = pitboard.vault().ok();
+    let folder = folder(kept.as_ref(), pitboard);
+    let keyring = keyring(kept.as_ref());
     changed("vault", outcome, |moved| {
         (
             json!({
@@ -83,13 +86,13 @@ fn moved(pitboard: &Pitboard, to: VaultForm) -> Report {
                 "moved": moved.moved,
                 "leaving": moved.leaving,
             }),
-            format!("{}\n", moved_line(&moved, &folder)),
+            format!("{}\n", moved_line(&moved, &folder, keyring)),
         )
     })
 }
 
-fn moved_line(moved: &Moved, folder: &str) -> String {
-    let into = form_words(moved.to, folder);
+fn moved_line(moved: &Moved, folder: &str, keyring: Keyring) -> String {
+    let into = form_words(moved.to, folder, keyring);
     match (moved.changed, moved.moved) {
         (false, _) => format!("Parked logins are already kept in {into}."),
         (true, 0) => format!("Parked logins are kept in {into} from now on."),
@@ -116,22 +119,29 @@ fn folder(kept: Option<&Keeping>, pitboard: &Pitboard) -> String {
         .unwrap_or_default()
 }
 
-fn form_words(form: VaultForm, folder: &str) -> String {
+// The login keyring where nothing says what answers for the Secret Service.
+fn keyring(kept: Option<&Keeping>) -> Keyring {
+    kept.and_then(|kept| kept.keyring).unwrap_or(Keyring::Login)
+}
+
+fn form_words(form: VaultForm, folder: &str, keyring: Keyring) -> String {
     match form {
-        VaultForm::SecretService => "the login keyring".to_string(),
+        VaultForm::SecretService => words::keyring(keyring).to_string(),
         VaultForm::Files => format!("0600 files in {folder}"),
     }
 }
 
 // `folder` as a person reads it.
 fn said(kept: &Keeping, folder: &str) -> String {
+    let named = words::keyring(keyring(Some(kept)));
     let mut lines = vec![match kept.place {
         Some(Vault::Keychain) => "Parked logins are kept in the login keychain, which every \
                                   Pitboard directory on this Mac shares."
             .to_string(),
-        Some(Vault::SecretService) => "Parked logins are kept in the login keyring, which every \
-                                       Pitboard directory of your session shares."
-            .to_string(),
+        Some(Vault::SecretService) => format!(
+            "Parked logins are kept in {named}, which every Pitboard directory of your session \
+             shares."
+        ),
         Some(Vault::Files) => {
             format!("Parked logins are kept in 0600 files in {folder}, which only you can read.")
         }
@@ -144,13 +154,13 @@ fn said(kept: &Keeping, folder: &str) -> String {
         lines.push(format!(
             "A move into {} is under way: the next `pitboard status`, change or daily renewal \
              finishes it.",
-            form_words(to, folder)
+            form_words(to, folder, keyring(Some(kept)))
         ));
     }
     if let Some((from, parks)) = kept.leaving {
         lines.push(format!(
             "{parks} parked login(s) wait to be deleted from {}: the next change deletes them.",
-            form_words(from, folder)
+            form_words(from, folder, keyring(Some(kept)))
         ));
     }
     // A move is offered only once none is under way or left anything to delete.
@@ -159,16 +169,14 @@ fn said(kept: &Keeping, folder: &str) -> String {
         (Some(Vault::SecretService), Some(true)) if settled => lines.push(format!(
             "`pitboard vault move files` keeps them in 0600 files in {folder} instead."
         )),
-        (Some(Vault::SecretService), Some(false)) => lines.push(
+        (Some(Vault::SecretService), Some(false)) => lines.push(format!(
             "No Secret Service answers on this session's bus, so they cannot be read from here. \
-             Run Pitboard in your desktop session, where signing in unlocks the login keyring."
-                .into(),
-        ),
-        (Some(Vault::Files), Some(true)) if settled => lines.push(
+             Run Pitboard in your desktop session, where signing in unlocks {named}."
+        )),
+        (Some(Vault::Files), Some(true)) if settled => lines.push(format!(
             "A Secret Service answers on this session's bus: `pitboard vault move secret-service` \
-             keeps them in the login keyring instead."
-                .into(),
-        ),
+             keeps them in {named} instead."
+        )),
         (Some(Vault::Files), Some(false)) => lines.push(
             "No Secret Service answers on this session's bus, as over SSH or in a container."
                 .into(),
@@ -190,6 +198,7 @@ mod tests {
             shared: false,
             folder: Some("/home/me/.pitboard/vault".into()),
             secret_service: Some(true),
+            keyring: Some(Keyring::Login),
             moving_to: None,
             leaving: None,
         }
@@ -243,17 +252,60 @@ mod tests {
             moved,
             leaving: 0,
         };
+        let login = Keyring::Login;
         assert_eq!(
-            moved_line(&moved(true, 2), FOLDER),
+            moved_line(&moved(true, 2), FOLDER, login),
             "Moved 2 parked login(s) into 0600 files in ~/.pitboard/vault."
         );
         assert_eq!(
-            moved_line(&moved(true, 0), FOLDER),
+            moved_line(&moved(true, 0), FOLDER, login),
             "Parked logins are kept in 0600 files in ~/.pitboard/vault from now on."
         );
         assert_eq!(
-            moved_line(&moved(false, 0), FOLDER),
+            moved_line(&moved(false, 0), FOLDER, login),
             "Parked logins are already kept in 0600 files in ~/.pitboard/vault."
+        );
+        let into_the_keyring = Moved {
+            to: VaultForm::SecretService,
+            ..moved(true, 2)
+        };
+        assert_eq!(
+            moved_line(&into_the_keyring, FOLDER, login),
+            "Moved 2 parked login(s) into the login keyring."
+        );
+        assert_eq!(
+            moved_line(&into_the_keyring, FOLDER, Keyring::KWallet),
+            "Moved 2 parked login(s) into KWallet."
+        );
+    }
+
+    // On KDE Plasma KWallet answers for the Secret Service.
+    #[test]
+    fn vault_names_kwallet_where_it_answers_for_the_secret_service() {
+        let kwallet = Keeping {
+            place: Some(Vault::SecretService),
+            shared: true,
+            keyring: Some(Keyring::KWallet),
+            leaving: Some((VaultForm::SecretService, 1)),
+            ..files()
+        };
+        assert_eq!(
+            said(&kwallet, FOLDER),
+            "Parked logins are kept in KWallet, which every Pitboard directory of your session \
+             shares.\n\
+             1 parked login(s) wait to be deleted from KWallet: the next change deletes them.\n"
+        );
+        let in_files = Keeping {
+            keyring: Some(Keyring::KWallet),
+            ..files()
+        };
+        assert!(
+            said(&in_files, FOLDER).ends_with(
+                "A Secret Service answers on this session's bus: `pitboard vault move \
+                 secret-service` keeps them in KWallet instead.\n"
+            ),
+            "{}",
+            said(&in_files, FOLDER)
         );
     }
 }

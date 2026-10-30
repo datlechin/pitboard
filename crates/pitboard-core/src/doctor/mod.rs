@@ -355,7 +355,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
     checks.extend(
         claude_parks
             .iter()
-            .map(|p| parks::judge_park(p, facts.now, moment)),
+            .map(|p| parks::judge_park(p, facts.now, parks::keyring(facts), moment)),
     );
     checks.extend(machine::judge_interrupted(facts));
     checks.extend(machine::judge_discarded(facts));
@@ -389,6 +389,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             &facts.codex,
             &codex_parks,
             facts.now,
+            parks::keyring(facts),
             moment,
         ));
     }

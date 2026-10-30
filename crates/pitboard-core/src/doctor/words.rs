@@ -1,6 +1,6 @@
 use super::network::ProxyFact;
 use crate::host::task::Drift;
-use crate::host::{Access, Os, SecretStore, Vault};
+use crate::host::{Access, Keyring, Os, SecretStore, Vault};
 use crate::words as said;
 use std::fmt::Display;
 
@@ -110,9 +110,13 @@ pub(super) const DELETED_ON_THE_NEXT_CHANGE: &str = "Pitboard deletes them on it
 pub(super) const DELETED_ONCE_THE_KEYCHAIN_OPENS: &str = "Pitboard deletes them on its next \
      change; if they stay, check the keychain is unlocked.";
 
-pub(super) const DELETED_ONCE_THE_LOGIN_KEYRING_OPENS: &str = "Pitboard deletes them on its next \
-     change; if they stay, make that change in your desktop session, where signing in unlocks \
-     the login keyring.";
+pub(super) fn deleted_once_the_keyring_opens(keyring: Keyring) -> String {
+    format!(
+        "Pitboard deletes them on its next change; if they stay, make that change in your \
+         desktop session, where signing in unlocks {}.",
+        said::keyring(keyring)
+    )
+}
 
 pub(super) const NO_STABLE_IDENTIFIER: &str = "this machine has no stable identifier";
 
@@ -160,10 +164,14 @@ pub(super) const UNLOCK_AND_RUN_ANY_COMMAND: &str = "Pitboard wrote these names 
 pub(super) const RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before creating a \
      login in them. Run any Pitboard command; it resolves them before doing anything else.";
 
-pub(super) const RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION: &str = "Pitboard wrote these names down \
-     before creating a login in them and cannot read them back to find out what is there. Run \
-     any Pitboard command in your desktop session, where signing in unlocks the login keyring; \
-     it resolves them before doing anything else.";
+pub(super) fn run_any_command_in_the_desktop_session(keyring: Keyring) -> String {
+    format!(
+        "Pitboard wrote these names down before creating a login in them and cannot read them \
+         back to find out what is there. Run any Pitboard command in your desktop session, where \
+         signing in unlocks {}; it resolves them before doing anything else.",
+        said::keyring(keyring)
+    )
+}
 
 pub(super) fn not_switched_to_for(seconds: i64) -> String {
     format!(
@@ -220,18 +228,29 @@ pub(super) const NOT_READ_THE_KEYCHAIN_IS_LOCKED: &str = "not read: the keychain
 
 pub(super) const UNLOCK_IT_THEN_DOCTOR: &str = "Unlock it, then run `pitboard doctor` again.";
 
-pub(super) const NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED: &str =
-    "not read: the login keyring is locked, or nothing answers for it on this session's bus";
+pub(super) fn not_read_the_keyring_is_locked(keyring: Keyring) -> String {
+    format!(
+        "not read: {} is locked, or nothing answers for it on this session's bus",
+        said::keyring(keyring)
+    )
+}
 
 pub(super) const IN_THE_DESKTOP_SESSION_THEN_DOCTOR: &str =
     "Run `pitboard doctor` again in your desktop session, where signing in unlocks it.";
 
-pub(super) const IN_THE_LOGIN_KEYRING: &str =
-    "in the login keyring, which every Pitboard directory of your session shares";
+pub(super) fn in_the_keyring(keyring: Keyring) -> String {
+    format!(
+        "in {}, which every Pitboard directory of your session shares",
+        said::keyring(keyring)
+    )
+}
 
-pub(super) const IN_A_KEYRING_THAT_DOES_NOT_ANSWER: &str = "in the login keyring, which is locked \
-                                                          or which nothing answers for on this \
-                                                          session's bus";
+pub(super) fn in_a_keyring_that_does_not_answer(keyring: Keyring) -> String {
+    format!(
+        "in {}, which is locked or which nothing answers for on this session's bus",
+        said::keyring(keyring)
+    )
+}
 
 pub(super) fn in_files(folder: &str) -> String {
     format!("in 0600 files in {folder}; no Secret Service answers on this session's bus")
@@ -241,8 +260,12 @@ pub(super) fn in_files_though_a_secret_service_answers(folder: &str) -> String {
     format!("in 0600 files in {folder}, though a Secret Service answers on this session's bus")
 }
 
-pub(super) const MOVE_INTO_THE_LOGIN_KEYRING: &str =
-    "Run `pitboard vault move secret-service` to keep them in the login keyring instead.";
+pub(super) fn move_into_the_keyring(keyring: Keyring) -> String {
+    format!(
+        "Run `pitboard vault move secret-service` to keep them in {} instead.",
+        said::keyring(keyring)
+    )
+}
 
 pub(super) fn moving_into(form: &str) -> String {
     format!("a move into {form} is under way")
@@ -255,9 +278,9 @@ pub(super) fn left_in(parks: usize, form: &str) -> String {
 pub(super) const THE_NEXT_CHANGE_DELETES_THEM: &str = "The next change deletes them.";
 
 // A form in a sentence, its folder named where it is files.
-pub(super) fn form(form: crate::state::VaultForm, folder: &str) -> String {
+pub(super) fn form(form: crate::state::VaultForm, folder: &str, keyring: Keyring) -> String {
     match form {
-        crate::state::VaultForm::SecretService => "the login keyring".to_string(),
+        crate::state::VaultForm::SecretService => said::keyring(keyring).to_string(),
         crate::state::VaultForm::Files => format!("0600 files in {folder}"),
     }
 }
@@ -1344,11 +1367,17 @@ pub(super) fn not_run_yet(runs: &str) -> String {
 }
 
 // Renewal's, as each run of it is one process.
-pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked: bool) -> String {
+pub(super) fn could_not_open(
+    runs: &str,
+    ago: i64,
+    vault: Option<Vault>,
+    locked: bool,
+    keyring: Keyring,
+) -> String {
     format!(
         "{runs}, but a run of it, {} ago, could not open {}",
         said::span(ago),
-        unopened(vault, locked)
+        unopened(vault, locked, keyring)
     )
 }
 
@@ -1357,11 +1386,12 @@ pub(super) fn switch_could_not_open(
     ago: i64,
     vault: Option<Vault>,
     locked: bool,
+    keyring: Keyring,
 ) -> String {
     format!(
         "{runs}, but a switch or warm-up of it, {} ago, could not open {}",
         said::span(ago),
-        unopened(vault, locked)
+        unopened(vault, locked, keyring)
     )
 }
 
@@ -1369,15 +1399,16 @@ pub(super) const TRIES_AGAIN_AT_ITS_NEXT_SWITCH: &str =
     "It tries again at its next switch or warm-up.";
 
 // Where the parked logins a run could not open are kept, and why where the store was locked.
-fn unopened(vault: Option<Vault>, locked: bool) -> &'static str {
+fn unopened(vault: Option<Vault>, locked: bool, keyring: Keyring) -> String {
     match (vault, locked) {
-        (Some(Vault::SecretService), true) => {
-            "the login keyring: it was locked, or nothing answered for it"
-        }
-        (Some(Vault::SecretService), false) => "the login keyring",
-        (Some(Vault::Keychain), true) => "the keychain: it was locked",
-        (Some(Vault::Keychain), false) => "the keychain",
-        (Some(Vault::Files | Vault::SealedFiles) | None, _) => "its parked logins",
+        (Some(Vault::SecretService), true) => format!(
+            "{}: it was locked, or nothing answered for it",
+            said::keyring(keyring)
+        ),
+        (Some(Vault::SecretService), false) => said::keyring(keyring).into(),
+        (Some(Vault::Keychain), true) => "the keychain: it was locked".into(),
+        (Some(Vault::Keychain), false) => "the keychain".into(),
+        (Some(Vault::Files | Vault::SealedFiles) | None, _) => "its parked logins".into(),
     }
 }
 
@@ -1643,6 +1674,58 @@ mod tests {
         assert_eq!(
             not_a_full_path("CODEX_HOME", std::path::Path::new("codex")),
             "CODEX_HOME is `codex`, which is not a full path"
+        );
+    }
+
+    // The Secret Service's collection is KWallet where KDE's daemon answers for it, and the login
+    // keyring elsewhere.
+    #[test]
+    fn the_secret_services_collection_is_named_for_what_answers_for_it() {
+        use crate::state::VaultForm;
+        let kwallet = Keyring::KWallet;
+        assert_eq!(
+            in_the_keyring(Keyring::Login),
+            "in the login keyring, which every Pitboard directory of your session shares"
+        );
+        assert_eq!(
+            in_the_keyring(kwallet),
+            "in KWallet, which every Pitboard directory of your session shares"
+        );
+        assert_eq!(
+            in_a_keyring_that_does_not_answer(kwallet),
+            "in KWallet, which is locked or which nothing answers for on this session's bus"
+        );
+        assert_eq!(
+            move_into_the_keyring(kwallet),
+            "Run `pitboard vault move secret-service` to keep them in KWallet instead."
+        );
+        assert_eq!(
+            moving_into(&form(VaultForm::SecretService, "/x/vault", kwallet)),
+            "a move into KWallet is under way"
+        );
+        assert_eq!(
+            left_in(2, &form(VaultForm::SecretService, "/x/vault", kwallet)),
+            "2 parked login(s) wait to be deleted from KWallet"
+        );
+        assert_eq!(
+            form(VaultForm::Files, "/x/vault", kwallet),
+            "0600 files in /x/vault"
+        );
+        assert_eq!(
+            not_read_the_keyring_is_locked(kwallet),
+            "not read: KWallet is locked, or nothing answers for it on this session's bus"
+        );
+        assert_eq!(
+            deleted_once_the_keyring_opens(kwallet),
+            "Pitboard deletes them on its next change; if they stay, make that change in your \
+             desktop session, where signing in unlocks KWallet."
+        );
+        assert_eq!(
+            run_any_command_in_the_desktop_session(kwallet),
+            "Pitboard wrote these names down before creating a login in them and cannot read \
+             them back to find out what is there. Run any Pitboard command in your desktop \
+             session, where signing in unlocks KWallet; it resolves them before doing anything \
+             else."
         );
     }
 
@@ -2543,18 +2626,29 @@ mod tests {
             "daily  ·  runs C:\\pitboard.exe  ·  not run yet"
         );
         let runs = "daily  ·  runs /usr/bin/pitboard";
+        let login = Keyring::Login;
         assert_eq!(
-            could_not_open(runs, 33_120, Some(Vault::SecretService), true),
+            could_not_open(runs, 33_120, Some(Vault::SecretService), true, login),
             "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
              login keyring: it was locked, or nothing answered for it"
         );
         assert_eq!(
-            could_not_open(runs, 33_120, Some(Vault::Keychain), true),
+            could_not_open(
+                runs,
+                33_120,
+                Some(Vault::SecretService),
+                false,
+                Keyring::KWallet
+            ),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open KWallet"
+        );
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::Keychain), true, login),
             "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
              keychain: it was locked"
         );
         assert_eq!(
-            could_not_open(runs, 33_120, Some(Vault::SealedFiles), false),
+            could_not_open(runs, 33_120, Some(Vault::SealedFiles), false, login),
             "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open its \
              parked logins"
         );
@@ -2563,10 +2657,11 @@ mod tests {
                 "from sign-in  ·  runs /usr/bin/pitboard",
                 600,
                 Some(Vault::SecretService),
-                true
+                true,
+                Keyring::KWallet
             ),
             "from sign-in  ·  runs /usr/bin/pitboard, but a switch or warm-up of it, 10m ago, \
-             could not open the login keyring: it was locked, or nothing answered for it"
+             could not open KWallet: it was locked, or nothing answered for it"
         );
         assert_eq!(
             runs_again(Os::Linux),
