@@ -15,6 +15,8 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
   headless display.
 - [Windows runners](windows-runners.md): what `windows-facts.yml` measured on GitHub's runners.
 - [The session machine](windows-session.md): what the session of 18 October 2026 measured.
+- [The Linux session machines](linux-session.md): what the sessions of 30 October 2026 measured
+  on Fedora with GNOME and with KDE Plasma, Ubuntu 26.04 and Debian 13.
 - [Documented, not measured](windows-documented.md): what Microsoft documents and nothing has
   measured yet.
 - [What the Windows app's glue rests on](windows-app.md): WinUI, WebView2, the Windows App SDK,

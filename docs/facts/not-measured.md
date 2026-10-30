@@ -41,10 +41,9 @@ not measured, and the register cannot hold them, since every fact in it is read 
 - Whether a renewal's answer names `refresh_token_expires_in`, and so moves the end of a parked
   login (`refresh_token_end`). Pitboard keeps the date a login has until an answer names one,
   as Claude Code does, and asks for a sign-in within 3 days of it.
-- The 33 seconds on a build after 2.1.278, and on Linux at all. `credential_cache` is read on
-  both systems and was measured on macOS with 2.1.278 alone: no Linux session with real
-  logins has been run, on the packages of the bundle `linux-facts.yml` builds
-  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)). Pitboard gives
+- The 33 seconds on macOS on a build after 2.1.278: `credential_cache` was measured there with
+  2.1.278 alone. On Linux 2.1.314 opens its login file again at the next request once it
+  changed ([The Linux session machines](linux-session.md#claude-code-and-codex)). Pitboard gives
   33 seconds on every system.
 
 ## Codex
@@ -131,13 +130,12 @@ and date, or stays in the table of what was not measured, with what was seen.
 
 These were not measured. Each says what Pitboard does where it cannot know.
 
-- A running user manager on the session bus. The Linux session of 30 October 2026 measured
-  only that its private socket does not take zbus 5.19 ([linux.md](linux.md#the-users-systemd)).
-  `host/linux/systemd.rs` was tested against a stand-in on a bus a test started, never against
-  systemd: whether the manager answers `UnitPath` and `Environment` there as the stand-in does,
-  how soon it owns `org.freedesktop.systemd1` on a session bus socket activation has just
-  started, a refused start and its restore, a mask made before an install, a service skipped by
-  its condition, and `uninstall`. `linux-facts.yml`'s `user-manager` job measures each on
+- Parts of a running user manager on the session bus. The Linux session machines installed,
+  started and removed the units against systemd 257 and 259
+  ([The Linux session machines](linux-session.md#renewal-and-the-watch-service)). Tested only
+  against a stand-in on a bus a test started: how soon the manager owns
+  `org.freedesktop.systemd1` on a session bus socket activation has just started, a refused start
+  and its restore, a mask made before an install, and a service skipped by its condition. `linux-facts.yml`'s `user-manager` job measures each on
   GitHub's Ubuntu 26.04 runners, with a throwaway user's lingering manager. Until a run is read,
   Pitboard does what systemd 262's source says, and waits 5 seconds for the manager's name.
 - A timer across suspend: whether a calendar timer that came due while the computer slept runs
@@ -149,9 +147,9 @@ These were not measured. Each says what Pitboard does where it cannot know.
   watch service on Ubuntu 26.04. Whether that `PATH` finds `claude` and `codex` where people
   install them, such as `~/.local/bin`, is not measured. The watch service looks for each tool
   only on the `PATH` it was given.
-- The Secret Service of any provider but gnome-keyring 48.0 in a container: KDE's ksecretd,
-  oo7-daemon and KeePassXC's, whether each names a default collection and replaces an item by
-  its attributes, and what each answers locked. Pitboard asks each what the specification says,
+- The Secret Service of oo7-daemon and KeePassXC's: whether each names a default collection and
+  replaces an item by its attributes, and what each answers locked. gnome-keyring 48 and 50 and
+  KDE's ksecretd were measured ([The Linux session machines](linux-session.md#sign-in-and-the-secret-service)). Pitboard asks each what the specification says,
   and parks only where `default` names a collection
   ([linux.md](linux.md#the-secret-service)).
 - A desktop session's keyring reached from a terminal, and over SSH while the same person is
@@ -162,24 +160,22 @@ These were not measured. Each says what Pitboard does where it cannot know.
   never asks ([linux.md](linux.md#the-secret-service)), and one with a display it is not in front
   of, as in a terminal multiplexer started at the desktop and attached over SSH, waits until the
   prompt is answered or the run is stopped.
-- A unit of a lingering user manager before the first sign-in after boot: whether the login
-  keyring is locked when the renewal timer fires, as critique 4 expects. A run the timer
-  started never asks, and is refused with `credential_store_locked`, which it keeps in
-  `renewal.json` for doctor to say.
-- Whether the login collection is unlocked when `graphical-session.target` starts: on GNOME with
-  gnome-keyring, on GNOME 51 with oo7-daemon, and on Plasma with ksecretd and
-  `plasma-kwallet-pam.service`, which nothing orders before the target
-  ([linux.md](linux.md#the-graphical-sessions-target)). Renewal runs then as any scheduled run
-  does: refused, it keeps the refusal, and the next run tries again. The Linux session machines
-  measure it on the packages of the bundle `linux-facts.yml`'s `session` job builds
-  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)), under a lingering
-  user manager too, before and after the first sign-in.
+- A renewal of a lingering user manager, before the first sign-in after boot, with a parked
+  login due. The keyring was locked there and `doctor` said so with no prompt, and with nothing
+  due no run was refused ([The Linux session machines](linux-session.md#renewal-and-the-watch-service)).
+  A run the timer started never asks, and is refused with `credential_store_locked`, which it
+  keeps in `renewal.json` for doctor to say.
+- Whether the login collection is unlocked when `graphical-session.target` starts on GNOME 51
+  with oo7-daemon, and on Plasma with ksecretd and `plasma-kwallet-pam.service`, which nothing
+  orders before the target ([linux.md](linux.md#the-graphical-sessions-target)). On GNOME
+  gnome-keyring's was unlocked 3.3 s before it
+  ([The Linux session machines](linux-session.md#sign-in-and-the-secret-service)). Renewal runs
+  then as any scheduled run does: refused, it keeps the refusal, and the next run tries again.
 - How `/proc` names npm's `claude` and `codex` on x86_64 and on GitHub's runners:
   `linux-facts.yml`'s `installs` job starts the stand-in in the place of each program, as Docker
-  on the Mac did on arm64 ([linux.md](linux.md#the-tools-processes)). What either tool
-  does to its own name once it runs is measured only on the Linux session machines, with the
-  session bundle's packages, since nothing else runs them. Pitboard finds a tool's process by its
-  `comm` alone.
+  on the Mac did on arm64 ([linux.md](linux.md#the-tools-processes)). Running, they were
+  `claude` and `codex` on the Linux session machines' arm64. Pitboard finds a tool's process by
+  its `comm` alone.
 - The process names of the programs Homebrew's Linux casks install, which no script installs
   ([linux.md](linux.md#homebrew-on-linux)). Each cask links its program into
   `$HOMEBREW_PREFIX/bin` under the tool's own name.
@@ -206,39 +202,21 @@ Mac. None of CI's Linux app jobs has run yet. Not measured:
 
 ## The Linux app on a desktop
 
-The app's services were measured against stand-ins on a bus of the tests' own and with systemd's
-autostart generator in the checks' images ([What the Linux app rests on](linux-app.md)), never
-in a desktop's session. Not measured, each for the Linux session machines:
+[The Linux session machines](linux-session.md) measured the app in Fedora's GNOME and Plasma,
+Ubuntu's GNOME with the AppIndicator extension and Debian's GNOME. Not measured:
 
-- Whether Plasma starts an autostart entry through `xdg-desktop-autostart.target` as GNOME's
-  systemd session does, and whether it honours `TryExec` there and where Plasma starts
-  without systemd. The app writes `TryExec` either way.
-- The `PATH` and the rest of the environment the app starts with from the launcher, from an
-  autostart entry and by D-Bus activation, on GNOME and on Plasma under Wayland (M7), and so
-  whether a debug build started from an autostart entry would run on the real homes (M10's
-  autostart half). Its D-Bus half was measured on a private bus: a service's program gets the
-  bus's environment ([The builds and their names](linux-app.md#the-builds-and-their-names)). A
-  debug build has no launcher, D-Bus service or autostart entry, and quits outside a fixture.
-- Whether the window comes to the front, and the startup notification ends, when the app opens
-  it from a snapshot after GApplication's `activate` returned, with the activation token GTK
-  4.18 keeps from it (`gtk_application_after_emit` is empty there) or the one a tray or KRunner
-  gave.
-- Which notification backend GLib picks in a Plasma session, which turns on whether anything
-  owns `org.gtk.Notifications` there, and how many buttons Plasma draws. The app posts the
-  same notice to either, with one button at most.
-- Whether a click on a notification in GNOME Shell and in Plasma reaches `app.notice-clicked`
-  with its argument, as the stand-ins of their interfaces do.
-- A Plasma logout with a dialog up since the window closes its dialogs with it, and a GNOME
-  logout with the app running ([Logging out](linux-app.md#logging-out)).
-- `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
-  on `false` from the owner of `org.freedesktop.login1`.
-- Whether Plasma 6.8's tray and the AppIndicator extension take the status item, draw its menu
-  with its radio entries and disabled ones, and take it again after plasmashell or GNOME Shell
-  restarts, as the stand-ins of their watcher and host do.
-- Whether Plasma 6.8 and the AppIndicator extension raise the app's window with the token they
-  provide before a click on a menu entry, which the item hands on with the click (M14). KWin's
-  tracking issue lists tokens for a status item's menu as unfinished, read in the research
-  for the plan and not since.
+- Where Plasma starts an autostart entry without systemd. The app writes `TryExec` either way.
+- The environment an autostart entry starts the app with, and so whether a debug build started
+  from one would run on the real homes (M10's autostart half). A debug build has no launcher,
+  D-Bus service or autostart entry, and quits outside a fixture.
+- Whether the startup notification ends when the app opens its window from a snapshot after
+  GApplication's `activate` returned. The window came to the front each time.
+- A click on a notice's button, in GNOME Shell or in Plasma. A click on the notice itself
+  reached the app with its argument.
+- `PrepareForSleep` from a real logind across a suspend: the guests' suspends failed. The app
+  tells the model a wake only on `false` from the owner of `org.freedesktop.login1`.
+- `Activate` from the AppIndicator extension, which it calls on a double click. Plasma's was
+  measured.
 - Whether Plasma and the AppIndicator extension draw the status icons in the panel's text
   colour, through KDE's `ColorScheme-Text` class and GTK's symbolic recolouring.
 - Account windows on Linux, which the app has none of until WebKitGTK 2.56: whether claude.ai
@@ -246,25 +224,12 @@ in a desktop's session. Not measured, each for the Linux session machines:
   and in which order `decide-policy` and `create` come (M8); and whether Ubuntu's AppArmor rule
   on user namespaces lets WebKit's bwrap sandbox run for a packaged app, or the package needs a
   profile of its own (M13). [Account windows](linux-app.md#account-windows) has what was read.
-- Whether GNOME Shell's search and KRunner reach a running Pitboard and show its results, and
-  whether the window comes to the front for a result GNOME Shell activates, which carries a
-  timestamp and no activation token, and for one KRunner 6.17 or later runs after setting its
-  token.
-- Whether plasmashell 6.4 or later loads the Plasma widget from the package, draws its
-  representations in a panel, on the desktop and in the system tray as `tst_widget` draws them
-  offscreen, and keeps it among the tray's hidden items while Pitboard is not running; and
-  whether its Switch reaches a running Pitboard through plasmashell's own connection
+- The Plasma widget in the system tray, and its package's install: the session machines ran it
+  from `apps/linux/plasmoid` in a panel and on the desktop
   ([The Plasma widget](linux-app.md#the-plasma-widget)).
-- Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
-  by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
-  one, then ends where none came.
 - Whether the app runs on openSUSE Tumbleweed, which no session machine is. Its rpm installs
   there, zypper removes it ([The RPM packages](linux-packages.md#the-rpm-packages)), and
   Uninstall names zypper there ([GNOME's words](linux-app.md#gnomes-words)).
-- What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
-  `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
-  ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
-  nothing sets it, the app says 24 hour times, the schema's default, whatever Plasma shows.
 
 ## The Linux packages
 
@@ -273,9 +238,3 @@ Mac. Not measured:
 
 - An x86_64 build or install of either format. rpmlint's verdict on the x86_64 command line was
   read from an rpm `rpmbuild --target x86_64` made of the released binary.
-- The packages on a desktop with a real session: installed, started and removed on Fedora with
-  GNOME and with KDE Plasma, Ubuntu 26.04 and Debian 13. The Linux session machines measure it on
-  the bundle `linux-facts.yml`'s `session` job builds
-  ([The Linux session bundle](../../CONTRIBUTING.md#the-linux-session-bundle)).
-- That job on `ubuntu-26.04-arm`: it has not run, so neither has its age download or its `jq`
-  there. Its steps ran on the Mac ([the session bundle](linux-packages.md#the-session-bundle)).

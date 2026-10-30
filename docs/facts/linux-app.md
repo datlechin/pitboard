@@ -317,7 +317,9 @@ Measured on 30 October 2026 on the Linux session machine: Fedora 44 with KDE Pla
 and with the window shown. With Preferences up over the window, Plasma said "The following
 applications did not close: • Pitboard. Logging out anyway in 2 minutes." after 20 seconds,
 Preferences closed and the window still shown. In an earlier run, Alt+F4 on that window ended the
-app and the logout went on at once. [The dialogs](#the-dialogs) has why the window stayed.
+app and the logout went on at once. [The dialogs](#the-dialogs) has why the window stayed. Since
+the window closes its dialogs with it, the login screen came within 12 seconds with Preferences up
+([The Linux session machines](linux-session.md#logout)).
 
 - plasma-shutdown has ksmserver close the session, then KWin the Wayland windows
   (`startkde/plasma-shutdown/shutdown.cpp:40-117` at plasma-workspace v6.7.5). KWin sends each
@@ -438,8 +440,9 @@ extension takes a child out of one variant and reads it as `[id, properties, chi
 (`dbusMenu.js:382-383`), so it threw `TypeError: (destructured parameter) is not iterable` 861
 times in 5 s and made a new client each time (`indicatorStatusIcon.js:337-347`). In 2 s the app
 answered 263 `AboutToShow` and 263 `GetLayout` with no click, GNOME Shell took about 91% CPU and
-the app 22%, and a click opened no menu. Plasma 6.7.5 read the same menu with no error. So each
-child is the entry in one variant, and the tests' host reads it as the extension does.
+the app 22%, and a click opened no menu. Plasma 6.7.5 drew no menu for it either. So each child
+is the entry in one variant, and the tests' host reads it as the extension does. With that, both
+drew the menu ([The Linux session machines](linux-session.md#the-status-item-and-its-menu)).
 
 ## Search and KRunner
 
