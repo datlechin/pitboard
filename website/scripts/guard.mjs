@@ -132,7 +132,7 @@ export function checkPage(name, html, rules) {
 
   // head.js sets the root's choice before the first paint; site.ts sets aria state once it loads
   for (const e of all.filter((e) => e.tag === "button")) {
-    const value = e.attrs["data-platform"] ?? e.attrs["data-surface"];
+    const value = e.attrs["data-platform"] ?? e.attrs["data-surface"] ?? e.attrs["data-desktop"];
     if (!value) continue;
     const what = `the ${value} ${e.attrs.role === "tab" ? "tab" : "button"}`;
     const look = e.attrs.class ?? "";

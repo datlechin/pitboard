@@ -122,14 +122,23 @@ test("needs an image description X takes, the same for X as for the others", () 
   assert.match(tags("The logo \u2014 big.").problems.join(), /en or em dash/);
 });
 
-test("needs each platform tab and surface button to look chosen by the root's choice", () => {
+test("needs each platform tab and surface or desktop button to look chosen by the root's choice", () => {
   const tab = (look) =>
     `<button class="text-muted ${look}" role="tab" aria-selected="true" data-platform="macos">macOS</button>`;
   const pick = (look) =>
     `<button class="text-fg ${look}" type="button" aria-pressed="true" data-surface="app">App</button>`;
+  const desktop = (look) =>
+    `<button class="text-fg ${look}" type="button" aria-pressed="true" data-desktop="gnome">GNOME</button>`;
   assert.deepEqual(
-    problems(tab("chosen:text-ink chosen:after:bg-ink") + pick("chosen:bg-ink")),
+    problems(
+      tab("chosen:text-ink chosen:after:bg-ink") + pick("chosen:bg-ink") + desktop("chosen:bg-ink"),
+    ),
     [],
+  );
+  assert.match(problems(desktop("")).join(), /the gnome button has no chosen: look/);
+  assert.match(
+    problems(desktop("aria-pressed:bg-ink")).join(),
+    /the gnome button looks chosen by aria-pressed, which only site\.ts sets/,
   );
   assert.match(
     problems(tab("aria-selected:text-ink")).join(),

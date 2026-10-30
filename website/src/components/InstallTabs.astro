@@ -10,9 +10,11 @@ import PlatformTabs from "./PlatformTabs.astro";
 
 interface Props {
   n: number;
+  // the hero's, whose figures the Linux desktop's choice redraws
+  desktop?: boolean;
   class?: string;
 }
-const { n, class: extra } = Astro.props;
+const { n, desktop, class: extra } = Astro.props;
 const { downloads } = await siteData();
 const zip = appZip(downloads.macos.release);
 const windows = downloads.windows.release;
@@ -25,7 +27,7 @@ const after = "js:not-data-shown:hidden";
 ---
 
 <div class={extra}>
-  <PlatformTabs label="Install Pitboard" tabId={tabId} panelId={panelId} />
+  <PlatformTabs label="Install Pitboard" tabId={tabId} panelId={panelId} desktop={desktop} />
   <div class="flow-root pt-7 no-js:pt-0">
     <div
       role="tabpanel"

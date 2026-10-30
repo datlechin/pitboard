@@ -15,7 +15,9 @@
   &:where(:root[data-platform="windows"] [data-platform="windows"]),
   &:where(:root[data-platform="linux"] [data-platform="linux"]),
   &:where(:root:not([data-surface="cli"]) [data-surface="app"]),
-  &:where(:root[data-surface="cli"] [data-surface="cli"]) {
+  &:where(:root[data-surface="cli"] [data-surface="cli"]),
+  &:where(:root:not([data-desktop="kde"]) [data-desktop="gnome"]),
+  &:where(:root[data-desktop="kde"] [data-desktop="kde"]) {
     @slot;
   }
 }
