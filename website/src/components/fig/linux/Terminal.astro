@@ -1,0 +1,36 @@
+---
+// The page's Linux computer's terminal, one shell whichever desktop shows: Ptyxis's header bar and
+// window under GNOME and Konsole's title bar, tools area and window under KDE Plasma, each as
+// gnome/Ptyxis.astro and kde/Konsole.astro draw them, around the one log both share, which takes
+// each terminal's type, colours, margins and rows by the desktop. Its log is named by the title the
+// desktop shows; its ids start `id`.
+import PtyxisBar from "../gnome/PtyxisBar.astro";
+import KonsoleBar from "../kde/KonsoleBar.astro";
+import { onOf } from "../../../lib/platform.ts";
+
+interface Props {
+  id: string;
+  // Ptyxis's title and Konsole's
+  title: string;
+  konsole: string;
+}
+const { id, title, konsole } = Astro.props;
+---
+
+<div
+  class="relative z-1 flex w-732 flex-col overflow-hidden rounded-u-15 bg-linux-term-bg shadow-linux-window outline-1 -outline-offset-1 outline-white/7 kde:w-663 kde:rounded-u-5 kde:bg-kde-term-bg kde:shadow-kde-window kde:outline-offset-0 kde:outline-kde-header-edge"
+>
+  <div class="contents" data-on={onOf(["gnome"])}>
+    <PtyxisBar title={title} id={id} />
+  </div>
+  <div class="contents" data-on={onOf(["kde"])}>
+    <KonsoleBar title={konsole} id={`${id}-kde`} />
+  </div>
+  <div
+    class="flex min-h-0 flex-1 flex-col justify-start overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 *:whitespace-pre-wrap [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text kde:py-1 kde:pr-22 kde:pl-1 kde:font-kde-mono kde:text-kde/18 kde:text-kde-term-text kde:[--term-bg:var(--color-kde-term-bg)] kde:*:min-h-18 kde:[&_.dim]:text-kde-term-faint kde:[&_.g]:text-kde-term-green kde:[&_.r]:text-kde-term-red kde:[&_.y]:text-kde-term-yellow kde:[&_b]:font-bold kde:[&_b]:text-kde-term-intense kde:live:max-h-[calc(28lh+var(--spacing)*2)]"
+    role="log"
+    aria-labelledby={`${id}-title`}
+  >
+    <slot />
+  </div>
+</div>

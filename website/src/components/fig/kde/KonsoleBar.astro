@@ -1,0 +1,57 @@
+---
+// Konsole's window above its terminal: KWin's Breeze title bar, the 20 pixel buttons with 4 above
+// and below (breezedecoration.cpp, its grid unit Noto Sans 10's "M"), the window's icon at its
+// start and, with one virtual desktop, no On All Desktops button, the title centred over the whole
+// width, then Minimize, Maximize and Close as breezebutton.cpp draws them; then Breeze's tools area
+// with the menu bar and the toolbars in Fedora's 9 point toolbar font (breezemetrics.h). Its ids
+// start `id`.
+import Icon from "./Icon.astro";
+import { konsoleMenus, konsoleTools } from "../../../data/kde.ts";
+
+interface Props {
+  title: string;
+  id: string;
+}
+const { title, id } = Astro.props;
+// breezebutton.cpp's marks, drawn in an 18 unit box a unit in from the button's 20
+const mark = "size-20 shrink-0 fill-none stroke-current";
+---
+
+<div class="contents font-kde text-kde text-kde-header-text">
+  <div class="relative flex h-28 flex-none items-center bg-kde-header px-4">
+    <Icon name="apps/22/utilities-terminal" key={`${id}-icon`} class="size-20" />
+    <span
+      class="pointer-events-none absolute inset-x-0 truncate px-76 text-center"
+      id={`${id}-title`}
+      >{title}</span
+    >
+    <span class="ml-auto flex gap-4" aria-hidden="true">
+      <svg class={mark} viewBox="-1 -1 20 20" stroke-width="1" stroke-linecap="round">
+        <path d="m4 7 5 5 5-5"></path>
+      </svg>
+      <svg class={mark} viewBox="-1 -1 20 20" stroke-width="1" stroke-linecap="round">
+        <path d="m4 11 5-5 5 5"></path>
+      </svg>
+      <svg class={mark} viewBox="-1 -1 20 20" stroke-width="1" stroke-linecap="round">
+        <path d="m5 5 8 8m0-8-8 8"></path>
+      </svg>
+    </span>
+  </div>
+  <div class="flex-none bg-kde-header" aria-hidden="true">
+    <div class="flex h-31 items-center">
+      {konsoleMenus.map((menu) => <span class="px-10">{menu}</span>)}
+    </div>
+    <div class="flex h-46 items-center p-6 text-kde-tool">
+      {konsoleTools.map((group, i) => <span class:list={["flex", { "ml-auto": i > 0 }]}>
+        {group.map((t) => <span class="flex h-34 items-center gap-4 px-6">
+          <Icon name={t.icon} key={`${id}-${t.icon.split("/").pop()}`} />
+          {t.text}
+          {t.menu && <svg class="size-12 shrink-0 fill-none stroke-current" viewBox="0 0 12 12">
+            <path d="m3 4.5 3 3 3-3" stroke-width="1"></path>
+          </svg>}
+        </span>)}
+      </span>)}
+    </div>
+    <div class="h-1 bg-kde-header-edge"></div>
+  </div>
+</div>

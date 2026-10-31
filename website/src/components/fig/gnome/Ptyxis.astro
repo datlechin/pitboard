@@ -1,75 +1,33 @@
 ---
 // Ptyxis 50.1 in its GNOME palette (src/palettes/gnome.palette) on libadwaita 1.9, 80 columns of
-// 11 point type under ptyxis-window.ui's header bar. With `backdrop`, another window has focus: the
-// header bar takes the terminal's ground (ptyxis-window-dressing.c), its contents half their
-// opacity, and the window libadwaita's backdrop shadow. Output colours spans g, y, r, dim, and
-// --term-bg is the ground a cursor's character takes.
+// 11 point type under its header bar. With `backdrop`, another window has focus, and the window has
+// libadwaita's backdrop shadow. Output colours spans g, y, r, dim, and --term-bg is the ground a
+// cursor's character takes.
+import PtyxisBar from "./PtyxisBar.astro";
+
 interface Props {
   // what the title says, unless a `title` slot draws it
   title?: string;
-  // a shell's window keeps its output as a log its title names; live, it grows with its output to
-  // Ptyxis's 24 rows, then scrolls
-  id?: string;
-  solo?: boolean;
   backdrop?: boolean;
   class?: string;
 }
-const { title, id, solo = false, backdrop = false, class: extra } = Astro.props;
-const button = "flex h-34 w-34 items-center justify-center";
-const icon = "size-16 shrink-0";
+const { title, backdrop = false, class: extra } = Astro.props;
 ---
 
 <div
   class:list={[
-    "z-1 flex flex-col overflow-hidden rounded-u-15 bg-linux-term-bg outline-1 -outline-offset-1 outline-white/7",
+    "absolute z-1 flex flex-col overflow-hidden rounded-u-15 bg-linux-term-bg outline-1 -outline-offset-1 outline-white/7",
     backdrop ? "shadow-linux-window-backdrop" : "shadow-linux-window",
-    solo ? "relative w-732" : "absolute",
     extra,
   ]}
 >
+  {Astro.slots.has("title") ? (
+    <PtyxisBar backdrop={backdrop}><slot name="title" slot="title" /></PtyxisBar>
+  ) : (
+    <PtyxisBar title={title} backdrop={backdrop} />
+  )}
   <div
-    class:list={[
-      "relative flex h-47 flex-none items-center px-7 pt-6 pb-7 font-gnome text-u-15 text-linux-bar-text inset-shadow-linux-bar-b",
-      backdrop ? "bg-ptyxis-bar-backdrop" : "bg-linux-bar-bg",
-    ]}
-  >
-    <span class:list={["flex w-full items-center", { "opacity-50": backdrop }]}>
-      <span class="flex">
-        <span class={button}
-          ><svg class={icon}><use href="#adwaita-tab-new" /></svg></span
-        >
-        <span class="flex h-34 w-24 items-center justify-center"
-          ><svg class={icon}><use href="#adwaita-pan-down" /></svg></span
-        >
-      </span>
-      <span class="pointer-events-none absolute inset-x-0 flex flex-col items-center leading-[1.2]">
-        <b class="font-bold" id={id && `${id}-title`}><slot name="title">{title}</slot></b>
-        <span class="text-u-12 opacity-55">~</span>
-      </span>
-      <span class="ml-auto flex gap-6">
-        <span class={button}
-          ><svg class={icon}><use href="#adwaita-view-grid" /></svg></span
-        >
-        <span class={button}
-          ><svg class={icon}><use href="#adwaita-open-menu" /></svg></span
-        >
-        <span class={button}>
-          <span class="flex size-24 items-center justify-center rounded-circle bg-current/10"
-            ><svg class={icon}><use href="#adwaita-window-close" /></svg></span
-          >
-        </span>
-      </span>
-    </span>
-  </div>
-  <div
-    class:list={[
-      "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow",
-      solo
-        ? "justify-start *:whitespace-pre-wrap live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text"
-        : "justify-end",
-    ]}
-    role={id ? "log" : undefined}
-    aria-labelledby={id && `${id}-title`}
+    class="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
   >
     <slot />
   </div>

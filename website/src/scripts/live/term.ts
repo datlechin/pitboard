@@ -88,14 +88,8 @@ class Term extends LiveFigure {
       if ((e as PointerEvent).pointerType === "touch" || e.target === this.prompt.field) return;
       if (getSelection()?.isCollapsed !== false) this.prompt.field.focus({ preventScroll: true });
     });
-    // one shell for a Linux computer, in the terminal of the desktop shown
-    this.chromes = new Map(
-      [...this.querySelectorAll<HTMLElement>("[data-chrome]")].map((c) => [
-        c.dataset.chrome!,
-        c.querySelector<HTMLElement>('[role="log"]')!,
-      ]),
-    );
-    if (this.chromes.size) {
+    // a Linux computer's one shell, named by the title of the terminal its desktop shows
+    if (this.platform === "linux") {
       this.follow();
       document.addEventListener("choice", this.follow);
     }
@@ -107,19 +101,9 @@ class Term extends LiveFigure {
     super.disconnectedCallback();
   }
 
-  private chromes = new Map<string, HTMLElement>();
-
-  // the shell's lines and prompt, into the chrome the desktop shows, the field named by its title
   private follow = () => {
-    const log = this.chromes.get(systemOf(this));
-    if (!log || log === this.log) return;
-    log.append(...this.log.childNodes);
-    const min = this.log.style.getPropertyValue("--min");
-    if (min) log.style.setProperty("--min", min);
-    this.log.style.removeProperty("--min");
-    this.log = log;
-    this.prompt.field.setAttribute("aria-labelledby", log.getAttribute("aria-labelledby")!);
-    log.scrollTop = log.scrollHeight;
+    const title = `${this.id}${systemOf(this) === "kde" ? "-kde" : ""}-title`;
+    for (const el of [this.log, this.prompt.field]) el.setAttribute("aria-labelledby", title);
   };
 
   protected render(state: State) {

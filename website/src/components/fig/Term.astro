@@ -1,12 +1,10 @@
 ---
 // A session in the terminal of each platform it runs on, each a shell of its own, its ids starting
 // `prefix` and its platform: on Linux one bash in Ptyxis under GNOME and in Konsole under KDE
-// Plasma, which live/term.ts moves to the chrome shown. Its last line is the shell's prompt: a
-// native field over the cursor each terminal draws.
+// Plasma. Its last line is the shell's prompt: a native field over the cursor each terminal draws.
 import CommandRow from "./CommandRow.astro";
 import Prompt from "./Prompt.astro";
-import Ptyxis from "./gnome/Ptyxis.astro";
-import Konsole from "./kde/Konsole.astro";
+import LinuxTerminal from "./linux/Terminal.astro";
 import MacTerminal from "./mac/Terminal.astro";
 import WinTerminal from "./win/Terminal.astro";
 import { printed, type Session } from "../../data/sessions.ts";
@@ -104,17 +102,12 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
     data-command={session.command}
     data-version={version("linux")}
   >
-    <div class="contents" data-on={onOf(["gnome"])} data-chrome="gnome">
-      <Ptyxis title={session.title} id={`${prefix}-linux`} solo>
-        {lines("linux").map((line) => (
-          <div set:html={line} />
-        ))}
-        <Prompt id={`${prefix}-linux`} ps={prompts.linux[0]} cursor={prompts.linux[1]} />
-      </Ptyxis>
-    </div>
-    <div class="contents" data-on={onOf(["kde"])} data-chrome="kde">
-      <Konsole title={konsoleTitle("bash")} id={`${prefix}-linux-kde`} solo />
-    </div>
+    <LinuxTerminal title={session.title} konsole={konsoleTitle("bash")} id={`${prefix}-linux`}>
+      {lines("linux").map((line) => (
+        <div set:html={line} />
+      ))}
+      <Prompt id={`${prefix}-linux`} ps={prompts.linux[0]} cursor={prompts.linux[1]} />
+    </LinuxTerminal>
     <CommandRow id={`${prefix}-linux`} commands={commands} />
     <span id={`${prefix}-linux-keys`} hidden>{keys}</span>
   </pb-term>
