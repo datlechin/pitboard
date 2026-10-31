@@ -4,7 +4,7 @@ sidebarTitle: "Account windows"
 description: "Look up how account windows open pages, sign in, download and keep data, and which shared links Pitboard refuses."
 ---
 
-The app opens account windows on macOS and Windows, and Linux has no app. [Use each account's site](/guides/account-windows) says how to open one, sign in and sign out.
+The app opens account windows on macOS and Windows. On Linux it opens a link in your browser. [Use each account's site](/guides/account-windows) says how to open one, sign in and sign out.
 
 Each enrolled Claude Code account has one window on claude.ai, and each enrolled Codex account one on chatgpt.com. A Claude Desktop account has none, and neither does a login nobody enrolled.
 
@@ -105,7 +105,7 @@ Pitboard opens an `http` link, or one with no scheme such as `claude.ai/new`, as
 
 ## Pitboard links
 
-A Pitboard link is `pitboard://open?url=` followed by a page's link, percent-encoded. On macOS, the Share extension hands a page to the app as one. On Windows, the installer registers `pitboard://` for Pitboard.
+A Pitboard link is `pitboard://open?url=` followed by a page's link, percent-encoded. On macOS, the Share extension hands a page to the app as one. On Windows, the installer registers `pitboard://` for Pitboard. On Linux, the app's desktop entry registers it, and the app's **Open Link** opens the page in your browser.
 
 ```text
 pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2F0e5a

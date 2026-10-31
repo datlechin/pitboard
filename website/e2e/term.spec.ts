@@ -1,6 +1,7 @@
 // The terminals (plan section 5): a prompt that runs pitboard against the one state, completes
 // with Tab as each shell's shipped script does, recalls lines with Up and Down, answers Ctrl+C
-// and the shell's own keys, and lets a keyboard leave.
+// and the shell's own keys, and lets a keyboard leave. On Linux one bash is drawn in Ptyxis under
+// GNOME and in Konsole under KDE Plasma (plan 3.2).
 import { choose, expect, test, type Platform } from "./fixtures.ts";
 import type { Locator, Page } from "@playwright/test";
 
@@ -25,7 +26,7 @@ async function open(
   await expect(term).not.toHaveAttribute("inert");
   const field = term.locator("[data-line]");
   await field.focus();
-  return { term, field, log: term.locator("[role=log]") };
+  return { term, field, log: term.locator("[role=log]:visible") };
 }
 
 // what the window shows, its last `n` lines
@@ -254,7 +255,9 @@ test("on a phone, a tap on a command runs it, and focus stays on the button", as
   const use = row.getByRole("button").nth(1);
   await use.tap();
   await expect(use).toBeFocused();
-  await expect(term.locator("[role=log]")).toContainText("Switched to personal; work is parked.");
+  await expect(term.locator("[role=log]:visible")).toContainText(
+    "Switched to personal; work is parked.",
+  );
   await expect(use).toHaveText("pitboard use work");
   // the field takes no tap, which iOS would zoom the page for
   await expect(term.locator("[data-line]")).toHaveCSS("pointer-events", "none");
@@ -273,4 +276,27 @@ test("where the pointer is fine, the terminal draws no row of commands", async (
   await choose(page.context(), { platform: "linux", surface: "cli" });
   await page.goto("/");
   await expect(page.locator("#usage-cli-linux [role=toolbar]")).toBeHidden();
+});
+
+test("on Linux, one bash keeps its lines and history in Ptyxis and in Konsole, named by the title shown", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "a keyboard");
+  const { term, field, log } = await open(page, "linux");
+  await expect(term.locator("#usage-cli-linux-title")).toBeVisible();
+  await expect(term.locator("#usage-cli-linux-kde-title")).toBeHidden();
+  await expect(log).toHaveAccessibleName("pitboard");
+  await field.fill("pitboard use personal");
+  await field.press("Enter");
+  await expect(log).toContainText("Switched to personal");
+  await page.locator('[role="group"][aria-label="Linux desktop"] [data-desktop="kde"]').click();
+  await expect(term.locator("#usage-cli-linux-kde-title")).toBeVisible();
+  await expect(term.locator("#usage-cli-linux-title")).toBeHidden();
+  await expect(log).toHaveAccessibleName("~ : bash");
+  await expect(field).toHaveAccessibleName("~ : bash");
+  await expect(log).toContainText("Switched to personal");
+  await field.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(field).toHaveValue("pitboard use personal");
 });

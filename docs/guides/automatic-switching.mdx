@@ -17,9 +17,14 @@ It switches early because open Claude Code sessions take up to about 33 seconds 
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Switch automatically** in **When a limit reaches**, then expand it and set the share in **At**.
   </Tab>
+  <Tab title="Linux">
+    In **Preferences** > **Limits**, choose **Switch Automatically** in **When a limit reaches**. Set the share in **At**, in its field or with its buttons, 95% at first.
+  </Tab>
 </Tabs>
 
 The app switches only while it is open, and posts a notification for each switch. Its **Switch Back** switches back to the account it left, as the notice in **Accounts** does.
+
+On Linux, where the desktop shows no tray icon, closing the window quits Pitboard. Turn on **Watch in the Background** in **Preferences** > **Advanced** to go on switching, as [Watch in the background](/reference/linux-app#watch-in-the-background) says.
 
 On the command line, run `pitboard watch` and leave the terminal open. It switches at its own share, `--at`, 95 by default, and never reads the app's **When a limit reaches**.
 
@@ -41,7 +46,7 @@ Anthropic's terms may cover automatic switching: see [Is this allowed](/concepts
 
 ## Run it in the background
 
-`pitboard watch install` starts `pitboard watch` in the background, and again at each sign-in, at the share you give it. On Linux, which has no app, it is how Pitboard switches and warms up with no terminal open.
+`pitboard watch install` starts `pitboard watch` in the background, and again at each sign-in, at the share you give it.
 
 ```sh
 pitboard watch install --at 90

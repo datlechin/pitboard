@@ -3,11 +3,12 @@
 import { shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
 import { model, type State } from "../../lib/model.ts";
+import { platformOf, type System } from "../../lib/platform.ts";
 import { activity } from "../../lib/words.ts";
 
-export function readLog(within: ParentNode, system: "macos" | "windows", s: State) {
+export function readLog(within: ParentNode, system: System, s: State) {
   const rows = [...within.querySelector('[data-part="log"]')!.children] as HTMLElement[];
-  const read = activity(s.log, system);
+  const read = activity(s.log, platformOf(system));
   rows.forEach((row, i) => {
     const e = read[i];
     const cells = [...row.children] as HTMLElement[];

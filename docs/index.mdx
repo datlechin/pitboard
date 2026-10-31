@@ -16,6 +16,11 @@ Without Pitboard, changing account in Claude Code, OpenAI's Codex CLI or Claude 
       <img src="/images/menu-windows.png" alt="The menu of Pitboard's icon in the notification area, with Open Pitboard first, then Claude Code and Codex accounts with a dot on each one in use and, after each name, how much of its fullest limit it has used or that its sign-in has expired" width="212" />
     </Frame>
   </Tab>
+  <Tab title="Linux">
+    <Frame>
+      <img src="/images/window-linux.png" alt="The Pitboard window, with a tip about switching before a limit runs out, then the Claude Code account in use with how much of each limit it has used, and under it an account whose sign-in has expired, offering Sign In" width="600" />
+    </Frame>
+  </Tab>
 </Tabs>
 
 Pitboard keeps the login of each account you are not using, called a [parked login](/concepts/switching#parked-logins). A switch puts the chosen account's parked login where Claude Code, Codex or Claude Desktop reads it. Your history, settings and projects stay where they are.
@@ -28,7 +33,7 @@ Pitboard finishes or undoes an [interrupted switch](/concepts/switching#interrup
 
 While the app is open, it [notifies you](/guides/switch#get-a-notification-before-a-limit-runs-out) once a limit of the account in use reaches 95%. Pitboard can also [switch Claude Code by itself](/guides/automatic-switching), from the app or a background service, once you turn it on.
 
-The app gives each Claude Code and Codex account its own [window on claude.ai or chatgpt.com](/guides/account-windows), where you sign in as that account.
+On macOS and Windows, the app gives each Claude Code and Codex account its own [window on claude.ai or chatgpt.com](/guides/account-windows), where you sign in as that account. On Linux, it opens their links in your browser.
 
 Pitboard has no server of its own and no telemetry. It sends each login only to the service that issued it. [What leaves your machine](/security#what-leaves-your-machine) lists every request.
 
@@ -37,9 +42,9 @@ Pitboard has no server of its own and no telemetry. It sends each login only to 
 | Part | Systems |
 | --- | --- |
 | The command line | macOS, Windows and Linux |
-| The app, which includes the command line | macOS and Windows |
+| The app, which includes the command line | macOS, Windows and Linux |
 
-The app runs from the menu bar on macOS, and from its icon in the notification area on Windows. [What you need](/install#what-you-need) gives the versions, the architectures and how far each system is tested.
+The app runs from the menu bar on macOS, and from its icon in the notification area on Windows. On Linux, it runs from its window, and from its tray icon where the desktop keeps a tray. [What you need](/install#what-you-need) gives the versions, the architectures and how far each system is tested.
 
 ## What it works with
 

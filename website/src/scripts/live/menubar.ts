@@ -26,6 +26,7 @@ import {
   statusLine,
   updated,
 } from "../../lib/words.ts";
+import { issuesOf, needsAttention } from "../../data/window.ts";
 import type { Tool } from "../../data/world.ts";
 
 class MenuBarDesk extends LiveFigure {
@@ -37,7 +38,7 @@ class MenuBarDesk extends LiveFigure {
     this.#item = this.querySelector<HTMLButtonElement>(`#${this.id}-item`)!;
     const item = this.#item;
     this.#menu = new Menu(this.querySelector<HTMLElement>(`#${this.id}-menu`)!, {
-      system: "macos",
+      toolkit: "appkit",
       desk: this,
       choose: (chosen) => this.#choose(chosen),
       shown: (open, refocus) => {
@@ -125,6 +126,8 @@ class MenuBarDesk extends LiveFigure {
       return;
     }
     switch (chosen.dataset.does) {
+      case "issues":
+        return bringForward("accounts", "macos");
       case "add":
         return bringForward("accounts", "macos", "add");
       case "refresh":
@@ -148,8 +151,16 @@ class MenuBarDesk extends LiveFigure {
     if (!s.running) this.#menu.closeAll(false);
     text(this.querySelector("[data-clock]"), menuBarClock(s.now));
     text(item.querySelector('[data-part="title"]'), menuBarShown(s, s.general.menuBarShows));
-    attr(item, "aria-label", menuBarSpoken(s));
+    const attention = needsAttention(s, "macos");
+    attr(item, "aria-label", menuBarSpoken(s, attention));
+    shown(item.querySelector('[data-part="mark"]'), !attention);
+    shown(item.querySelector('[data-part="badged"]'), attention);
     html(this.querySelector('[data-part="status"]'), statusLine(s));
+    const issues = issuesOf(s, "macos");
+    const box = this.#menu.el.querySelector('[data-part="attention"]');
+    shown(box, !!issues);
+    text(box?.querySelector('[data-part="title"]'), issues?.title ?? "");
+    text(box?.querySelector('[data-part="line"]'), issues?.subtitle ?? "");
 
     const after = this.#menu.el.querySelector('[data-moment="after"]')!;
     for (const group of after.querySelectorAll<HTMLElement>("[data-tool]"))

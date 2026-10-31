@@ -1,0 +1,49 @@
+---
+// Ptyxis's header bar (ptyxis-window.ui): New Tab and its menu, the title over the folder, then the
+// tab overview, the main menu and Close. With `backdrop`, another window has focus: it takes the
+// terminal's ground (ptyxis-window-dressing.c) and its contents half their opacity.
+interface Props {
+  // what the title says, unless a `title` slot draws it
+  title?: string;
+  id?: string;
+  backdrop?: boolean;
+}
+const { title, id, backdrop = false } = Astro.props;
+const button = "flex h-34 w-34 items-center justify-center";
+const icon = "size-16 shrink-0";
+---
+
+<div
+  class:list={[
+    "relative flex h-47 flex-none items-center px-7 pt-6 pb-7 font-gnome text-u-15 text-linux-bar-text inset-shadow-linux-bar-b",
+    backdrop ? "bg-ptyxis-bar-backdrop" : "bg-linux-bar-bg",
+  ]}
+>
+  <span class:list={["flex w-full items-center", { "opacity-50": backdrop }]}>
+    <span class="flex">
+      <span class={button}
+        ><svg class={icon}><use href="#adwaita-tab-new" /></svg></span
+      >
+      <span class="flex h-34 w-24 items-center justify-center"
+        ><svg class={icon}><use href="#adwaita-pan-down" /></svg></span
+      >
+    </span>
+    <span class="pointer-events-none absolute inset-x-0 flex flex-col items-center leading-[1.2]">
+      <b class="font-bold" id={id && `${id}-title`}><slot name="title">{title}</slot></b>
+      <span class="text-u-12 opacity-55">~</span>
+    </span>
+    <span class="ml-auto flex gap-6">
+      <span class={button}
+        ><svg class={icon}><use href="#adwaita-view-grid" /></svg></span
+      >
+      <span class={button}
+        ><svg class={icon}><use href="#adwaita-open-menu" /></svg></span
+      >
+      <span class={button}>
+        <span class="flex size-24 items-center justify-center rounded-circle bg-current/10"
+          ><svg class={icon}><use href="#adwaita-window-close" /></svg></span
+        >
+      </span>
+    </span>
+  </span>
+</div>

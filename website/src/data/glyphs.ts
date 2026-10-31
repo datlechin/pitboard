@@ -83,22 +83,6 @@ export const menuSymbol: Record<string, string> = {
   "mi-search": `<circle cx="8.75" cy="8.75" r="5.25" ${stroke}/><path d="m12.6 12.6 4.4 4.4" ${stroke}/>`,
 };
 
-// GNOME's symbolic icons in a header bar, 16 pixels square, drawn after Adwaita's.
-export const symbolic: Record<
-  "adw-tab-new" | "adw-pan-down" | "adw-grid" | "adw-menu" | "adw-close",
-  string
-> = {
-  "adw-tab-new":
-    '<rect x="1" y="1" width="14" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 4.5v7M4.5 8h7" stroke="currentColor" stroke-width="2"/>',
-  "adw-pan-down":
-    '<path d="m4 6.5 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-  "adw-grid":
-    '<path d="M2 1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1Zm8 0h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1ZM2 9h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Zm8 0h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z" fill="currentColor"/>',
-  "adw-menu": '<path d="M1 3h14M1 8h14M1 13h14" stroke="currentColor" stroke-width="2"/>',
-  "adw-close":
-    '<path d="m4.75 4.75 6.5 6.5m0-6.5-6.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
-};
-
 // Windows' symbols, from Microsoft's Fluent UI System Icons (MIT, assets/icons/FluentSystemIcons-LICENSE.txt):
 // the 20 pixel assets, each one path, their coordinates rounded to tenths of a pixel.
 export const fluent: Record<string, string> = {

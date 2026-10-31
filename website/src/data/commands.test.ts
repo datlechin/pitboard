@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { plainText } from "../lib/changelog.ts";
-import { attestCommand, commands, linuxWays, windowsWays } from "./commands.ts";
+import {
+  attestCommand,
+  commands,
+  LINUX_KEY,
+  linuxWays,
+  windowsWays,
+  type Command,
+} from "./commands.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const pages = [
@@ -67,27 +74,56 @@ test("offers Scoop with the bucket's own lines, from the first full release it h
 
 // A channel's setup is the repository page's, which sets up the beta channel and moves to stable.
 const repository = repo("docs/install/linux-repository.mdx");
+const lines = new Set(repository.split("\n").map((l) => l.trim()));
+const everyWay = (release: { prerelease: boolean }) => {
+  const { setup, keyCheck, app, cli } = linuxWays(release);
+  return [setup, app, cli].flatMap((w) => [...w.apt, ...w.dnf, ...w.zypper]).concat(keyCheck);
+};
 
 test("sets up the beta channel until a full release has the Linux app, and stable from then", () => {
   for (const [release, setup] of [
     [beta, "pitboard-beta"],
     [full, "pitboard"],
   ] as const) {
-    const { apt, dnf, zypper } = linuxWays(release);
-    for (const command of [...apt, ...dnf, ...zypper]) {
-      assert.ok(repository.includes(command.copy), `${setup}: ${command.copy}`);
-    }
-    assert.ok(apt.some((c) => c.copy.includes(`/etc/apt/sources.list.d/${setup}.sources `)));
-    for (const command of [dnf[0], zypper[0]]) assert.ok(command.copy.endsWith(`/${setup}.repo`));
+    const ways = linuxWays(release);
+    for (const command of [...Object.values(ways.setup).flat(), ways.keyCheck])
+      assert.ok(lines.has(command.copy), `${setup}: ${command.copy}`);
+    for (const command of Object.values(ways.app).flat())
+      assert.ok(lines.has(command.copy), command.copy);
+    assert.ok(
+      ways.setup.apt.some((c) => c.copy.includes(`/etc/apt/sources.list.d/${setup}.sources `)),
+    );
+    for (const command of [ways.setup.dnf[0], ways.setup.zypper[0]])
+      assert.ok(command.copy.endsWith(`/${setup}.repo`));
   }
 });
 
-// The offline build draws no release with the Linux app, so CommandBox never checks these there.
+test("checks the key apt is given against the fingerprint the repository page shows under pub", () => {
+  assert.equal(/^\s*pub .+\n\s+([0-9A-F]{40})$/m.exec(repository)?.[1], LINUX_KEY);
+  assert.ok(repository.includes(`whose fingerprint is \`${LINUX_KEY}\``));
+  // the key the first download saves
+  const { setup, keyCheck } = linuxWays(beta);
+  const keyring = keyCheck.copy.replace(/^gpg --show-keys /, "");
+  assert.ok(setup.apt[0].copy.startsWith(`sudo curl -fsSL -o ${keyring} `));
+});
+
+test("installs the command line alone as the pitboard package, as the app installs", () => {
+  const { app, cli } = linuxWays(beta);
+  const alone = (commands: Command[]) =>
+    commands.map((c) => c.copy.replace(/ pitboard-app$/, " pitboard"));
+  assert.deepEqual(
+    Object.values(cli).map((commands) => commands.map((c) => c.copy)),
+    Object.values(app).map(alone),
+  );
+  const said = "For the command line alone, install `pitboard`.";
+  assert.equal(repository.split(said).length - 1, 3, "for apt, dnf and zypper");
+  assert.ok(repo("docs/install.mdx").includes(said));
+});
+
+// The offline build draws the beta channel alone, so CommandBox never checks stable's.
 test("shows each Linux command as it copies it", () => {
   for (const release of [beta, full]) {
-    const { apt, dnf, zypper } = linuxWays(release);
-    for (const command of [...apt, ...dnf, ...zypper])
-      assert.equal(plainText(command.html), command.copy);
+    for (const command of everyWay(release)) assert.equal(plainText(command.html), command.copy);
   }
 });
 
@@ -95,11 +131,8 @@ test("names each setup file the repository serves", () => {
   const served = readdirSync(new URL("../../../packaging/linux/", import.meta.url)).filter((name) =>
     /^pitboard.*\.(sources|repo|pref)$/.test(name),
   );
-  const named = [beta, full].flatMap((release) => {
-    const { apt, dnf, zypper } = linuxWays(release);
-    return [...apt, ...dnf, ...zypper].flatMap(
-      (c) => c.copy.match(/[\w-]+\.(sources|repo|pref)\b/g) ?? [],
-    );
-  });
+  const named = [beta, full].flatMap((release) =>
+    everyWay(release).flatMap((c) => c.copy.match(/[\w-]+\.(sources|repo|pref)\b/g) ?? []),
+  );
   assert.deepEqual([...new Set(named)].sort(), served.sort());
 });

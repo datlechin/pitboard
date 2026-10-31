@@ -1,11 +1,12 @@
 //! Each surface drawn in-process, as GTK's own reftests draw theirs: the window's paintable,
 //! rendered by the window's own renderer into a texture and saved as PNG, light and then dark,
-//! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads. Each is
-//! drawn over a fixture's model, with every clock time said as one fixed time and animations
-//! off, so a picture is the same from one run to the next, which each holds
-//! (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up over,
-//! as the model shows it once it has taken what the picture sends it. A header bar's title cut
-//! short fails its picture.
+//! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads, with
+//! `linux-<surface>-<state>.boxes.json` beside them, the bounds of every widget drawn. Each is
+//! drawn with GNOME's default settings over a fixture's model, with every clock time said as one
+//! fixed time and animations off, so a picture is the same from one run to the next, which each
+//! holds (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up
+//! over, as the model shows it once it has taken what the picture sends it. A header bar's title
+//! cut short fails its picture.
 #![cfg(target_os = "linux")]
 
 use std::path::{Path, PathBuf};
@@ -14,7 +15,8 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
-use gtk::glib;
+use gtk::glib::translate::IntoGlib;
+use gtk::{gdk, gio, glib, pango};
 use pitboard_linux::data_folder::DataFolder;
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::stand_in;
@@ -23,12 +25,20 @@ use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{AccountGroup, Host, Window};
 use pitboard_model::{
     AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, Pane, PitboardModel,
-    Place, PlatformError, Sheet, Snapshot, Tool,
+    Place, PlatformError, Sheet, Snapshot, Surfaces, Tool,
 };
+use serde::Serialize;
 
 const PATIENCE: Duration = Duration::from_secs(30);
 
 const SCALE: f32 = 2.0;
+
+// GNOME's defaults, gsettings-desktop-schemas' `font-name`, `button-layout` and `accent-color`,
+// and the colour libadwaita draws that accent in.
+const FONT: &str = "Adwaita Sans 11";
+const DECORATION_LAYOUT: &str = "appmenu:close";
+const ACCENT: &str = "blue";
+const ACCENT_RGBA: &str = "#3584e4";
 
 struct Told(Mutex<mpsc::Sender<Snapshot>>);
 
@@ -78,17 +88,18 @@ impl LocalTime for Fixed {
 }
 
 // The window asks nothing of an app while it is drawn, and its start at sign-in is a
-// fixture's stand-in, off.
+// fixture's stand-in, off. A tray keeps it running where the model was told of one.
 struct Drawn {
     data: DataFolder,
     start_at_sign_in: stand_in::Autostart,
+    tray: bool,
 }
 
 impl Host for Drawn {
     fn send(&self, _: Intent) {}
     fn open(&self, _: &str, _: &gtk::Window) {}
     fn keeps_running(&self) -> bool {
-        false
+        self.tray
     }
     fn quit(&self) {}
     fn data(&self) -> &DataFolder {
@@ -156,6 +167,83 @@ fn drawn(widget: &impl IsA<gtk::Widget>) -> glib::Bytes {
     renderer.render_texture(&node, None).save_to_png_bytes()
 }
 
+// A widget as the boxes file beside its picture has it: where its parent is in the file, its
+// type, CSS node and style classes, its bounds in the window at scale 1, and a text's font.
+#[derive(Serialize)]
+struct Boxed {
+    parent: Option<usize>,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    css_name: String,
+    css_classes: Vec<String>,
+    bounds: Bounds,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    font: Option<Font>,
+}
+
+#[derive(Serialize)]
+struct Bounds {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+#[derive(Serialize)]
+struct Font {
+    family: String,
+    // In pixels, the CSS size GTK gives a widget's Pango context (gtk_css_style_get_pango_font).
+    size: f64,
+    weight: i32,
+}
+
+// Every widget `window` draws, each after its parent, from the corner its picture starts at. A
+// popover is a surface of its own, which the window's paintable leaves out.
+fn boxes(window: &Window) -> Vec<Boxed> {
+    let origin = window.compute_bounds(window).expect("the window's bounds");
+    let mut found = Vec::new();
+    let mut next = vec![(window.clone().upcast::<gtk::Widget>(), None)];
+    while let Some((widget, parent)) = next.pop() {
+        let bounds = widget
+            .compute_bounds(window)
+            .expect("a drawn widget's bounds");
+        let index = found.len();
+        found.push(Boxed {
+            parent,
+            kind: widget.type_().name(),
+            css_name: widget.css_name().into(),
+            css_classes: widget.css_classes().into_iter().map(Into::into).collect(),
+            bounds: Bounds {
+                x: bounds.x() - origin.x(),
+                y: bounds.y() - origin.y(),
+                width: bounds.width(),
+                height: bounds.height(),
+            },
+            font: font(&widget),
+        });
+        let mut child = widget.last_child();
+        while let Some(widget) = child {
+            child = widget.prev_sibling();
+            if widget.is_mapped() && !widget.is::<gtk::Native>() {
+                next.push((widget, Some(index)));
+            }
+        }
+    }
+    found
+}
+
+fn font(widget: &gtk::Widget) -> Option<Font> {
+    if !(widget.is::<gtk::Label>() || widget.is::<gtk::Text>() || widget.is::<gtk::Inscription>()) {
+        return None;
+    }
+    let font = widget.pango_context().font_description()?;
+    Some(Font {
+        family: font.family()?.into(),
+        size: f64::from(font.size()) / f64::from(pango::SCALE),
+        weight: font.weight().into_glib(),
+    })
+}
+
 // A spinner the window shows is drawn at the angle it starts at: AdwSpinnerPaintable follows the
 // frame clock of the widget it is given whatever the animations setting, and with none keeps
 // still (libadwaita 1.7.6 `adw-spinner-paintable.c`). The time a picture is drawn at is not in it.
@@ -200,7 +288,7 @@ fn cut_short(widget: &gtk::Widget, in_header: bool) -> Vec<String> {
 // The app's style sheet and icons, which AdwApplication and GtkApplication take from the
 // resource as the app starts, and which a window drawn here has no application to take.
 fn styled() {
-    let display = gtk::gdk::Display::default().expect("headless.sh's display");
+    let display = gdk::Display::default().expect("headless.sh's display");
     let css = gtk::CssProvider::new();
     css.load_from_resource(&format!("{}/style.css", pitboard_linux::resources::BASE));
     gtk::style_context_add_provider_for_display(
@@ -210,6 +298,48 @@ fn styled() {
     );
     gtk::IconTheme::for_display(&display)
         .add_resource_path(&format!("{}/icons", pitboard_linux::resources::BASE));
+}
+
+// GTK and libadwaita started with GNOME's defaults, which no portal gives them under headless.sh.
+// GTK 4.22 on Wayland then reads settings.ini alone, and libadwaita, under ADW_DISABLE_PORTAL,
+// the accent from GSettings. Else they draw `Sans 10`, three window buttons and Ubuntu's orange.
+fn started_like_gnome() {
+    let backend = gio::SettingsBackend::default();
+    assert_eq!(
+        backend.type_().name(),
+        "GMemorySettingsBackend",
+        "the pictures change GSettings only in memory, as headless.sh keeps them"
+    );
+    let interface = gio::SettingsSchemaSource::default()
+        .and_then(|schemas| schemas.lookup("org.gnome.desktop.interface", true))
+        .expect("gsettings-desktop-schemas' org.gnome.desktop.interface");
+    gio::Settings::new_full(&interface, Some(&backend), None)
+        .set_string("accent-color", ACCENT)
+        .unwrap();
+    let ini = glib::user_config_dir().join("gtk-4.0").join("settings.ini");
+    let wanted =
+        format!("[Settings]\ngtk-font-name={FONT}\ngtk-decoration-layout={DECORATION_LAYOUT}\n");
+    match std::fs::read_to_string(&ini) {
+        // An earlier picture's, in the same config home.
+        Ok(found) => assert_eq!(found, wanted, "{} is not the pictures'", ini.display()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir_all(ini.parent().unwrap()).unwrap();
+            std::fs::write(&ini, wanted).unwrap();
+        }
+        Err(error) => panic!("{}: {error}", ini.display()),
+    }
+    adw::init().unwrap();
+    let settings = gtk::Settings::default().unwrap();
+    assert_eq!(settings.gtk_font_name().as_deref(), Some(FONT));
+    assert_eq!(
+        settings.gtk_decoration_layout().as_deref(),
+        Some(DECORATION_LAYOUT)
+    );
+    assert_eq!(
+        adw::StyleManager::default().accent_color_rgba(),
+        gdk::RGBA::parse(ACCENT_RGBA).unwrap(),
+        "libadwaita's accent, read from GSettings under ADW_DISABLE_PORTAL=1"
+    );
 }
 
 // What a step of a picture sends the model, and what the model shows once it has taken it.
@@ -227,7 +357,7 @@ fn picture(
     then: impl Fn(&Window),
     dialog: bool,
 ) {
-    adw::init().unwrap();
+    started_like_gnome();
     pitboard_linux::resources::register();
     styled();
     let settings = gtk::Settings::default().unwrap();
@@ -271,10 +401,12 @@ fn picture(
             wait(done, &mut shown);
         }
     }
+    let tray = shown.status_item.is_some();
     let store = Shown::new(shown);
     let drawn = Drawn {
         data: DataFolder::at(&scratch.join("data")),
         start_at_sign_in: stand_in::Autostart::new(&scratch),
+        tray,
     };
     let window = Window::new(None, &store, Rc::new(drawn));
     window.present();
@@ -300,7 +432,7 @@ fn picture(
 }
 
 /// `window` light and then dark, as `<name>.png` and `<name>-dark.png` in `folder`, each drawn
-/// twice and held the same.
+/// twice and held the same, with `<name>.boxes.json` beside them.
 fn draw(window: &Window, name: &str, folder: &Path) {
     std::fs::create_dir_all(folder).unwrap();
     let style = adw::StyleManager::default();
@@ -324,6 +456,8 @@ fn draw(window: &Window, name: &str, folder: &Path) {
             panic!("{name} differs from one drawing to the next");
         }
     }
+    let boxes = serde_json::to_vec_pretty(&boxes(window)).unwrap();
+    std::fs::write(folder.join(format!("{name}.boxes.json")), boxes).unwrap();
 }
 
 /// The accounts page over `world`, once what it shows in place of the list or the list is
@@ -555,13 +689,28 @@ fn listed() -> Step {
     })
 }
 
-// Preferences over the accounts, on its page `page`, with what `steps` read.
-fn preferences(name: &str, page: &'static str, steps: &[Step]) {
+// A tray showing Pitboard, as the app tells the model once one does.
+fn with_a_tray() -> Step {
+    (
+        Some(Intent::SurfacesChanged {
+            surfaces: Surfaces { status_item: true },
+        }),
+        |shown| shown.status_item.is_some(),
+    )
+}
+
+// Preferences over the accounts, on its page `page`, with what `steps` read, saved as
+// `preferences-<page>`, or as `preferences-<page>-tray` where a tray shows Pitboard.
+fn preferences(page: &'static str, tray: bool, steps: &[Step]) {
+    let mut every = vec![listed()];
+    every.extend(tray.then(with_a_tray));
+    every.extend_from_slice(steps);
+    let name = format!("preferences-{page}{}", if tray { "-tray" } else { "" });
     picture(
-        name,
+        &name,
         "oneTool",
         true,
-        steps,
+        &every,
         move |window| {
             window
                 .activate_action("pitboard.preferences", None)
@@ -578,21 +727,40 @@ fn preferences(name: &str, page: &'static str, steps: &[Step]) {
 
 #[gtk::test]
 fn preferences_general() {
-    preferences("preferences-general", "general", &[listed()]);
+    preferences("general", false, &[]);
+}
+
+#[gtk::test]
+fn preferences_general_tray() {
+    preferences("general", true, &[]);
 }
 
 #[gtk::test]
 fn preferences_limits() {
-    preferences("preferences-limits", "limits", &[listed()]);
+    preferences("limits", false, &[]);
 }
 
 #[gtk::test]
-fn preferences_advanced() {
+fn preferences_limits_tray() {
+    preferences("limits", true, &[]);
+}
+
+fn preferences_advanced_with(tray: bool) {
     let read: Step = (Some(Intent::ReadSchedule), |_| true);
     let found: Step = (Some(Intent::LookForCommandLine), |shown| {
         shown.machine.command_line.in_terminal.is_some()
     });
-    preferences("preferences-advanced", "advanced", &[listed(), read, found]);
+    preferences("advanced", tray, &[read, found]);
+}
+
+#[gtk::test]
+fn preferences_advanced() {
+    preferences_advanced_with(false);
+}
+
+#[gtk::test]
+fn preferences_advanced_tray() {
+    preferences_advanced_with(true);
 }
 
 // A page of the window's, pushed over the accounts by its menu's `action`, once `shown` reads

@@ -55,9 +55,10 @@ const after = moments.after;
 const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
 ---
 
+{/* as tall as the menu at its longest, with what needs attention over the accounts */}
 <pb-menubar
   id={prefix}
-  class="desk block h-668"
+  class="desk block h-717"
   data-demo-desk={demo ? "" : undefined}
   inert
   data-output
@@ -97,7 +98,12 @@ const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
         aria-expanded="true"
         aria-controls={menu}
       >
-        <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
+        {/* the mark, badged while the menu has something to look at (MenuBarLabel.swift);
+           SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element */}
+        <svg class="size-16 shrink-0" data-part="mark"><use href="#pb-template"></use></svg>
+        <svg class="size-16 shrink-0" data-part="badged" {...{ hidden: true }}>
+          <use href="#pb-template-badge"></use>
+        </svg>
         <span
           set:html={either(
             escaped(menuBarTitle(moments.before)),
@@ -113,6 +119,25 @@ const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
         aria-labelledby={item}
         tabindex="-1"
       >
+        {/* what needs attention: the pressing notices of the window, counted under the first one's
+           title (MenuBarContent.swift `attention`) */}
+        <div data-part="attention" hidden>
+          <div
+            class:list={[row, "group/item pt-3", live]}
+            role="menuitem"
+            tabindex="-1"
+            data-does="issues"
+          >
+            <span class="flex-1">
+              <span class="block" data-part="title"></span>
+              <span
+                class:list={["block text-u-11/15 text-mac-menu-sub", sub]}
+                data-part="line"
+              ></span>
+            </span>
+          </div>
+          <div class={sep} role="separator"></div>
+        </div>
         {shown.map((moment) => <div
           class:list={[
             { "hidden demo-before:block": demo && moment === "before" },

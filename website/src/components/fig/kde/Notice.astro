@@ -1,0 +1,77 @@
+---
+// The notification once a limit reaches the share, as plasmashell draws what GLib's
+// org.freedesktop.Notifications backend posts (docs/facts/linux-session.md, "Notifications"): a
+// popup 18 grid units wide, 36 pixels in from the screen's corner over the panel (notifications'
+// Globals.qml), a group its summary names. DelegatePopup.qml lays it out: a heading band that meets
+// the popup's top and right edges, holding the app's icon at 16, its name, and Configure, which a
+// sender with a shown desktop entry has, and Close; the timeout's 2 pixel bar over the band's foot;
+// the summary, a level 4 heading in DemiBold; the body, the tool's name over the sentence on lines
+// of their own, as the app joins them (notices.rs `posted`); and the one action's button at the end
+// of a row. A popup under a minute old shows no age. Its frame, band and button are approx, and it
+// comes and goes at once, as KWin's effects on it were not read. The bell is in the tray while the
+// notification is unread, Pitboard's icon at the share's level beside it; the window's advice,
+// which puts a switch in the menu and so wants attention, comes only at 100%.
+// departs from the apps: KDE Plasma's notification history is not drawn
+import Icon from "./Icon.astro";
+import Panel from "./Panel.astro";
+import StatusItem from "./StatusItem.astro";
+import { CLOSE, panelClock } from "../../../data/kde.ts";
+import { app, trayAttention } from "../../../data/linux.ts";
+import { clock, share } from "../../../data/world.ts";
+import { start } from "../../../lib/model.ts";
+import { noticeMoment } from "../../../lib/moment.ts";
+import { headsUp, level } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
+const { time, date } = panelClock(clock.warned);
+// as the model words it at the moment
+const attention = trayAttention(noticeMoment(start())!.state);
+// a ToolButton showing its icon alone, square to the band
+const tool =
+  "flex size-28 items-center justify-center rounded-u-4 outline-none focus-visible:inset-ring-1 focus-visible:inset-ring-kde-focus";
+---
+
+<pb-notice id={prefix} class="desk block h-300 desk-px-720" inert data-output>
+  <div
+    class="absolute right-36 bottom-98 z-3 flex w-332 flex-col overflow-hidden rounded-u-6 bg-kde-plasma backdrop-blur-kde backdrop-saturate-150 px-4 pb-4 font-kde text-kde text-kde-plasma-text shadow-kde-plasma live:not-data-[state]:invisible"
+    role="group"
+    aria-labelledby={`${prefix}-title`}
+    data-banner
+  >
+    <div
+      class="-mx-4 flex h-28 items-center gap-4 bg-kde-plasma-heading pl-4 inset-shadow-kde-heading"
+    >
+      <svg class="size-16 shrink-0" aria-hidden="true"><use href="#pb-linux-app"></use></svg>
+      <span class="min-w-0 flex-1 truncate opacity-90" aria-hidden="true">{app}</span>
+      <span class={tool} aria-hidden="true">
+        <Icon name="actions/16/configure" />
+      </span>
+      <button class={tool} type="button" aria-label={CLOSE} data-close>
+        <Icon name="actions/16/window-close" />
+      </button>
+    </div>
+    <div class="-mx-4 -mt-2 h-2 bg-kde-focus" data-part="timeout"></div>
+    <b class="mt-4 text-kde-h4 font-semibold" id={`${prefix}-title`}>{headsUp.title.gnome}</b>
+    <span class="block" data-subtitle>{headsUp.tool}</span>
+    <span class="block" data-body>{headsUp.body}</span>
+    <span class="mt-4 flex justify-end" data-switch-row>
+      <button
+        class="flex h-30 items-center rounded-u-4 bg-kde-plasma-button px-8 inset-ring-1 inset-ring-kde-plasma-button-edge outline-none focus-visible:inset-ring-kde-focus"
+        type="button"
+        data-switch
+      >
+        {headsUp.button.gnome}
+      </button>
+    </span>
+  </div>
+  <Panel time={time} date={date} prefix={prefix} bell>
+    <StatusItem id={`${prefix}-icon`} level={level(share)} attention={attention} levels />
+  </Panel>
+</pb-notice>
+
+<script>
+  import "../../../scripts/live/notice.ts";
+</script>

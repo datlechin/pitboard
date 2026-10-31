@@ -12,6 +12,7 @@ import {
   clock,
   inUse as drawnInUse,
   logged,
+  openWindows,
   share as defaultShare,
   tools,
   warmUp as drawnWarmUp,
@@ -39,10 +40,12 @@ import {
   sentence,
   shareOfLimit,
   switchButton,
+  titled,
+  eachFront,
   whole,
   type Said,
-  type System,
 } from "./words.ts";
+import type { System } from "./platform.ts";
 
 export { ADOPTION_CEILING_SECONDS, SETTLING_SECONDS };
 
@@ -143,6 +146,12 @@ export interface State extends World {
   posted: Posted[];
   // accounts with a window of their site open, by id
   windowsOpen: string[];
+  // the claude.ai link shared from a browser that waits in macOS's Open Link window for an
+  // account, until one is chosen or the window goes (windows.rs `arrival`)
+  linkWaiting: boolean;
+  // the Linux app's window, which a status item keeps Pitboard running without: Close puts it
+  // away and the tray's Open Pitboard brings it back (application.rs `activate`)
+  windowShown: boolean;
   decidedAt: number;
   // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
   switching: { id: string; token: number } | null;
@@ -209,7 +218,9 @@ export function start(): State {
     schedule: false,
     log: logged.filter((e) => e.at !== clock.switched).map((e) => ({ ...e })),
     posted: [],
-    windowsOpen: [id("work")],
+    windowsOpen: openWindows.map(id),
+    linkWaiting: true,
+    windowShown: true,
     decidedAt: clock.menuBar,
     switching: null,
     reading: null,
@@ -479,14 +490,12 @@ function advise(s: State) {
 
 // present/words/notices.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did
 // not make by itself, and of its not judging one.
-const NOT_SWITCHED: Said = {
-  macos: "Automatic Switch Skipped",
-  windows: "Automatic switch skipped",
-};
-const NOT_SWITCHING: Said = {
-  macos: "Automatic Switching Paused",
-  windows: "Automatic switching paused",
-};
+const NOT_SWITCHED = eachFront((f) =>
+  titled(f, "Automatic Switch Skipped", "Automatic switch skipped"),
+);
+const NOT_SWITCHING = eachFront((f) =>
+  titled(f, "Automatic Switching Paused", "Automatic switching paused"),
+);
 
 // state.rs `look_to_switch` and its outcomes: what switching by itself came to, said under the
 // setting, and each reason not to said once until the next switch.
@@ -564,7 +573,7 @@ function lookToSwitch(s: State) {
       s.autoStanding = { came: "switched", from: was, to: to.label, used: shareOfLimit(limit) };
       post(s, {
         id: `auto/${was}/${to.label}/${s.now}`,
-        title: { macos: `Switched to ${to.label}`, windows: `Switched to ${to.label}` },
+        title: eachFront(() => `Switched to ${to.label}`),
         subtitle: toolName("claude"),
         body: `${was} has used ${shareOfLimit(limit)}. ${sentence(afterSwitch("claude", "Sessions"))}`,
         button: { title: SWITCH_BACK, tool: "claude", label: was },
@@ -1036,6 +1045,25 @@ export function openWindow(tool: Tool, label: string) {
   });
 }
 
+// The link waiting opened as `id`, in its window, which opens where it is not open
+// (windows.rs `open_link`), or put away with no account chosen (`dismiss_link`).
+export function openLink(id: string) {
+  const s = model.get();
+  const a = s.accounts.find((x) => x.id === id);
+  if (!s.linkWaiting || !a) return;
+  change((s) => {
+    s.linkWaiting = false;
+    if (!s.windowsOpen.includes(a.id)) s.windowsOpen.push(a.id);
+  });
+}
+
+export function dismissLink() {
+  if (!model.get().linkWaiting) return;
+  change((s) => {
+    s.linkWaiting = false;
+  });
+}
+
 // A change to Settings' General.
 export function setGeneral(to: Partial<State["general"]>) {
   change((s) => {
@@ -1048,6 +1076,21 @@ export function closeWindow(id: string) {
   if (!model.get().windowsOpen.includes(id)) return;
   change((s) => {
     s.windowsOpen = s.windowsOpen.filter((open) => open !== id);
+  });
+}
+
+// The Linux app's window closed where the tray keeps Pitboard running, and shown again.
+export function closeAppWindow() {
+  if (!model.get().windowShown) return;
+  change((s) => {
+    s.windowShown = false;
+  });
+}
+
+export function showAppWindow() {
+  if (model.get().windowShown) return;
+  change((s) => {
+    s.windowShown = true;
   });
 }
 
@@ -1107,14 +1150,20 @@ export function reset() {
   rebase();
 }
 
-// How long each app took over a switch and a read in its UI tests on CI's runners
-// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after a row's
-// button on windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on
-// Windows and never seen dimmed on macOS.
+// How long each app took over a switch and a read (docs/facts/site.md): In Use 0.12 s after a click
+// on macOS, In use 0.19 to 0.37 s after a row's button on windows-2025 and 0.25 s on
+// windows-11-arm, in their UI tests on CI's runners; a tray entry's switch 1.06 s through KDE
+// Plasma in a Linux session, which GNOME's window takes too, measured on neither. Refresh was
+// disabled for 14 to 24 ms on Windows and never seen dimmed on macOS; Linux's read takes Windows'.
 export const TAKES_MS: Record<"switch" | "read", Record<System, number>> = {
-  switch: { macos: 120, windows: 250 },
-  read: { macos: 24, windows: 24 },
+  switch: { macos: 120, windows: 250, gnome: 1060, kde: 1060 },
+  read: { macos: 24, windows: 24, gnome: 24, kde: 24 },
 };
+
+// What each system's host gives the app beside its windows, as the app's model keeps it
+// (front.rs `Surfaces`): a status item in macOS's menu bar, Windows' notification area and KDE
+// Plasma's tray, and none on stock GNOME, where closing the window quits Pitboard.
+export const surfaces = (system: System) => ({ statusItem: system !== "gnome" });
 let token = 0;
 
 // The app's switch from a menu, the window's Switch or a notification's: the account reads

@@ -11,14 +11,14 @@ const DOCS_RULES = join(DOCS, "AGENTS.md");
 
 const BUDGETS = {
   html: {
-    // its figures drawn for each platform: the size measured with them, and a fifth more
-    "index.html": 114_800,
+    // its figures drawn for each system: the size measured with them, and a fifth more
+    "index.html": 205_100,
     "download.html": 30_000,
     "404.html": 30_000,
     "changelog.html": 80_000,
   },
   // the figures' live states: the size measured with them, and a fifth more
-  css: 24_100,
+  css: 33_100,
   fonts: { files: 2, bytes: 90_000, preloads: 2 },
   // WhatsApp drops a larger preview image
   image: 300_000,
@@ -132,7 +132,7 @@ export function checkPage(name, html, rules) {
 
   // head.js sets the root's choice before the first paint; site.ts sets aria state once it loads
   for (const e of all.filter((e) => e.tag === "button")) {
-    const value = e.attrs["data-platform"] ?? e.attrs["data-surface"];
+    const value = e.attrs["data-platform"] ?? e.attrs["data-surface"] ?? e.attrs["data-desktop"];
     if (!value) continue;
     const what = `the ${value} ${e.attrs.role === "tab" ? "tab" : "button"}`;
     const look = e.attrs.class ?? "";
@@ -151,6 +151,12 @@ export function checkPage(name, html, rules) {
         fail(`${file} does not show the step its panel gives after a download`);
     }
   }
+
+  // an id names one element, but in a template live code copies and names again
+  const given = new Map();
+  for (const e of all.filter((e) => e.attrs.id && !closest(e.parent, (p) => p.tag === "template")))
+    given.set(e.attrs.id, (given.get(e.attrs.id) ?? 0) + 1);
+  for (const [id, n] of given) if (n > 1) fail(`gives #${id} to ${n} elements`);
 
   const ids = new Set(all.map((e) => e.attrs.id).filter(Boolean));
   for (const e of all) {

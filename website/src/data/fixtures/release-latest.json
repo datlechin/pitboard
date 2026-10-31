@@ -1,101 +1,101 @@
 {
-  "tag_name": "v0.15.1",
-  "name": "v0.15.1",
+  "tag_name": "v0.15.2",
+  "name": "v0.15.2",
   "draft": false,
   "prerelease": false,
-  "published_at": "2026-10-23T08:12:18Z",
-  "html_url": "https://github.com/datlechin/pitboard/releases/tag/v0.15.1",
+  "published_at": "2026-10-28T07:33:35Z",
+  "html_url": "https://github.com/datlechin/pitboard/releases/tag/v0.15.2",
   "assets": [
     {
       "name": "appcast.xml",
       "size": 876,
-      "digest": "sha256:0960d9b2aaefd070837a47161c705e6587e3186d528572d2762c9b71a1212886",
+      "digest": "sha256:3b864f972966541078fe712ffa198a8a794ae727c7986fd0f525e5f9aeeca3b6",
       "content_type": "application/xml",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/appcast.xml"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/appcast.xml"
     },
     {
       "name": "install.sh",
       "size": 7818,
-      "digest": "sha256:6b8cf5ed9d0b5d04ad9df8c436cbce8c583be5aa095aa830744f0b1e19368560",
+      "digest": "sha256:b76dca7413d35ad091a0370f0f155ee4e86705f53289cead9453671c289b4353",
       "content_type": "application/x-sh",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/install.sh"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/install.sh"
     },
     {
-      "name": "pitboard-v0.15.1-aarch64-apple-darwin.tar.gz",
-      "size": 2071137,
-      "digest": "sha256:69ec6c102c217cf8de39520f335758bd253ab161ac9b6e7b4c7292609295454d",
+      "name": "pitboard-v0.15.2-aarch64-apple-darwin.tar.gz",
+      "size": 2069815,
+      "digest": "sha256:056964748ec8af21b85e5369160d260621e990e50d9ab12c1a1176c1a2650bdd",
       "content_type": "application/gzip",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-aarch64-apple-darwin.tar.gz"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-aarch64-apple-darwin.tar.gz"
     },
     {
-      "name": "pitboard-v0.15.1-aarch64-apple-darwin.tar.gz.cdx.json",
+      "name": "pitboard-v0.15.2-aarch64-apple-darwin.tar.gz.cdx.json",
       "size": 109487,
-      "digest": "sha256:348c523a452ebe86e8ea88fedce805d6b95e73e1544155d90d9908a732708a6a",
+      "digest": "sha256:a041d601b0baa071868d7fc41823afd6ef5c4ba80867ec64f69dcbee40654953",
       "content_type": "application/json",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-aarch64-apple-darwin.tar.gz.cdx.json"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-aarch64-apple-darwin.tar.gz.cdx.json"
     },
     {
-      "name": "pitboard-v0.15.1-aarch64-unknown-linux-musl.tar.gz",
-      "size": 2276371,
-      "digest": "sha256:2b28c7f062d18a579aade5068c285490ca04cdbacf03f31940894dbbb136c7b3",
+      "name": "pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz",
+      "size": 2276057,
+      "digest": "sha256:e11835cd1abc1f764066efcdec276d3fe67b07767da0913858276ddd5e077e2a",
       "content_type": "application/gzip",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-aarch64-unknown-linux-musl.tar.gz"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz"
     },
     {
-      "name": "pitboard-v0.15.1-aarch64-unknown-linux-musl.tar.gz.cdx.json",
+      "name": "pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz.cdx.json",
       "size": 97734,
-      "digest": "sha256:e97abb4548bdea7b1c8b1df1b1d0bb071c232020e14ca90a80d9cd6b0b75bcdc",
+      "digest": "sha256:60df6026592d67cc4a71948ae85a49681061a7240b82559ab5a9f8fa9f367a1b",
       "content_type": "application/json",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-aarch64-unknown-linux-musl.tar.gz.cdx.json"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz.cdx.json"
     },
     {
-      "name": "Pitboard-v0.15.1-macos.zip",
-      "size": 18760928,
-      "digest": "sha256:e3e3a396598200b57d56d5489ef33b390fcb490a330be290a26eedcf614c5a09",
+      "name": "Pitboard-v0.15.2-macos.zip",
+      "size": 18756951,
+      "digest": "sha256:264b0148291f300973b2489fc0b97780e88b81b57673ae0dd96a5784f5428f09",
       "content_type": "application/zip",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/Pitboard-v0.15.1-macos.zip"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/Pitboard-v0.15.2-macos.zip"
     },
     {
-      "name": "Pitboard-v0.15.1-macos.zip.cdx.json",
+      "name": "Pitboard-v0.15.2-macos.zip.cdx.json",
       "size": 205331,
-      "digest": "sha256:3bcaeecd213ee138f91ce797b0c7fdfb9cd40370a618b61a384037693a7c0d24",
+      "digest": "sha256:9c2b588136c6b2902d948d360cf8978af0729c8a1d91a2a7df2ac00d9f6ca2e0",
       "content_type": "application/json",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/Pitboard-v0.15.1-macos.zip.cdx.json"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/Pitboard-v0.15.2-macos.zip.cdx.json"
     },
     {
-      "name": "pitboard-v0.15.1-x86_64-apple-darwin.tar.gz",
-      "size": 2206369,
-      "digest": "sha256:66b2b4637fc1864677716e966927190907b9908d0c8dfb26e785658336106d4f",
+      "name": "pitboard-v0.15.2-x86_64-apple-darwin.tar.gz",
+      "size": 2206392,
+      "digest": "sha256:d1e1e492aa7581edb0f20fea9587a150328e40384a273bad0c850bdd22304336",
       "content_type": "application/gzip",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-x86_64-apple-darwin.tar.gz"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-x86_64-apple-darwin.tar.gz"
     },
     {
-      "name": "pitboard-v0.15.1-x86_64-apple-darwin.tar.gz.cdx.json",
+      "name": "pitboard-v0.15.2-x86_64-apple-darwin.tar.gz.cdx.json",
       "size": 109301,
-      "digest": "sha256:351fdd18bc370bac940d030cc20f248f3fed9886cfb1688e48d9f24babc6d342",
+      "digest": "sha256:72818b846904ff42f7693c81a5f904b8eca92265b3790d62ef67bf4b98e86b60",
       "content_type": "application/json",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-x86_64-apple-darwin.tar.gz.cdx.json"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-x86_64-apple-darwin.tar.gz.cdx.json"
     },
     {
-      "name": "pitboard-v0.15.1-x86_64-unknown-linux-musl.tar.gz",
-      "size": 2373466,
-      "digest": "sha256:1a3b735a474fc644ea845a1df83dc1a3d019a90de0034c8239f757fcfe97478b",
+      "name": "pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz",
+      "size": 2372994,
+      "digest": "sha256:cee321ab4fed9add000a981d6fa851613ee027a3eefb51a4de59e72a2bc449f1",
       "content_type": "application/gzip",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-x86_64-unknown-linux-musl.tar.gz"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz"
     },
     {
-      "name": "pitboard-v0.15.1-x86_64-unknown-linux-musl.tar.gz.cdx.json",
+      "name": "pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz.cdx.json",
       "size": 97548,
-      "digest": "sha256:8d2f0a0ab05074f984964efe806dcf826c158a1b15342b30c464708d859107ea",
+      "digest": "sha256:78b9af57b9c2e337297313c1cf7b47298836fb7d873f8a76a1d8acb324187893",
       "content_type": "application/json",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/pitboard-v0.15.1-x86_64-unknown-linux-musl.tar.gz.cdx.json"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz.cdx.json"
     },
     {
       "name": "SHA256SUMS",
       "size": 624,
-      "digest": "sha256:017161091a0e915aae0238979a5dc07b884ccf21e8e9667a0c0c7edc28c1e47a",
+      "digest": "sha256:4ef5be4ab311826a1b72956decba53718b8a8419dc17cb7a9e21b25fa659df9c",
       "content_type": "application/octet-stream",
-      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.1/SHA256SUMS"
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v0.15.2/SHA256SUMS"
     }
   ]
 }

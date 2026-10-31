@@ -1,16 +1,18 @@
 // A window's panes (answer 4 a): macOS's sidebar and WinUI's NavigationView, in WAI-ARIA's tabs
 // pattern. A page shown `under` another, as Windows' Diagnostics and Activity are under Settings,
 // keeps that page's tab selected and goes back to it.
+import type { System } from "../../lib/platform.ts";
 
 export interface PanesOptions {
-  system: "macos" | "windows";
+  system: System;
   window: HTMLElement;
   // a pane has shown, the first time or again
   shown: (pane: string) => void;
 }
 
-// the window's width in units, by which its height is kept in units as the page scales it
-const WIDTH = { macos: 640, windows: 704 };
+// the window's width in units, by which its height is kept in units as the page scales it, on each
+// system whose window has panes
+const WIDTH: Partial<Record<System, number>> = { macos: 640, windows: 704 };
 
 export class Panes {
   readonly tabs: HTMLElement[];
@@ -20,6 +22,7 @@ export class Panes {
   readonly #under = new Map<string, string>();
 
   constructor(readonly o: PanesOptions) {
+    if (WIDTH[o.system] === undefined) throw new Error(`no ${o.system} window has panes`);
     this.tabs = [...o.window.querySelectorAll<HTMLElement>('[role="tab"][data-pane]')];
     for (const panel of o.window.querySelectorAll<HTMLElement>("[data-pane-panel][data-under]"))
       this.#under.set(panel.dataset.panePanel!, panel.dataset.under!);
@@ -95,7 +98,7 @@ export class Panes {
       const w = this.o.window;
       if (pane === this.first) w.style.removeProperty("--locked");
       else if (!w.style.getPropertyValue("--locked")) {
-        const unit = w.getBoundingClientRect().width / WIDTH[this.o.system];
+        const unit = w.getBoundingClientRect().width / WIDTH[this.o.system]!;
         w.style.setProperty(
           "--locked",
           `calc(var(--spacing) * ${w.getBoundingClientRect().height / unit})`,

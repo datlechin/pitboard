@@ -1,0 +1,103 @@
+---
+// GNOME Shell's NotificationMessage (js/ui/messageList.js, widgets/_message-list.scss), approx. A
+// GTK notification's body is one line, its newlines made spaces, so the tool the Linux app puts
+// first runs into it, and its button shows only once the message is expanded: a `banner`
+// (js/ui/messageTray.js) expands while held, a message in the date menu's list by Expand. St names
+// neither icon button, so the figure names them for what they do. The app sets no icon on a
+// notification. St sizes a box by its content, as box-content does.
+import linuxSymbolic from "../../../../../apps/linux/data/icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg?raw";
+import { app } from "../../../data/linux.ts";
+import { shell } from "../../../data/gnome.ts";
+import { headsUp } from "../../../lib/words.ts";
+import { symbolOf } from "../../../lib/symbolic.ts";
+
+interface Props {
+  prefix: string;
+  banner?: boolean;
+  class?: string;
+}
+const { prefix, banner = false, class: extra } = Astro.props;
+const mark = symbolOf(linuxSymbolic, true);
+const title = banner ? `${prefix}-title` : `${prefix}-center-note`;
+const actions = `${prefix}-center-actions`;
+// %notification_button: white at 15%, 30% under the pointer
+const round =
+  "flex size-28 flex-none items-center justify-center rounded-full bg-white/15 text-shell-text focus-shell live:cursor-default live:hover:bg-white/30";
+// collapsed, the body keeps to one line; expanded, to DEFAULT_EXPAND_LINES
+const body = banner
+  ? "line-clamp-6 live:group-data-[state=in]/banner:line-clamp-1"
+  : "line-clamp-1 group-data-expanded/note:line-clamp-6";
+---
+
+<div
+  class:list={[
+    "box-content flex flex-col border-(length:--u) border-transparent bg-shell-message p-6 text-shell-text live:hover:bg-shell-card-hover",
+    banner
+      ? "group/banner min-h-64 rounded-u-16 shadow-shell-banner"
+      : "group/note mb-12 rounded-u-18 live:cursor-default",
+    extra,
+  ]}
+  role="group"
+  aria-labelledby={title}
+  data-banner={banner ? "" : undefined}
+  data-part={banner ? undefined : "note"}
+>
+  <div class="flex items-center gap-6 pl-6 text-shell-card-dim">
+    <svg
+      class="size-16 flex-none"
+      viewBox={mark.viewBox}
+      fill="currentColor"
+      set:html={mark.body}
+    />
+    <span class="box-content flex min-h-24 flex-1 items-end gap-6 pb-6">
+      <b class="font-bold">{app}</b>
+      <span class="pb-1 shell-small">{shell.justNow}</span>
+    </span>
+    {!banner && <button
+      class:list={[round, "group/expand"]}
+      type="button"
+      aria-label={shell.expand}
+      aria-expanded="false"
+      aria-controls={actions}
+      data-does="expand"
+    >
+      <svg class="size-16 transition-transform duration-200 group-aria-expanded/expand:rotate-180">
+        <use href="#adwaita-pan-down" />
+      </svg>
+    </button>}
+    <button
+      class:list={[round, "m-3"]}
+      type="button"
+      aria-label={shell.close}
+      data-close={banner ? "" : undefined}
+      data-does={banner ? undefined : "dismiss"}
+    >
+      <svg class="size-16"><use href="#adwaita-window-close" /></svg>
+    </button>
+  </div>
+  <div class="flex flex-col gap-4 p-6">
+    <b class="font-bold" id={title} data-part={banner ? undefined : "note-title"}
+      >{headsUp.title.gnome}</b
+    >
+    <span class={body}
+      ><span data-subtitle>{headsUp.tool}</span> <span data-body>{headsUp.body}</span></span
+    >
+  </div>
+  <div
+    class:list={[
+      "flex gap-6 p-4",
+      banner ? "live:group-data-[state=in]/banner:sr-only" : "hidden group-data-expanded/note:flex",
+    ]}
+    id={banner ? undefined : actions}
+    data-switch-row
+  >
+    <button
+      class="flex-1 rounded-u-8 bg-white/15 px-12 py-6 font-bold focus-shell live:cursor-default live:hover:bg-white/30"
+      type="button"
+      data-switch={banner ? "" : undefined}
+      data-does={banner ? undefined : "switch"}
+    >
+      {headsUp.button.gnome}
+    </button>
+  </div>
+</div>

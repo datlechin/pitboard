@@ -1,0 +1,52 @@
+---
+// A GtkButton as libadwaita draws it (_buttons.scss): bold, at radius 9 on the current colour at 10%,
+// 34 tall with 17 a side for its words, 10 for a `label` button whose style classes the app set in
+// place of GTK's text-button, or 34 square for an icon; `flat` on nothing until hovered,
+// `suggested` on the accent, `destructive` in the error colour; a `pill` 44 tall and round, and a
+// `circular` one 34 round.
+import Symbolic from "./Symbolic.astro";
+import type { Icon } from "../../../data/linux-window.ts";
+
+interface Props extends Omit<astroHTML.JSX.ButtonHTMLAttributes, "class"> {
+  look?: "raised" | "flat" | "suggested" | "destructive";
+  shape?: "text" | "label" | "image" | "pill" | "circular";
+  icon?: Icon;
+  class?: string;
+}
+const {
+  look = "raised",
+  shape = "text",
+  icon,
+  class: extra,
+  type = "button",
+  ...rest
+} = Astro.props;
+const looks = {
+  raised: "bg-current/10 live:hover:bg-current/15 live:active:bg-current/30",
+  flat: "live:hover:bg-current/7 live:active:bg-current/16",
+  suggested:
+    "bg-adw-accent-bg text-white live:hover:bg-[image:linear-gradient(rgb(255_255_255/0.1),rgb(255_255_255/0.1))]",
+  destructive: "text-adw-error bg-current/15 live:hover:bg-current/20 live:active:bg-current/35",
+};
+const shapes = {
+  text: "h-34 min-w-34 rounded-u-9 px-17",
+  label: "h-34 min-w-34 rounded-u-9 px-10",
+  image: "size-34 rounded-u-9",
+  pill: "h-44 rounded-pill px-32",
+  circular: "size-34 rounded-circle",
+};
+---
+
+<button
+  class:list={[
+    "inline-flex shrink-0 items-center justify-center font-bold whitespace-nowrap outline-none focus-adw disabled:opacity-50 live:cursor-default",
+    looks[look],
+    shapes[shape],
+    extra,
+  ]}
+  type={type}
+  {...rest}
+>
+  {icon && <Symbolic name={icon} />}
+  <slot />
+</button>

@@ -5,7 +5,7 @@ import { Prompt } from "./prompt.ts";
 import { toolbar } from "./toolbar.ts";
 import type { Machine, Running, Step } from "../../lib/cli.ts";
 import type { State } from "../../lib/model.ts";
-import type { Platform } from "../../lib/platform.ts";
+import { systemOf, type Platform } from "../../lib/platform.ts";
 import { escaped } from "../../lib/words.ts";
 import {
   builtin,
@@ -35,6 +35,8 @@ const load = () =>
   ));
 
 class Term extends LiveFigure {
+  // a program left running prints what each state brings, shown or not
+  protected drawsHidden = true;
   private shell!: Shell;
   private platform!: Platform;
   private log!: HTMLElement;
@@ -81,12 +83,28 @@ class Term extends LiveFigure {
         this.inTurn(() => this.enter(text));
       });
     // a click in the window gives the prompt focus, as a terminal's does, and a drag selects
-    this.log.addEventListener("click", (e) => {
+    this.addEventListener("click", (e) => {
+      if (!this.log.contains(e.target as Node)) return;
       if ((e as PointerEvent).pointerType === "touch" || e.target === this.prompt.field) return;
       if (getSelection()?.isCollapsed !== false) this.prompt.field.focus({ preventScroll: true });
     });
+    // a Linux computer's one shell, named by the title of the terminal its desktop shows
+    if (this.platform === "linux") {
+      this.follow();
+      document.addEventListener("choice", this.follow);
+    }
     super.connectedCallback();
   }
+
+  disconnectedCallback() {
+    document.removeEventListener("choice", this.follow);
+    super.disconnectedCallback();
+  }
+
+  private follow = () => {
+    const title = `${this.id}${systemOf(this) === "kde" ? "-kde" : ""}-title`;
+    for (const el of [this.log, this.prompt.field]) el.setAttribute("aria-labelledby", title);
+  };
 
   protected render(state: State) {
     if (this.running) this.print(this.running.next(state));
@@ -114,9 +132,10 @@ class Term extends LiveFigure {
 
   // PowerShell's prompt names the folder it is in; zsh's and bash's, as drawn, do not.
   private ps(): string {
+    // bash's in the dim of the chrome it is shown in, Ptyxis's or Konsole's
     const dim = {
       zsh: "text-mac-term-dim",
-      bash: "text-linux-term-dim",
+      bash: "dim",
       powershell: "text-win-term-dim",
     }[this.shell];
     const said = this.shell === "powershell" ? `PS ${this.cwd}>` : this.shell === "zsh" ? "%" : "$";

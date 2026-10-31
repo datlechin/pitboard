@@ -1,0 +1,34 @@
+---
+// Ptyxis 50.1 in its GNOME palette (src/palettes/gnome.palette) on libadwaita 1.9, 80 columns of
+// 11 point type under its header bar. With `backdrop`, another window has focus, and the window has
+// libadwaita's backdrop shadow. Output colours spans g, y, r, dim, and --term-bg is the ground a
+// cursor's character takes.
+import PtyxisBar from "./PtyxisBar.astro";
+
+interface Props {
+  // what the title says, unless a `title` slot draws it
+  title?: string;
+  backdrop?: boolean;
+  class?: string;
+}
+const { title, backdrop = false, class: extra } = Astro.props;
+---
+
+<div
+  class:list={[
+    "absolute z-1 flex flex-col overflow-hidden rounded-u-15 bg-linux-term-bg outline-1 -outline-offset-1 outline-white/7",
+    backdrop ? "shadow-linux-window-backdrop" : "shadow-linux-window",
+    extra,
+  ]}
+>
+  {Astro.slots.has("title") ? (
+    <PtyxisBar backdrop={backdrop}><slot name="title" slot="title" /></PtyxisBar>
+  ) : (
+    <PtyxisBar title={title} backdrop={backdrop} />
+  )}
+  <div
+    class="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
+  >
+    <slot />
+  </div>
+</div>

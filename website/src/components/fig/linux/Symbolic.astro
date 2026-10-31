@@ -1,0 +1,23 @@
+---
+// An icon the window asks for by name, as each desktop's theme gives it (data/linux-window.ts
+// `iconOf`): Adwaita's on GNOME, Breeze's on KDE Plasma, each shown on its own desktop.
+import { iconOf, type Icon } from "../../../data/linux-window.ts";
+
+interface Props {
+  name: Icon;
+  class?: string;
+}
+const { name, class: extra = "size-16" } = Astro.props;
+const [gnome, kde] = [iconOf(name, "gnome"), iconOf(name, "kde")];
+---
+
+<svg class:list={["shrink-0", extra]} aria-hidden="true">
+  {gnome === kde ? (
+    <use href={`#${gnome}`} />
+  ) : (
+    <>
+      <use href={`#${gnome}`} data-on="gnome" />
+      <use href={`#${kde}`} data-on="kde" />
+    </>
+  )}
+</svg>

@@ -1,0 +1,98 @@
+---
+// Plasma's panel under Konsole, in which a Claude Code session runs, with Pitboard's status item in
+// the system tray and the menu a right click on it opens, over the panel from the item's left edge
+// (systemtray.cpp). The item is a button Plasma names "Pitboard" and describes by its tooltip's
+// text, which shows over it; its menu's ids each start `prefix`. In the demo the pointer chooses
+// work, the menu shuts, the icon follows, and the tooltip names work as the pointer rests on the
+// item; the session's status line follows the switch after the menu does. Every node a state
+// shows is drawn; the moment after the switch is the one live code keeps to the state.
+import Konsole from "./Konsole.astro";
+import Panel from "./Panel.astro";
+import StatusItem from "./StatusItem.astro";
+import Tooltip from "./Tooltip.astro";
+import TrayMenu from "./TrayMenu.astro";
+import { panelClock, konsoleTitle } from "../../../data/kde.ts";
+import { session } from "../../../data/desk.ts";
+import { trayTip } from "../../../data/linux.ts";
+import { clock, moments } from "../../../data/world.ts";
+import { menuBarLevel, statusLine } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+  demo?: boolean;
+}
+const { prefix, demo = false } = Astro.props;
+const icon = `${prefix}-icon`;
+const tip = trayTip(moments.after);
+const { time, date } = panelClock(clock.menuBar);
+const [before, now] = [statusLine(moments.before), statusLine(moments.after)];
+const status =
+  demo && before !== now
+    ? `<span class="hidden demo:inline">${before}</span><span class="demo:hidden" data-part="status">${now}</span>`
+    : `<span data-part="status">${now}</span>`;
+const rule =
+  "bg-linear-to-b from-kde-term-faint to-kde-term-faint bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
+// The pointer rests on the item at 495 by 509 and moves to work's row, 45 on and 284 up. It is the
+// site's arrow in the colours of Fedora's breeze_cursors, black inside white.
+const pointer =
+  "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:translate-x-45 demo-row:-translate-y-284";
+---
+
+<pb-kde-desk
+  id={prefix}
+  class="desk block h-540 desk-px-720"
+  data-demo-desk={demo ? "" : undefined}
+  inert
+  data-output
+>
+  <Konsole
+    id={`${prefix}-konsole`}
+    title={konsoleTitle("claude")}
+    class="top-14 bottom-70 left-14 w-663 [&_.elbow]:mr-1 [&_.elbow]:ml-1 [&_.elbow]:size-6 [&_.elbow]:align-[calc(var(--spacing)*3)]"
+  >
+    {session.map((line) => (
+      <div set:html={line} />
+    ))}
+    <div class={rule}></div>
+    <div>&gt; <span class="bg-kde-term-text"> </span></div>
+    <div class={rule}></div>
+    <div set:html={`  ${status}`} />
+  </Konsole>
+  <Panel time={time} date={date} prefix={prefix}>
+    <StatusItem
+      id={icon}
+      level={menuBarLevel(moments.after)}
+      was={demo ? menuBarLevel(moments.before) : undefined}
+      levels
+      describedby={`${prefix}-tip`}
+    />
+  </Panel>
+  <TrayMenu class="absolute bottom-50 left-480 z-3" prefix={prefix} owner={icon} demo={demo} live />
+  <Tooltip
+    id={`${prefix}-tip`}
+    class="absolute bottom-62 left-495 z-3 hidden -translate-x-1/2 data-[state=shown]:flex demo-reach:flex"
+    mainText={tip.title}
+    subText={tip.text}
+  />
+  <svg
+    aria-hidden="true"
+    class:list={[
+      "pointer-events-none absolute bottom-10 left-495 z-4 h-21 w-13 origin-[1px_1px] transition-transform duration-800 ease-out data-[state=gone]:opacity-0",
+      { "demo-pick:scale-86 demo-pick:duration-100": demo },
+      { [pointer]: demo },
+    ]}
+    viewBox="0 0 13 21"
+    data-part="pointer"
+  >
+    <path
+      class="fill-black stroke-white"
+      d="M.5.5v17.6l4.3-4.2 2.9 6.7 2.6-1.1-2.9-6.6h6Z"
+      stroke-width="1"
+      stroke-linejoin="round"
+    ></path>
+  </svg>
+</pb-kde-desk>
+
+<script>
+  import "../../../scripts/live/kde-desk.ts";
+</script>

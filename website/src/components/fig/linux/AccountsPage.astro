@@ -1,0 +1,46 @@
+---
+// The accounts page (data/ui/accounts-page.ui, window/accounts.rs): an AdwPreferencesPage whose
+// first group holds the notices, a boxed list shown while one is, then a group an account, each
+// tool's in the model's order. Templates make what a visitor adds.
+import AccountGroup from "./AccountGroup.astro";
+import LimitRow from "./LimitRow.astro";
+import List from "./List.astro";
+import NoticeRow from "./NoticeRow.astro";
+import { accountsPage, switchNotice } from "../../../data/linux-window.ts";
+import { sessionsFollowIn, switchedTo } from "../../../data/window.ts";
+import { moments, type Moment } from "../../../data/world.ts";
+import { toolsOn } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+  moment: Moment;
+  // the accounts of one tool alone, as the hero's window shows Claude Code's
+  only?: "claude";
+  // the account whose Switch the hero's demo presses
+  demo?: string;
+}
+const { prefix, moment, only, demo } = Astro.props;
+const page = accountsPage(moments[moment]);
+const groups = page.groups.filter((g) => !only || g.tool === only);
+const tools = toolsOn("linux");
+---
+
+<div class="mx-auto flex w-540 flex-col gap-24 px-12 py-24" data-part="page">
+  <List data-part="notices" hidden={moment !== "after"}>
+    {tools.map(([tool, name]) => (
+      <NoticeRow
+        tool={tool}
+        title={tool === "claude" ? switchNotice.title : switchedTo(name, "work")}
+        countdown={tool === "claude" ? switchNotice.countdown : `${sessionsFollowIn(name)} 0:21`}
+        shown={moment === "after" && tool === "claude"}
+      />
+    ))}
+  </List>
+  <div class="flex flex-col gap-24" data-part="list">
+    {groups.map((g) => (
+      <AccountGroup prefix={prefix} group={g} demo={g.label === demo} />
+    ))}
+  </div>
+  <template data-part="group"><AccountGroup prefix={prefix} /></template>
+  <template data-part="limit"><LimitRow /></template>
+</div>

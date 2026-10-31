@@ -1,7 +1,7 @@
 ---
-// A session in the terminal of each system it runs on, and in macOS's on a system it does not; each
-// terminal is a shell of its own, its ids starting `prefix` and its platform. Its last line is the
-// shell's prompt: a native field over the cursor each terminal draws, which live/term.ts runs.
+// A session in the terminal of each platform it runs on, each a shell of its own, its ids starting
+// `prefix` and its platform: on Linux one bash in Ptyxis under GNOME and in Konsole under KDE
+// Plasma. Its last line is the shell's prompt: a native field over the cursor each terminal draws.
 import CommandRow from "./CommandRow.astro";
 import Prompt from "./Prompt.astro";
 import LinuxTerminal from "./linux/Terminal.astro";
@@ -10,8 +10,9 @@ import WinTerminal from "./win/Terminal.astro";
 import { printed, type Session } from "../../data/sessions.ts";
 import { moments } from "../../data/world.ts";
 import { siteData } from "../../lib/data.ts";
-import { platforms, shownOn, type Platform } from "../../lib/platform.ts";
+import { onOf, platforms, type Platform } from "../../lib/platform.ts";
 import { taps } from "../../lib/shell.ts";
+import { konsoleTitle } from "../../data/kde.ts";
 
 interface Props {
   prefix: string;
@@ -19,8 +20,9 @@ interface Props {
 }
 const { prefix, session } = Astro.props;
 const { downloads } = await siteData();
-// each shell's prompt, and the cursor at it: Terminal's and Ptyxis's a block the text shows
-// through inverted, Windows Terminal's a bar. Out of focus, each is hollow.
+// each shell's prompt, and the cursor at it: Terminal's a block the text shows through inverted,
+// Ptyxis's and Konsole's a block in the text's colour, which each chrome sets, Windows
+// Terminal's a bar. Out of focus, each is hollow.
 const prompts: Record<Platform, [string, string]> = {
   macos: [
     '<span class="text-mac-term-dim">%</span>',
@@ -31,8 +33,8 @@ const prompts: Record<Platform, [string, string]> = {
     "inline-block h-20 w-2 bg-win-term-text align-top live:group-not-focus-within:w-[1ch] live:group-not-focus-within:bg-transparent live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-win-term-text",
   ],
   linux: [
-    '<span class="text-linux-term-dim">$</span>',
-    "bg-linux-term-text text-linux-term-bg live:group-not-focus-within:bg-transparent live:group-not-focus-within:text-linux-term-text live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-linux-term-text",
+    '<span class="dim">$</span>',
+    "bg-current text-(--term-bg) live:group-not-focus-within:bg-transparent live:group-not-focus-within:text-current live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-current",
   ],
 };
 const drawn = platforms.filter((p) => !session.on || session.on.includes(p));
@@ -53,7 +55,7 @@ const version = (p: Platform) => downloads[p].release.version;
 const keys = "Tab completes a command. Escape, then Tab, moves on.";
 ---
 
-<div class={shownOn("macos", drawn)} data-drawing="cli macos">
+<div data-drawing="cli macos" data-on={onOf(["macos"])}>
   <pb-term
     id={`${prefix}-macos`}
     class:list={[desk, "py-20", coarse]}
@@ -72,7 +74,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
     <span id={`${prefix}-macos-keys`} hidden>{keys}</span>
   </pb-term>
 </div>
-{drawn.includes("windows") && <div class={shownOn("windows", drawn)} data-drawing="cli windows">
+{drawn.includes("windows") && <div data-drawing="cli windows" data-on={onOf(["windows"])}>
   <pb-term
     id={`${prefix}-windows`}
     class:list={[desk, "py-24 desk-px-820", coarse]}
@@ -91,7 +93,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
     <span id={`${prefix}-windows-keys`} hidden>{keys}</span>
   </pb-term>
 </div>}
-{drawn.includes("linux") && <div class={shownOn("linux", drawn)} data-drawing="cli linux">
+{drawn.includes("linux") && <div data-drawing="cli linux" data-on={onOf(["linux"])}>
   <pb-term
     id={`${prefix}-linux`}
     class:list={[desk, "py-24 desk-px-780", coarse]}
@@ -100,7 +102,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
     data-command={session.command}
     data-version={version("linux")}
   >
-    <LinuxTerminal title={session.title} id={`${prefix}-linux`}>
+    <LinuxTerminal title={session.title} konsole={konsoleTitle("bash")} id={`${prefix}-linux`}>
       {lines("linux").map((line) => (
         <div set:html={line} />
       ))}

@@ -6,10 +6,6 @@
 @custom-variant js (&:where(.js *));
 @custom-variant no-js (&:where(:root:not(.js) *));
 @custom-variant scrolled (&:where(.scrolled *));
-/* the platform head.js chose; without JavaScript, macOS */
-@custom-variant platform-macos (&:where(:root:not([data-platform="windows"], [data-platform="linux"]) *));
-@custom-variant platform-windows (&:where([data-platform="windows"] *));
-@custom-variant platform-linux (&:where([data-platform="linux"] *));
 @custom-variant os-mobile (&:where([data-os="mobile"] *));
 @custom-variant surface-app (&:where([data-surface="app"] *));
 @custom-variant surface-cli (&:where([data-surface="cli"] *));
@@ -19,7 +15,9 @@
   &:where(:root[data-platform="windows"] [data-platform="windows"]),
   &:where(:root[data-platform="linux"] [data-platform="linux"]),
   &:where(:root:not([data-surface="cli"]) [data-surface="app"]),
-  &:where(:root[data-surface="cli"] [data-surface="cli"]) {
+  &:where(:root[data-surface="cli"] [data-surface="cli"]),
+  &:where(:root:not([data-desktop="kde"]) [data-desktop="gnome"]),
+  &:where(:root[data-desktop="kde"] [data-desktop="kde"]) {
     @slot;
   }
 }
@@ -170,7 +168,7 @@
   --color-mac-window-scrim: light-dark(rgb(172 172 172 / 0.62), rgb(0 0 0 / 0.4));
   --color-mac-window-close-off: light-dark(#dcdcdc, #5a5a5a);
   --color-mac-window-focus: light-dark(rgb(0 122 255 / 0.5), rgb(10 132 255 / 0.5));
-  /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
+  /* Ptyxis 50.1's GNOME palette in a libadwaita 1.9 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
   --color-linux-bar-shade: light-dark(rgb(0 0 6 / 0.12), rgb(0 0 6 / 0.36));
@@ -249,7 +247,6 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-mac: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
-  --font-linux: "Adwaita Sans", "Cantarell", "Ubuntu Sans", "Inter", system-ui, sans-serif;
   --font-win:
     "Segoe UI Variable", "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
   --font-win-mono: "Cascadia Mono", "Cascadia Code", Consolas, var(--font-mono);
@@ -404,6 +401,9 @@
   --inset-shadow-win-layer-edge: inset 0 0 0 calc(1 * var(--u)) var(--color-win-layer-edge);
   --inset-shadow-win-strong: inset 0 0 0 calc(1 * var(--u)) var(--color-win-strong);
 }
+@import "./adwaita.css";
+@import "./gnome.css";
+@import "./kde.css";
 
 @font-face {
   font-family: "Inter";
@@ -465,6 +465,16 @@
   :focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+  /* what is for some systems shows to the one head.js chose, Linux by its desktop, and important
+     as preflight's [hidden] is, so no utility shows it to another; without JavaScript every part
+     shows, and a figure its macOS drawing alone */
+  :root[data-platform="macos"] [data-on]:not([data-on~="macos"]),
+  :root[data-platform="windows"] [data-on]:not([data-on~="windows"]),
+  :root[data-platform="linux"]:not([data-desktop="kde"]) [data-on]:not([data-on~="gnome"]),
+  :root[data-platform="linux"][data-desktop="kde"] [data-on]:not([data-on~="kde"]),
+  :root:not(.js) figure [data-on]:not([data-on~="macos"]) {
+    display: none !important;
   }
   @media (prefers-reduced-motion: reduce) {
     *,

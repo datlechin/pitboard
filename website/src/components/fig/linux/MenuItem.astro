@@ -1,0 +1,19 @@
+---
+// A GtkModelButton in a popover menu (_menus.scss `modelbutton`): 32 tall at least and 40 wide, 12
+// a side at radius 9, the current colour at 10% under the pointer or the keyboard, dimmed while
+// its action is off.
+interface Props extends Omit<astroHTML.JSX.HTMLAttributes, "class"> {
+  disabled?: boolean;
+}
+const { disabled = false, ...rest } = Astro.props;
+---
+
+<div
+  class="flex h-32 min-w-40 items-center rounded-u-9 px-12 whitespace-nowrap outline-none focus-visible:bg-current/10 aria-disabled:opacity-50 live:hover:bg-current/10 live:active:bg-current/16 live:aria-disabled:hover:bg-transparent"
+  role="menuitem"
+  tabindex="-1"
+  aria-disabled={disabled ? "true" : undefined}
+  {...rest}
+>
+  <slot />
+</div>

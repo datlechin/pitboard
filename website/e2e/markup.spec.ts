@@ -8,9 +8,11 @@ import {
   drawn,
   expect,
   handedOver,
-  platforms,
+  platformOf,
   roots,
+  systems,
   test,
+  type Platform,
 } from "./fixtures.ts";
 
 test.use({ reducedMotion: "reduce" });
@@ -55,19 +57,20 @@ test.describe("without JavaScript", () => {
   });
 });
 
-// the figures index.astro draws at the moment before the demo's switch
-const before = ["usage-mac", "usage-win"];
+// the figures index.astro draws at the moment before the demo's switch: the window #usage draws on
+// each system, and GNOME's hero, whose window the demo switches in
+const before = ["usage-mac", "usage-win", "usage-linux", "hero-gnome", "hero-gnome-window"];
 
 test.describe("with JavaScript", () => {
-  for (const platform of platforms) {
-    test(`on ${platform}, every figure is the markup Astro drew`, async ({
+  for (const system of systems) {
+    test(`on ${system}, every figure is the markup Astro drew`, async ({
       page,
       browser,
       baseURL,
       problems,
     }) => {
       const astro = await astroDrew(browser, baseURL!, problems);
-      await choose(page.context(), { platform });
+      await choose(page.context(), { system });
       await page.clock.install();
       await page.goto("/");
       const live = new Set(await defined(page));
@@ -76,16 +79,26 @@ test.describe("with JavaScript", () => {
       expect(Object.keys(now)).toEqual(Object.keys(astro));
       for (const [id, html] of Object.entries(now))
         if (!before.includes(id)) expect(html, id).toBe(astro[id]);
-      // the window #usage draws before the switch: back on personal, it is that markup again
+      // the window #usage draws before the switch: back on personal, it is that markup again, in
+      // the window the system shows, a hidden one drawing nothing until it shows
       await page
         .locator('#switch-mac [data-account="personal"] [data-does="use"]')
         .dispatchEvent("click");
-      await expect(page.locator('#usage-mac [data-account="personal"]')).toHaveAttribute(
-        "aria-keyshortcuts",
-        "Meta+C",
-      );
+      const inUse: Record<Platform, [string, string, string | null]> = {
+        macos: ['#usage-mac [data-account="personal"]', "aria-keyshortcuts", "Meta+C"],
+        windows: [
+          '#usage-win [data-account="personal"] [data-does="expand"]',
+          "aria-keyshortcuts",
+          "F2 Control+C",
+        ],
+        linux: ['#usage-linux [data-account="personal"] [data-part="in-use"]', "hidden", null],
+      };
+      const [where, name, value] = inUse[platformOf(system)];
+      if (value === null) await expect(page.locator(where)).not.toHaveAttribute(name);
+      else await expect(page.locator(where)).toHaveAttribute(name, value);
       const back = await drawn(page);
-      for (const id of before) expect(back[id], id).toBe(astro[id]);
+      for (const id of before.filter((id) => !id.startsWith("hero-")))
+        expect(back[id], id).toBe(astro[id]);
       // a figure whose element is not defined stays the drawing, inert
       const inert = await page
         .locator(roots)
@@ -100,12 +113,12 @@ test.describe("with JavaScript", () => {
 test.describe("on a phone", () => {
   test.skip(({ isMobile }) => !isMobile, "a phone's width");
 
-  for (const platform of platforms)
+  for (const system of systems)
     for (const surface of ["app", "cli"] as const)
-      test(`on ${platform}, every ${surface} figure fits the page and scrolls nothing sideways`, async ({
+      test(`on ${system}, every ${surface} figure fits the page and scrolls nothing sideways`, async ({
         page,
       }) => {
-        await choose(page.context(), { platform, surface });
+        await choose(page.context(), { system, surface });
         await page.goto("/");
         const over = await page.locator(roots).evaluateAll((all) =>
           all

@@ -17,7 +17,7 @@ import {
   toast,
 } from "./windows.ts";
 import { moments, tools } from "./world.ts";
-import { TIP_LENGTH, menuBarLevel, shellTip, trayTip } from "../lib/words.ts";
+import { TIP_LENGTH, barTip, menuBarLevel, shellTip } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
@@ -173,7 +173,7 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   );
   assert.ok(catalogue.includes('format!("{label} ({tool})")'));
   assert.equal(
-    trayTip(moments.after),
+    barTip(moments.after, "windows"),
     "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): weekly 7% used",
   );
 });
@@ -182,7 +182,7 @@ test("the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a
   const icon = shell("NotifyIcon.cs");
   assert.ok(icon.includes(`public const int TipLength = ${TIP_LENGTH};`));
   assert.ok(icon.includes("char.IsHighSurrogate(tip[TipLength - 1]) ? TipLength - 1 : TipLength"));
-  const tip = trayTip(moments.after);
+  const tip = barTip(moments.after, "windows");
   assert.equal(shellTip(tip), tip);
   assert.equal(shellTip("a".repeat(200)).length, 127);
   // a name of 126 letters and a face: the face's two units would end past the 127th
@@ -580,6 +580,27 @@ test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl
   assert.ok(
     repo("website/src/pages/index.astro").includes(
       "include F2 to rename the account selected, Delete to remove it and Ctrl+C to copy its email address.",
+    ),
+  );
+});
+
+test("each question's default is its verb but Uninstall Pitboard?'s, and the Name step offers Done alone", () => {
+  const host = views("DialogHost.cs");
+  assert.ok(
+    host.includes(
+      "dialog.DefaultButton = question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.Close;",
+    ),
+  );
+  assert.ok(
+    present("accounts.rs").includes("destructive: true,\n            confirm_is_default: true,"),
+  );
+  assert.ok(
+    present("removal.rs").includes("intent: Intent::Uninstall,") &&
+      present("removal.rs").includes("confirm_is_default: false,"),
+  );
+  assert.ok(
+    shell("SheetPage.cs").includes(
+      "public override string? CloseTitle => Sheet is Sheet.Name ? null : Words.Window.Cancel;",
     ),
   );
 });

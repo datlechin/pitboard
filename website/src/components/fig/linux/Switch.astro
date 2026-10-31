@@ -1,0 +1,27 @@
+---
+// GtkSwitch (_switch.scss): a trough at radius 14 with 3 a side, the current colour at 15%, and a 20
+// round slider with its shadow; turned on, the accent and a white slider. 46 by 26.
+interface Props {
+  on?: boolean;
+  label?: string;
+  labelledby?: string;
+  describedby?: string;
+  [data: `data-${string}`]: string | undefined;
+}
+const { on = false, label, labelledby, describedby, ...data } = Astro.props;
+---
+
+<button
+  class="group/switch relative h-26 w-46 shrink-0 rounded-u-14 bg-current/15 outline-none focus-visible:outline-[length:calc(var(--u)*2)] focus-visible:outline-offset-[calc(var(--u)*1)] focus-visible:outline-solid focus-visible:outline-adw-accent/50 aria-checked:bg-adw-accent-bg live:cursor-default live:hover:bg-current/20 live:aria-checked:hover:bg-adw-accent-bg"
+  type="button"
+  role="switch"
+  aria-checked={on ? "true" : "false"}
+  aria-label={label}
+  aria-labelledby={labelledby}
+  aria-describedby={describedby}
+  {...data}
+>
+  <span
+    class="absolute top-3 left-3 size-20 rounded-circle bg-adw-slider shadow-adw-slider transition-[left] group-aria-checked/switch:left-23 group-aria-checked/switch:bg-white"
+  ></span>
+</button>

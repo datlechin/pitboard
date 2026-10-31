@@ -1,0 +1,84 @@
+---
+// Pitboard's status item in Plasma's system tray: the icon presence.rs names for the level the
+// model words, or its attention twin, which Plasma shows and pulses while the item needs attention
+// (StatusNotifierItem.qml, AbstractItem.qml, PulseAnimation.qml), shrunk to 80% while pressed.
+// The icon is 22 pixels in a cell 8 wider, as tall as the tray (systemtray's main.qml), in the
+// Plasma style's text colour, as KIconLoader recolours it. Plasma names the item by its title and
+// describes it by its tooltip's text. With `levels` every icon is drawn, those not shown hidden,
+// and `was` over them before the demo's switch.
+import { breeze } from "../../../lib/breeze.ts";
+import type { level } from "../../../lib/words.ts";
+
+type Level = ReturnType<typeof level>;
+interface Props {
+  level: Level;
+  was?: Level;
+  attention?: boolean;
+  levels?: boolean;
+  id: string;
+  describedby?: string;
+  class?: string;
+}
+const {
+  level: now,
+  was = now,
+  attention = false,
+  levels = false,
+  id,
+  describedby,
+  class: extra,
+} = Astro.props;
+const files = import.meta.glob<string>(
+  "../../../../../apps/linux/data/icons/symbolic/status/*-symbolic.svg",
+  { query: "?raw", import: "default", eager: true },
+);
+const tray = { g: "plenty", y: "low", r: "out" } as const;
+const drawn = (l: Level, alert: boolean) => {
+  const name = `com.usepitboard.Pitboard-${tray[l]}${alert ? "-attention" : ""}-symbolic`;
+  const file = files[`../../../../../apps/linux/data/icons/symbolic/status/${name}.svg`];
+  if (!file) throw new Error(`apps/linux has no ${name}`);
+  return breeze(file, `${id}-${name}`).body;
+};
+const icon = "size-22 shrink-0";
+const each: [Level, boolean][] = levels
+  ? (["g", "y", "r"] as const).flatMap((l) => [false, true].map((a): [Level, boolean] => [l, a]))
+  : [[now, attention]];
+// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
+const shown = (l: Level, a: boolean) => (l === now && a === attention ? {} : { hidden: true });
+---
+
+<button
+  class:list={[
+    "group/item flex h-38 w-30 items-center justify-center outline-none focus-visible:inset-ring-1 focus-visible:inset-ring-kde-focus",
+    extra,
+  ]}
+  type="button"
+  id={id}
+  aria-label="Pitboard"
+  aria-describedby={describedby}
+  data-attention={String(attention)}
+>
+  <span
+    class="flex items-center justify-center transition-[scale] duration-200 ease-out motion-safe:group-data-[attention=true]/item:animate-kde-pulse live:group-active/item:scale-80"
+  >
+    {was !== now && (
+      <svg
+        class={`${icon} hidden demo-before:block`}
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        set:html={drawn(was, false)}
+      />
+    )}
+    {each.map(([l, a]) => (
+      <svg
+        class:list={[icon, { "demo-before:hidden": was !== now }]}
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        data-level={levels ? l : undefined}
+        data-attention={levels ? String(a) : undefined}
+        set:html={drawn(l, a)}
+        {...(levels ? shown(l, a) : {})}
+      />
+    ))}
+  </span>
+</button>

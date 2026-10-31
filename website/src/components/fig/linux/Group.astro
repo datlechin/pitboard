@@ -1,0 +1,41 @@
+---
+// AdwPreferencesGroup (_preferences.scss): its bold title over its dimmed description, 6 apart, a
+// suffix at the header's end, a header of one line at least 34 tall, then 6 and its boxed list, 6
+// more under a header that has a description.
+interface Props {
+  title?: string;
+  description?: string | null;
+  id: string;
+  class?: string;
+  [data: `data-${string}`]: string | undefined;
+}
+const { title, description, id, class: extra, ...data } = Astro.props;
+const header = title || description || Astro.slots.has("suffix");
+---
+
+{/* adw-preferences-group.c gives it the role group, which is no landmark */}
+<div
+  class:list={["flex flex-col", extra]}
+  role="group"
+  aria-labelledby={title ? `${id}-title` : undefined}
+  {...data}
+>
+  {header && <div class:list={["flex items-center gap-6", description ? "mb-12" : "min-h-34 mb-6"]}>
+    <span class="flex min-w-0 flex-1 flex-col gap-6">
+      <span class="truncate adw-heading" id={`${id}-title`} hidden={!title} data-part="group-title">
+        {title}
+      </span>
+      <span
+        class="opacity-55 adw-lines"
+        id={`${id}-description`}
+        hidden={!description && !Astro.slots.has("description")}
+        data-part="description"
+      >
+        {description}
+        <slot name="description" />
+      </span>
+    </span>
+    <slot name="suffix" />
+  </div>}
+  <slot />
+</div>

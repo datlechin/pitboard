@@ -1,0 +1,30 @@
+---
+// Konsole 26.08.2 under KWin's Breeze decoration, in the colours Fedora's Plasma gives an app: its
+// title bar and tools area, then the terminal in Konsole's Breeze scheme and Noto Sans Mono 10 with
+// its 1 pixel margin, 80 columns where its profile opens 110, the scrollbar's 21 pixels kept empty
+// (approx). Output colours spans g, y, r, dim (SGR 2's faint) and b (bold's intense), and
+// --term-bg is the ground a cursor's character takes.
+import KonsoleBar from "./KonsoleBar.astro";
+
+interface Props {
+  title: string;
+  // the window's own, which its ids start with
+  id: string;
+  class?: string;
+}
+const { title, id, class: extra } = Astro.props;
+---
+
+<div
+  class:list={[
+    "absolute z-1 flex flex-col overflow-hidden rounded-u-5 bg-kde-term-bg shadow-kde-window outline-1 outline-kde-header-edge",
+    extra,
+  ]}
+>
+  <KonsoleBar title={title} id={id} />
+  <div
+    class="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-1 pr-22 pl-1 font-kde-mono text-kde/18 whitespace-pre text-kde-term-text ligatures-none [--term-bg:var(--color-kde-term-bg)] *:min-h-18 [&_.dim]:text-kde-term-faint [&_.g]:text-kde-term-green [&_.r]:text-kde-term-red [&_.y]:text-kde-term-yellow [&_b]:font-bold [&_b]:text-kde-term-intense"
+  >
+    <slot />
+  </div>
+</div>

@@ -71,7 +71,7 @@ Select-String -Path SHA256SUMS -Pattern (Get-ChildItem Pitboard-*.msi, pitboard-
 
 It prints the line of `SHA256SUMS` for each installer and zip in the folder that matches. A file whose line it does not print differs from the one the release published.
 
-Homebrew and the install script check what they install against these checksums, and refuse a download changed on the release page later. On Windows, nothing checks an installer or a zip for you.
+Homebrew and the install script check what they install against these checksums, and refuse a download changed on the release page later. apt, dnf and zypper check what they install from Pitboard's repository against its signatures, as [Check the signature](#check-the-signature) says. On Windows, nothing checks an installer or a zip for you.
 
 ## Check the install script
 

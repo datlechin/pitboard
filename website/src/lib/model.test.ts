@@ -19,6 +19,7 @@ import {
   advance,
   cancelSignIn,
   clamped,
+  closeAppWindow,
   countdown,
   decide,
   declineSecond,
@@ -36,10 +37,12 @@ import {
   setChoice,
   setShare,
   settle,
+  showAppWindow,
   signInAgain,
   signInFromApp,
   start,
   suggest,
+  surfaces,
   switchBackFromApp,
   switchFromApp,
   use,
@@ -66,7 +69,8 @@ import {
   rowLines,
   statusLine,
   statusLines,
-  trayTip,
+  barTip,
+  whereItLives,
   hm,
 } from "./words.ts";
 import { plainText } from "./changelog.ts";
@@ -81,6 +85,7 @@ import {
   type Tool,
 } from "../data/world.ts";
 import { SITE_BANNED, bannedFromDocs, wordPattern } from "../../scripts/guard.mjs";
+import { frontOf, systems } from "./platform.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const core = (path: string) => repo(`crates/pitboard-core/src/${path}`);
@@ -276,7 +281,11 @@ test("a_limit_at_the_share_is_notified_once_before_it_runs_out", () => {
   assert.deepEqual(posted(), once);
   const [heads] = model.get().posted;
   assert.equal(heads.title.windows, "5-hour limit almost reached");
-  assert.deepEqual(heads.button?.title, { macos: "Switch", windows: "Switch to work" });
+  assert.deepEqual(heads.button?.title, {
+    macos: "Switch",
+    windows: "Switch to work",
+    gnome: "Switch to work",
+  });
   assert.deepEqual(model.get().advice, [], "the window offers it at 100%");
   reading({ "claude/personal": [session(100), weekly(20)] });
   refresh();
@@ -412,6 +421,7 @@ test("Pitboard switches by itself only once the account has settled, then never 
   assert.deepEqual(after.posted.at(-1)?.button?.title, {
     macos: "Switch Back",
     windows: "Switch back",
+    gnome: "Switch Back",
   });
   assert.deepEqual(
     after.log.slice(-1).map((e) => [e.caller, e.verb, e.subject, e.outcome]),
@@ -681,6 +691,22 @@ test("Quit stops the app's reads and notifications, and Reset brings every figur
   assert.deepEqual(model.get(), start());
 });
 
+test("the Linux window closes where a tray keeps Pitboard running, and Open Pitboard shows it", () => {
+  reset();
+  assert.equal(model.get().windowShown, true);
+  closeAppWindow();
+  assert.equal(model.get().windowShown, false);
+  assert.equal(model.get().running, true);
+  assert.equal(model.get().changed, true);
+  showAppWindow();
+  assert.equal(model.get().windowShown, true);
+  closeAppWindow();
+  reset();
+  assert.equal(model.get().windowShown, true);
+  assert.deepEqual(surfaces("gnome"), { statusItem: false });
+  assert.deepEqual(surfaces("kde"), { statusItem: true });
+});
+
 test("a view hears each action once", () => {
   reset();
   let heard = 0;
@@ -698,8 +724,8 @@ function everything(): { said: string[]; printed: string[] } {
   const printed = new Set<string>();
   const hear = (s: State) => {
     for (const p of s.posted)
-      [p.title.macos, p.title.windows, p.subtitle ?? "", p.body, p.button?.title.macos ?? ""]
-        .concat(p.button?.title.windows ?? "")
+      [...Object.values(p.title), p.subtitle ?? "", p.body]
+        .concat(Object.values(p.button?.title ?? {}))
         .forEach((t) => said.add(t));
     if (s.autoStanding) said.add(autoStandingSaid(s.autoStanding));
     const note = atLimitNote(s.preferences);
@@ -707,7 +733,7 @@ function everything(): { said: string[]; printed: string[] } {
     const next = nextWarmUp(s);
     if (next) said.add(next);
     said.add(menuBarTitle(s));
-    trayTip(s)
+    barTip(s, "windows")
       .split("\n")
       .forEach((t) => said.add(t));
     for (const a of s.accounts) {
@@ -973,4 +999,31 @@ test("a notice is put away by its close button, and the second-account step by N
   assert.deepEqual(model.get().declinedSecond, ["desktop"]);
   reset();
   assert.deepEqual(model.get().declinedSecond, []);
+});
+
+test("a tray keeps Pitboard on every system but stock GNOME, whose window says closing it quits", () => {
+  assert.deepEqual(
+    systems.map((s) => surfaces(s).statusItem),
+    [true, true, false, true],
+  );
+  const front = repo("crates/pitboard-model/src/front.rs");
+  assert.ok(front.includes("Front::Gnome => Surfaces { status_item: false },"));
+  assert.ok(
+    repo("apps/linux/src/preferences/general.rs").includes(
+      ".then(|| pitboard_model::gnome_words().close_note);",
+    ),
+  );
+  assert.match(
+    whereItLives(frontOf("gnome"), surfaces("gnome").statusItem),
+    /^Pitboard quits once/,
+  );
+  assert.match(whereItLives(frontOf("kde"), surfaces("kde").statusItem), /icon stays/);
+});
+
+test("a switch on Linux takes as long as the tray's took through KDE Plasma, its read as long as Windows'", () => {
+  assert.ok(repo("docs/facts/linux-session.md").includes("in 1.06 s through Plasma"));
+  for (const desktop of ["gnome", "kde"] as const) {
+    assert.equal(TAKES_MS.switch[desktop], 1060);
+    assert.equal(TAKES_MS.read[desktop], TAKES_MS.read.windows);
+  }
 });

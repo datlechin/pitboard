@@ -38,7 +38,10 @@ const icon = "size-20 shrink-0";
 
 <div class="flex h-full flex-col">
   <div class="px-24 text-u-28/36 font-semibold">{page.title}</div>
-  <div class="mt-24 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-24 pb-24">
+  <div
+    class="mt-24 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-24 pb-24"
+    data-part="scroller"
+  >
     <div class={head}>{winGeneral.section}</div>
     <div class={card}>
       <svg class={icon} aria-hidden="true"><use href="#fl-power"></use></svg>

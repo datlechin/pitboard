@@ -198,3 +198,104 @@ export function numberBox(
     },
   };
 }
+
+// GtkSpinButton as an AdwSpinRow holds it (gtkspinbutton.c): the arrows step it, Page Up and Page
+// Down a page, Ctrl+Home and Ctrl+End go to its ends, and a press on its - or + steps at once, then
+// after TIMEOUT_INITIAL every TIMEOUT_REPEAT; wrapping, a step from an end goes to the other and
+// one past an end stops on it, and otherwise a button turns off at its end; typed, Enter or leaving
+// the field reads what was typed, and what reads as no number puts the value back.
+export interface Spin {
+  set(value: number, enabled: boolean): void;
+}
+export interface SpinOptions {
+  min: number;
+  max: number;
+  step: number;
+  page: number;
+  wrap: boolean;
+  said: (value: number) => string;
+  // what was typed, read as a number, or null where it is none; a field nothing is typed in has
+  // none of its own
+  read?: (text: string) => number | null;
+  take: (value: number) => void;
+}
+const GTK_SPIN_DELAY = 500;
+const GTK_SPIN_EVERY = 50;
+
+export function gtkSpin(
+  input: HTMLInputElement,
+  down: HTMLElement,
+  up: HTMLElement,
+  o: SpinOptions,
+): Spin {
+  let value = Number(input.getAttribute("aria-valuenow"));
+  let enabled = true;
+  // typed and not yet read, which a step puts back
+  let typing = false;
+  const to = (by: number) => {
+    const next = value + by;
+    if (by > 0) return o.wrap && value === o.max ? o.min : Math.min(next, o.max);
+    return o.wrap && value === o.min ? o.max : Math.max(next, o.min);
+  };
+  const go = (n: number) => {
+    typing = false;
+    if (!enabled) return;
+    if (n === value) input.value = o.said(value);
+    else o.take(n);
+  };
+  function read() {
+    if (!o.read || !typing) return;
+    const n = o.read(input.value);
+    go(n === null ? value : Math.min(o.max, Math.max(o.min, Math.round(n))));
+  }
+  input.addEventListener("input", () => (typing = true));
+  input.addEventListener("keydown", (e) => {
+    const ends: Record<string, number> = {
+      Home: o.min,
+      End: o.max,
+      PageUp: o.max,
+      PageDown: o.min,
+    };
+    const steps: Record<string, number> = {
+      ArrowUp: o.step,
+      ArrowDown: -o.step,
+      PageUp: o.page,
+      PageDown: -o.page,
+    };
+    const n = e.ctrlKey ? ends[e.key] : steps[e.key] === undefined ? undefined : to(steps[e.key]);
+    if (n !== undefined) {
+      e.preventDefault();
+      return go(n);
+    }
+    if (e.key === "Enter") read();
+  });
+  input.addEventListener("change", read);
+  for (const [button, by] of [
+    [up, o.step],
+    [down, -o.step],
+  ] as const)
+    holding(button, GTK_SPIN_DELAY, GTK_SPIN_EVERY, () => {
+      if (!enabled || button.dataset.state === "off") return;
+      go(to(by));
+    });
+
+  return {
+    set(n, on) {
+      value = n;
+      const said = o.said(n);
+      if (!typing) input.value = said;
+      input.setAttribute("aria-valuenow", String(n));
+      input.setAttribute("aria-valuetext", said);
+      for (const [button, end] of [
+        [up, o.max],
+        [down, o.min],
+      ] as const)
+        if (!o.wrap && n === end) button.dataset.state = "off";
+        else if (button.dataset.state === "off") delete button.dataset.state;
+      if (on !== enabled) {
+        enabled = on;
+        input.disabled = !on;
+      }
+    },
+  };
+}

@@ -1,5 +1,5 @@
-// Settings at Warm-Up on both systems: the hours as each system picks a time, each Claude
-// Code account's switch, and the words that follow them (plan question 14, answer c).
+// Settings at Warm-Up on each system: the hours as each system picks a time, each Claude Code
+// account's switch, and the words that follow them (plan question 14, answer c; plan 3.3).
 import type { Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
 
@@ -137,3 +137,89 @@ test.describe("Windows", () => {
     expect(await axe(page, ["#warm-win"], ["target-size"])).toEqual([]);
   });
 });
+
+for (const system of ["gnome", "kde"] as const)
+  test.describe(`Linux under ${system}`, () => {
+    test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
+
+    async function preferences(page: Page) {
+      await choose(page.context(), { system });
+      await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
+      await page.goto("/");
+      await handedOver(page);
+      await page.waitForFunction(() => customElements.get("pb-linux-preferences") !== undefined);
+      const fig = page.locator("#warm-linux-preferences");
+      await fig.scrollIntoViewIfNeeded();
+      await expect(fig).not.toHaveAttribute("inert");
+      return fig;
+    }
+
+    test("From and To step a quarter hour and an hour a page, wrap past midnight, and take no typing", async ({
+      page,
+    }) => {
+      const fig = await preferences(page);
+      const from = fig.getByRole("spinbutton", { name: "From" });
+      await expect(from).toHaveAttribute("aria-valuetext", "07:00");
+      await from.focus();
+      await page.keyboard.press("ArrowUp");
+      await expect(from).toHaveAttribute("aria-valuetext", "07:15");
+      await page.keyboard.press("PageDown");
+      await expect(from).toHaveAttribute("aria-valuetext", "06:15");
+      await page.keyboard.press("Control+Home");
+      await expect(from).toHaveAttribute("aria-valuetext", "00:00");
+      // wrapping, a step from an end goes to the other, 23:59 as the app's adjustment has it
+      await page.keyboard.press("ArrowDown");
+      await expect(from).toHaveAttribute("aria-valuetext", "23:59");
+      await expect(from).not.toBeEditable();
+      const to = fig.getByRole("spinbutton", { name: "To" });
+      await to.focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(to).toHaveAttribute("aria-valuetext", "22:45");
+    });
+
+    test("each Claude Code account's switch turns its warm-up, and the next warm-up follows", async ({
+      page,
+    }) => {
+      const fig = await preferences(page);
+      const personal = fig.getByRole("switch", { name: "personal" });
+      const work = fig.getByRole("switch", { name: "work" });
+      await expect(personal).toHaveAttribute("aria-checked", "true");
+      await expect(work).toHaveAttribute("aria-checked", "false");
+      await expect(fig.locator('[data-part="warm-standing"]')).toHaveText(
+        "Next warm-up: personal at 22:00.",
+      );
+      await personal.click();
+      await expect(personal).toHaveAttribute("aria-checked", "false");
+      await expect(fig.locator('[data-account="personal"] [data-part="subtitle"]')).toBeHidden();
+      await work.focus();
+      await page.keyboard.press("Space");
+      await expect(work).toHaveAttribute("aria-checked", "true");
+      await expect(fig.locator('[data-account="work"] [data-part="subtitle"]')).toBeVisible();
+      // the window's Warm-Up row says the same
+      await expect(
+        page.locator(
+          '#usage-linux [data-account="work"] [data-part="warm"] [data-part="subtitle"]',
+        ),
+      ).not.toHaveText("Off");
+      expect(await axe(page, ["#warm-linux"])).toEqual([]);
+    });
+
+    test("an account's Warm-Up Preferences opens Preferences at Warm-Up with From focused", async ({
+      page,
+    }) => {
+      await preferences(page);
+      const usage = page.locator("#usage-linux");
+      await usage.scrollIntoViewIfNeeded();
+      await usage
+        .locator('[data-account="personal"]')
+        .getByRole("button", { name: "Warm-Up Preferences" })
+        .click();
+      const fig = page.locator("#warm-linux-preferences");
+      await expect(fig).toBeInViewport();
+      await expect(fig.getByRole("tab", { name: "Limits" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await expect(fig.getByRole("spinbutton", { name: "From" })).toBeFocused();
+    });
+  });

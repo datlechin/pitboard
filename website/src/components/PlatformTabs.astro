@@ -1,33 +1,55 @@
 ---
-// The tabs of the platform choice site.ts keeps on the root, each controlling its platform's panel.
-import { platformNames, platforms, type Platform } from "../lib/platform.ts";
+// The tabs of the platform choice site.ts keeps on the root, each controlling its platform's panel,
+// and with `desktop` the Linux desktop's choice at the row's end while Linux is chosen.
+import Choice from "./fig/Choice.astro";
+import {
+  desktopNames,
+  desktops,
+  onOf,
+  platformNames,
+  platforms,
+  type Platform,
+} from "../lib/platform.ts";
 
 interface Props {
   label: string;
   tabId: (p: Platform) => string;
   panelId: (p: Platform) => string;
+  desktop?: boolean;
   class?: string;
 }
-const { label, tabId, panelId, class: extra } = Astro.props;
+const { label, tabId, panelId, desktop = false, class: extra } = Astro.props;
 const tab =
   "relative -mx-2 h-11 cursor-pointer px-2 font-mono text-control/5 font-semibold text-muted hover:text-ink focus-visible:-outline-offset-2 chosen:text-ink chosen:after:absolute chosen:after:inset-x-2 chosen:after:-bottom-px chosen:after:h-0.5 chosen:after:bg-ink";
 ---
 
-<div
-  class:list={["flex gap-7 border-b border-grid no-js:hidden", extra]}
-  role="tablist"
-  aria-label={label}
->
-  {platforms.map((p, i) => <button
-    class={tab}
-    role="tab"
-    type="button"
-    id={tabId(p)}
-    aria-controls={panelId(p)}
-    aria-selected={i === 0 ? "true" : "false"}
-    tabindex={i === 0 ? undefined : "-1"}
-    data-platform={p}
+<div class:list={["no-js:hidden", { "sm:flex": desktop }, extra]}>
+  <div
+    class:list={["flex gap-7 border-b border-grid", { "sm:grow": desktop }]}
+    role="tablist"
+    aria-label={label}
   >
-    {platformNames[p]}
-  </button>)}
+    {platforms.map((p, i) => <button
+      class={tab}
+      role="tab"
+      type="button"
+      id={tabId(p)}
+      aria-controls={panelId(p)}
+      aria-selected={i === 0 ? "true" : "false"}
+      tabindex={i === 0 ? undefined : "-1"}
+      data-platform={p}
+    >
+      {platformNames[p]}
+    </button>)}
+  </div>
+  {desktop && <div
+    class="max-sm:mt-3 sm:flex sm:items-center sm:border-b sm:border-grid sm:pl-6"
+    data-on={onOf(["linux"])}
+  >
+    <Choice
+      name="desktop"
+      label="Linux desktop"
+      options={desktops.map((d) => [d, desktopNames[d]])}
+    />
+  </div>}
 </div>

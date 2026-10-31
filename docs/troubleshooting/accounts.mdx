@@ -91,6 +91,9 @@ Install the tool. For Codex, install OpenAI's Codex CLI: Pitboard does not use t
 
     It sees `PITBOARD_CLAUDE` and `PITBOARD_CODEX` only when they are set for your Windows account, not in one terminal.
   </Tab>
+  <Tab title="Linux">
+    The app looks on your login shell's `PATH`, then in `~/.local/bin` and `/home/linuxbrew/.linuxbrew/bin`. It sees `PITBOARD_CLAUDE` and `PITBOARD_CODEX` only in the environment your desktop starts it with, not from your shell's startup files.
+  </Tab>
 </Tabs>
 
 The app looks again each time the dialog opens and each time its window comes to the front.

@@ -2,36 +2,35 @@
 import { commands } from "../data/commands.ts";
 import { DOCS } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
-import { appZip, linuxApp, windowsMsi } from "../lib/github.ts";
-import { platforms, shownOn, type Platform } from "../lib/platform.ts";
+import { appZip, windowsMsi } from "../lib/github.ts";
+import { onOf, type Platform } from "../lib/platform.ts";
 import CommandBox from "./CommandBox.astro";
 import DownloadButton from "./DownloadButton.astro";
 import PlatformTabs from "./PlatformTabs.astro";
 
 interface Props {
   n: number;
+  // the hero's, whose figures the Linux desktop's choice redraws
+  desktop?: boolean;
   class?: string;
 }
-const { n, class: extra } = Astro.props;
+const { n, desktop, class: extra } = Astro.props;
 const { downloads } = await siteData();
 const zip = appZip(downloads.macos.release);
 const windows = downloads.windows.release;
-const linuxHasApp = linuxApp(downloads.linux.release);
 const tabId = (p: Platform) => `tab-${p}-${n}`;
 const panelId = (p: Platform) => `tp-${p}-${n}`;
-// each platform's panel to its readers, macOS's without JavaScript
-const panel = (p: Platform) => shownOn(p, platforms);
 const note = "mt-4 max-w-measure text-note text-pretty text-muted";
 const lead = "mt-6 text-note text-fg";
 const after = "js:not-data-shown:hidden";
 ---
 
 <div class={extra}>
-  <PlatformTabs label="Install Pitboard" tabId={tabId} panelId={panelId} />
+  <PlatformTabs label="Install Pitboard" tabId={tabId} panelId={panelId} desktop={desktop} />
   <div class="flow-root pt-7 no-js:pt-0">
     <div
-      class={panel("macos")}
       role="tabpanel"
+      data-on={onOf(["macos"])}
       id={panelId("macos")}
       aria-labelledby={tabId("macos")}
     >
@@ -49,8 +48,9 @@ const after = "js:not-data-shown:hidden";
       </p>
     </div>
     <div
-      class={panel("windows")}
+      class="no-js:hidden"
       role="tabpanel"
+      data-on={onOf(["windows"])}
       id={panelId("windows")}
       aria-labelledby={tabId("windows")}
     >
@@ -75,31 +75,22 @@ const after = "js:not-data-shown:hidden";
       <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
     <div
-      class={panel("linux")}
+      class="no-js:hidden"
       role="tabpanel"
+      data-on={onOf(["linux"])}
       id={panelId("linux")}
       aria-labelledby={tabId("linux")}
     >
-      {linuxHasApp ? (
-        <>
-          <p class={note}>
-            The app needs Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed, and
-            <a href="/download#linux">installs from Pitboard's repository</a> with the command line.
-          </p>
-          <p class={lead}>For the command line alone, run the install script:</p>
-          <CommandBox class="mt-2" command={commands.installScript} />
-        </>
-      ) : (
-        <>
-          <p class={note}>
-            The app runs on macOS and Windows, so on Linux, install the command line:
-          </p>
-          <CommandBox class="mt-4" command={commands.installScript} />
-        </>
-      )}
       <p class={note}>
-        Then <a href={`${DOCS}/quickstart#on-the-command-line`}>add your accounts</a>.
+        The app needs Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with
+        GNOME or KDE Plasma, and <a href="/download#linux">installs from Pitboard's repository</a>.
       </p>
+      <p class={lead}>
+        For the command line alone, install <code>pitboard</code> from it, or on another
+        distribution run the install script:
+      </p>
+      <CommandBox class="mt-2" command={commands.installScript} />
+      <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
   </div>
 </div>

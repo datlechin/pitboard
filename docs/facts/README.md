@@ -42,8 +42,9 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
   Pitboard's directory.
 - [The fixtures](fixtures.md): the worlds the apps' debug builds launch into.
 - [The site's figures](site.md): the shells, prompts and keys usepitboard.com's terminals
-  draw, the keys a browser keeps from a page, a box's edges in Firefox, and how the apps' menus,
-  dialogs, lists and Limits controls behave.
+  draw, the keys a browser keeps from a page, a box's edges in Firefox, how the apps' menus,
+  dialogs, lists and Limits controls behave, and what the Linux figures of GNOME and KDE Plasma
+  rest on.
 - [Not measured](not-measured.md): what nobody has measured about the tools, watching
   Pitboard's directory, the Linux app and its checks, and what Pitboard does where it cannot
   know.

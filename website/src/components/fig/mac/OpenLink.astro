@@ -1,18 +1,31 @@
 ---
-// AccountPicker.swift, with crates/pitboard-model/src/present/windows.rs's words, under the menu
-// bar the app puts up while it is in front. Corners as the main window's; no picture measures its
-// title bar. Its controls stay drawn: Open loads claude.ai.
+// AccountPicker.swift as a link a browser shared waits in it, in present/windows.rs's words, under
+// the menu bar the app puts up while it is in front: the link, the site's accounts in a list whose
+// selection is the account chosen, then Cancel and Open, the default. The list is as tall as its
+// ideal 160 points, and its ids start `prefix`. live/picker.ts follows the one state with it, with
+// a template for an account a visitor adds. Corners as the main window's; no picture measures its
+// title bar.
 import AppMenuBar from "./AppMenuBar.astro";
-import Lights from "./Lights.astro";
 import Button from "./Button.astro";
-import { clock } from "../../../data/world.ts";
+import Lights from "./Lights.astro";
+import { CANCEL, OPEN, OPEN_LINK, linkText, openLinkAs, pickerOf } from "../../../data/window.ts";
+import { account, clock, moments, openWindows, sharedLink } from "../../../data/world.ts";
 import { menuBarClock } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
 }
 const { prefix } = Astro.props;
-const account = "rounded-u-5 pt-4 px-8 pb-5";
+const site = new URL(sharedLink).host;
+const picker = pickerOf(
+  { ...moments.after, windowsOpen: openWindows.map((label) => account(label).id) },
+  site,
+);
+// the selection in the accent while the list has focus, or nothing else in the window has, grey
+// otherwise, and its words white on the accent
+const away = "group-[:not(:focus-within):not([data-key])]/list";
+const option = `group/option rounded-u-5 px-8 pt-4 pb-5 outline-none aria-selected:bg-mac-window-blue aria-selected:text-white ${away}:aria-selected:bg-mac-window-pick ${away}:aria-selected:text-inherit live:cursor-default`;
+const detail = `block text-u-10/13 text-mac-window-sub group-aria-selected/option:text-white/80 ${away}:group-aria-selected/option:text-mac-window-sub`;
 ---
 
 <pb-account-picker
@@ -24,29 +37,53 @@ const account = "rounded-u-5 pt-4 px-8 pb-5";
   <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} room="clock" />
   <div
     class="relative w-440 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
+    role="group"
+    aria-labelledby={`${prefix}-title`}
+    data-part="window"
   >
     <div class="relative h-28 bg-mac-window-side">
       <Lights window class="top-7 left-12" />
-      <span class="pointer-events-none absolute inset-x-0 top-6 text-center font-bold"
-        >Open Link</span
+      {/* closing the window puts the link away, as Cancel does */}
+      <button
+        class="absolute top-6 left-11 z-2 size-16 rounded-circle focus-mac live:cursor-default"
+        type="button"
+        aria-label="Close"
+        data-does="cancel"
+      ></button>
+      <span
+        class="pointer-events-none absolute inset-x-0 top-6 text-center font-bold"
+        id={`${prefix}-title`}
+        >{OPEN_LINK}</span
       >
     </div>
     <div class="grid gap-12 p-20">
-      <span class="font-bold">Open this claude.ai link as:</span>
-      <span class="truncate font-mono text-u-12"
-        >claude.ai/project/0199c2f4-8e3b-7a51-b6d0-4f2e9c7a1d38</span
+      <span class="font-bold" id={`${prefix}-as`}>{openLinkAs(site)}</span>
+      <span class="truncate font-mono text-u-12">{linkText(sharedLink)}</span>
+      <div
+        class="group/list h-160 rounded-u-6 bg-mac-window-bg p-4 shadow-mac-list outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
+        role="listbox"
+        aria-labelledby={`${prefix}-as`}
+        data-key
       >
-      <div class="rounded-u-6 bg-mac-window-bg p-4 shadow-mac-list">
-        <div class={account}>
-          personal<small class="block text-u-10/13 text-mac-window-sub">me@example.com</small>
-        </div>
-        <div class:list={[account, "bg-mac-window-blue text-white"]}>
-          work<small class="block text-u-10/13 text-white/80">me@company.com, window open</small>
-        </div>
+        {picker.accounts.map(({ a, detail: said }) => <div
+          class={option}
+          role="option"
+          aria-selected={a.id === picker.chosen ? "true" : "false"}
+          data-account={a.id}
+        >
+          <span class="block" data-part="label">{a.label}</span>
+          <small class={detail} data-part="detail">{said}</small>
+        </div>)}
       </div>
+      <template data-part="option">
+        <div class={option} role="option" aria-selected="false">
+          <span class="block" data-part="label"></span>
+          <small class={detail} data-part="detail"></small>
+        </div>
+      </template>
       <div class="flex justify-end gap-8">
-        <Button button={false}>Cancel</Button>
-        <Button button={false} default>Open</Button>
+        <Button data-does="cancel">{CANCEL}</Button>
+        <Button default data-does="open">{OPEN}</Button>
       </div>
     </div>
   </div>

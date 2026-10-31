@@ -1,6 +1,6 @@
 import { REPO, SLUG } from "../data/site.ts";
 import { compareVersions } from "./changelog.ts";
-import { platformNames, platforms, type Platform } from "./platform.ts";
+import type { Platform } from "./platform.ts";
 
 const API = `https://api.github.com/repos/${SLUG}`;
 
@@ -384,30 +384,20 @@ export function windowsRelease(latest: Release, betas: Iterable<Release>): Relea
 }
 
 // The app's package for each machine, in both formats.
-export function linuxApp(release: Release): boolean {
-  return LINUX_PACKAGES.every(([file]) =>
+const hasLinuxApp = (release: Release) =>
+  LINUX_PACKAGES.every(([file]) =>
     release.assets.some((a) => a.name === `pitboard-app-v${release.version}-${file}`),
   );
-}
 
 // Linux files come from the latest release once it carries the app's packages, and from the newest
-// published beta that does until then, as Windows files do. While none does, from the latest.
+// published beta that does until then, as Windows files do.
 export function linuxRelease(latest: Release, betas: Iterable<Release>): Release {
-  if (linuxApp(latest)) return latest;
+  if (hasLinuxApp(latest)) return latest;
   const [newest] = [...betas]
-    .filter(linuxApp)
+    .filter(hasLinuxApp)
     .sort((a, b) => compareVersions(b.version, a.version));
-  return newest ?? latest;
-}
-
-// macOS takes the latest release, and a system whose files come from a beta is named.
-export function ahead(latest: Release, releases: Record<Platform, Release>): string | null {
-  const early = platforms.filter((p) => releases[p].version !== latest.version);
-  if (early.length === 0) return null;
-  const rest = platforms.filter((p) => !early.includes(p));
-  const named = (ps: Platform[]) =>
-    `${ps.map((p) => platformNames[p]).join(" and ")} ${ps.length === 1 ? "gets" : "get"}`;
-  return `Until 1.0.0, ${named(early)} betas, and ${named(rest)} ${latest.version}.`;
+  if (!newest) throw new Error("no published release has the Linux app's packages");
+  return newest;
 }
 
 // From 1.0.0 the release workflow refuses an unsigned rc or full release, and signs a beta once

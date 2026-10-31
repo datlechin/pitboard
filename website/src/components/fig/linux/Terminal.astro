@@ -1,50 +1,33 @@
 ---
-// Ptyxis 49 in a libadwaita 1.8 window, 80 columns of 11 point type; output colours spans g, y, r, dim.
-// Its output is a log its title names; live, it grows with its output to Ptyxis's 24 rows, then
-// scrolls.
+// The page's Linux computer's terminal, one shell whichever desktop shows: Ptyxis's header bar and
+// window under GNOME and Konsole's title bar, tools area and window under KDE Plasma, each as
+// gnome/Ptyxis.astro and kde/Konsole.astro draw them, around the one log both share, which takes
+// each terminal's type, colours, margins and rows by the desktop. Its log is named by the title the
+// desktop shows; its ids start `id`.
+import PtyxisBar from "../gnome/PtyxisBar.astro";
+import KonsoleBar from "../kde/KonsoleBar.astro";
+import { onOf } from "../../../lib/platform.ts";
+
 interface Props {
-  title: string;
   id: string;
+  // Ptyxis's title and Konsole's
+  title: string;
+  konsole: string;
 }
-const { title, id } = Astro.props;
-const button = "flex h-34 w-34 items-center justify-center";
-const icon = "size-16 shrink-0";
+const { id, title, konsole } = Astro.props;
 ---
 
 <div
-  class="relative w-732 overflow-hidden rounded-u-15 bg-linux-term-bg shadow-linux-window outline-1 -outline-offset-1 outline-white/7"
+  class="relative z-1 flex w-732 flex-col overflow-hidden rounded-u-15 bg-linux-term-bg shadow-linux-window outline-1 -outline-offset-1 outline-white/7 kde:w-663 kde:rounded-u-5 kde:bg-kde-term-bg kde:shadow-kde-window kde:outline-offset-0 kde:outline-kde-header-edge"
 >
-  <div
-    class="relative flex h-47 items-center bg-linux-bar-bg px-7 pt-6 pb-7 font-linux text-u-15 text-linux-bar-text inset-shadow-linux-bar-b"
-  >
-    <span class="flex">
-      <span class={button}
-        ><svg class={icon}><use href="#adw-tab-new" /></svg></span
-      >
-      <span class="flex h-34 w-24 items-center justify-center"
-        ><svg class={icon}><use href="#adw-pan-down" /></svg></span
-      >
-    </span>
-    <span class="pointer-events-none absolute inset-x-0 flex flex-col items-center leading-[1.2]">
-      <b class="font-bold" id={`${id}-title`}>{title}</b>
-      <span class="text-u-12 opacity-55">~</span>
-    </span>
-    <span class="ml-auto flex gap-6">
-      <span class={button}
-        ><svg class={icon}><use href="#adw-grid" /></svg></span
-      >
-      <span class={button}
-        ><svg class={icon}><use href="#adw-menu" /></svg></span
-      >
-      <span class:list={[button, "ml-6"]}>
-        <span class="flex size-24 items-center justify-center rounded-circle bg-current/10"
-          ><svg class={icon}><use href="#adw-close" /></svg></span
-        >
-      </span>
-    </span>
+  <div class="contents" data-on={onOf(["gnome"])}>
+    <PtyxisBar title={title} id={id} />
+  </div>
+  <div class="contents" data-on={onOf(["kde"])}>
+    <KonsoleBar title={konsole} id={`${id}-kde`} />
   </div>
   <div
-    class="flex flex-col px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre-wrap text-linux-term-text ligatures-none live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
+    class="flex min-h-0 flex-1 flex-col justify-start overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 *:whitespace-pre-wrap [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text kde:py-1 kde:pr-22 kde:pl-1 kde:font-kde-mono kde:text-kde/18 kde:text-kde-term-text kde:[--term-bg:var(--color-kde-term-bg)] kde:*:min-h-18 kde:[&_.dim]:text-kde-term-faint kde:[&_.g]:text-kde-term-green kde:[&_.r]:text-kde-term-red kde:[&_.y]:text-kde-term-yellow kde:[&_b]:font-bold kde:[&_b]:text-kde-term-intense kde:live:max-h-[calc(28lh+var(--spacing)*2)]"
     role="log"
     aria-labelledby={`${id}-title`}
   >

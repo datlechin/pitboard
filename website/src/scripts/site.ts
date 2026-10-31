@@ -1,4 +1,5 @@
 import { say } from "./live/say.ts";
+import { platformOf, type System } from "../lib/platform.ts";
 
 const d = document.documentElement;
 
@@ -114,7 +115,7 @@ function phoneMenu() {
 }
 
 // Each choice the root keeps as data-<name>, and the key that stores it.
-const keys = { surface: "tab", platform: "platform" } as const;
+const keys = { surface: "tab", platform: "platform", desktop: "desktop" } as const;
 type Choice = keyof typeof keys;
 interface Chosen {
   name: Choice;
@@ -166,14 +167,20 @@ function choice(name: Choice): (value: string) => void {
   return show;
 }
 
-// A link into a <details> opens it, and one into another platform's part shows that platform.
-function openTarget(showPlatform: (value: string) => void) {
+// A link into a <details> opens it, and one into another system's part shows that system.
+function openTarget(showPlatform: (value: string) => void, showDesktop: (value: string) => void) {
   const id = decodeURIComponent(location.hash.slice(1));
   const target = id ? document.getElementById(id) : null;
   const box = target?.closest("details");
   if (box) box.open = true;
-  const on = target?.closest<HTMLElement>("[data-for]")?.dataset.for?.split(" ");
-  if (on && !on.includes(d.dataset.platform ?? "")) showPlatform(on[0]);
+  const on = target?.closest<HTMLElement>("[data-on]")?.dataset.on?.split(" ") as
+    System[] | undefined;
+  const platform = d.dataset.platform;
+  const reader = platform === "linux" ? d.dataset.desktop : platform;
+  if (!on || on.includes(reader as System)) return;
+  const to = on.find((s) => platformOf(s) === platform) ?? on[0];
+  if (platformOf(to) !== platform) showPlatform(platformOf(to));
+  if (platformOf(to) === "linux" && to !== d.dataset.desktop) showDesktop(to);
 }
 
 function copying() {
@@ -253,8 +260,9 @@ theming();
 phoneMenu();
 choice("surface");
 const showPlatform = choice("platform");
-openTarget(showPlatform);
-addEventListener("hashchange", () => openTarget(showPlatform));
+const showDesktop = choice("desktop");
+openTarget(showPlatform, showDesktop);
+addEventListener("hashchange", () => openTarget(showPlatform, showDesktop));
 copying();
 afterDownload();
 demo();

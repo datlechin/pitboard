@@ -1,12 +1,15 @@
 // <pb-notice>: the notification row, in its own moment (lib/moment.ts). Pitboard sets no alert style
-// or duration, so each system's banner goes after the system's time (plan 3.6, 3.7; answer 2 a).
+// or duration, so each system's banner goes after the system's time (plan 3.6, 3.7; answer 2 a):
+// macOS's banner, Windows' toast and Notification Center, GNOME Shell's banner and date menu, and
+// KDE Plasma's popup over its tray.
 // departs from the apps: The Mac's clock opens nothing
+import { center, type Center } from "./center.ts";
 import { attr, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
 import { bringForward } from "./forward.ts";
 import { say } from "./say.ts";
 import { noticeMoment, type Moment } from "../../lib/moment.ts";
-import { model, type Posted, type State } from "../../lib/model.ts";
+import { model, showAppWindow, type Posted, type State } from "../../lib/model.ts";
 import {
   hm,
   menuBarClock,
@@ -14,12 +17,15 @@ import {
   menuBarSpoken,
   menuBarShown,
   shortDate,
-  type System,
 } from "../../lib/words.ts";
+import { frontOf, systemOf, type System } from "../../lib/platform.ts";
+import { topBarClock } from "../../data/gnome.ts";
+import { trayAttention } from "../../data/linux.ts";
 
-// how long a banner stays, until measured on macOS 27 and Windows 11: Windows' default, which
-// Settings > Accessibility > Visual effects sets
-const SHOWN_MS = 5000;
+// how long a banner stays: macOS's, until measured on macOS 27; Windows' default, which Settings >
+// Accessibility > Visual effects sets; GNOME Shell's NOTIFICATION_TIMEOUT (messageTray.js); and
+// Plasma's PopupTimeout (libnotificationmanager's notificationsettings.kcfg)
+const SHOWN_MS: Record<System, number> = { macos: 5000, windows: 5000, gnome: 4000, kde: 5000 };
 const IN_VIEW = 0.6;
 
 const said = (el: Element | null, text: string) => {
@@ -38,14 +44,14 @@ class Notice extends LiveFigure {
   #pointer = false;
   #focus = false;
   #seen?: IntersectionObserver;
-  // what Notification Center holds of the moment's notification, and the clock that opens it
+  // what Notification Center or the date menu holds of the moment's notification, and the clock
+  // that opens it
   #kept: Posted | null = null;
   #center: HTMLDialogElement | null = null;
-  #clock: HTMLElement | null = null;
+  #opens: Center | null = null;
 
   connectedCallback() {
-    const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
-    this.#system = drawing.endsWith("windows") ? "windows" : "macos";
+    this.#system = systemOf(this);
     this.#banner = this.querySelector("[data-banner]")!;
     const b = this.#banner;
     b.addEventListener("pointerenter", () => this.#hold("pointer", true));
@@ -56,9 +62,16 @@ class Notice extends LiveFigure {
     });
     this.querySelector("[data-close]")?.addEventListener("click", () => this.#leave());
     this.querySelector("[data-switch]")?.addEventListener("click", () => this.#switch());
+    // on Linux a click on the notification itself opens the window (notices.rs `posted`)
+    if (this.#system === "gnome" || this.#system === "kde")
+      b.addEventListener("click", (e) => {
+        if (!(e.target as Element).closest("button")) this.#opened();
+      });
     this.#center = this.querySelector<HTMLDialogElement>('[data-part="center"]');
-    this.#clock = this.querySelector('[data-does="center"]');
-    if (this.#center && this.#clock) this.#listenCenter(this.#center, this.#clock);
+    const clock = this.querySelector<HTMLElement>('[data-does="center"]');
+    if (this.#center && clock) this.#listenCenter(this.#center, clock);
+    // nothing is kept, and Plasma's bell is off, until the notification comes
+    this.#drawCenter();
     this.#seen = new IntersectionObserver(
       ([e]) => {
         this.#inView = e.isIntersecting && e.intersectionRatio >= IN_VIEW;
@@ -96,49 +109,38 @@ class Notice extends LiveFigure {
   protected restart() {
     this.#shown = null;
     this.#kept = null;
-    this.#openCenter(false);
+    this.#opens?.open(false);
     this.#drawCenter();
     this.#arrive();
   }
 
-  #listenCenter(center: HTMLDialogElement, clock: HTMLElement) {
-    clock.addEventListener("click", () => this.#openCenter(!center.open));
-    center.addEventListener("close", () => attr(clock, "aria-expanded", "false"));
-    center.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      this.#openCenter(false);
-      clock.focus({ preventScroll: true });
-    });
-    center.addEventListener("click", (e) => {
-      const does = (e.target as Element).closest<HTMLElement>("[data-does]")?.dataset.does;
+  #listenCenter(dialog: HTMLDialogElement, clock: HTMLElement) {
+    this.#opens = center(clock, dialog, { opened: () => this.#leave() });
+    dialog.addEventListener("click", (e) => {
+      const at = e.target as Element;
+      const does = at.closest<HTMLElement>("[data-does]")?.dataset.does;
       if (does === "dismiss" || does === "clear") return this.#forget();
       if (does === "switch") return this.#switch();
-      // a click on the notification itself brings the app's window forward, as its toast's does
-      if ((e.target as Element).closest('[data-part="note"]')) {
-        this.#forget();
-        this.#openCenter(false);
-        bringForward("accounts", "windows");
+      // GNOME's Expand shows the message's actions in the list
+      if (does === "expand") {
+        const note = at.closest<HTMLElement>('[data-part="note"]')!;
+        const open = !note.hasAttribute("data-expanded");
+        note.toggleAttribute("data-expanded", open);
+        attr(at.closest('[data-does="expand"]'), "aria-expanded", String(open));
+        return;
       }
+      // a click on the notification itself brings the app's window forward, as its toast's does
+      if (at.closest('[data-part="note"]')) this.#opened();
     });
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        const at = e.target as Node;
-        if (center.open && !center.contains(at) && !clock.contains(at)) this.#openCenter(false);
-      },
-      true,
-    );
   }
 
-  #openCenter(open: boolean) {
-    const center = this.#center;
-    if (!center || open === center.open) return;
-    if (!open) return center.close();
-    center.show();
-    attr(this.#clock, "aria-expanded", "true");
+  // the notification activated: it goes, and the app's window comes into view
+  #opened() {
     this.#leave();
-    center.focus({ preventScroll: true });
+    this.#forget();
+    this.#opens?.open(false);
+    if (this.#system === "kde") showAppWindow();
+    bringForward("accounts", this.#system);
   }
 
   #forget() {
@@ -146,28 +148,42 @@ class Notice extends LiveFigure {
     this.#drawCenter();
   }
 
-  // the notification Notification Center holds, or none
+  // the notification Notification Center or the date menu holds, or none; Plasma's bell shows
+  // while it is unread
   #drawCenter() {
+    shown(this.querySelector('[data-part="bell"]'), !!this.#kept);
     const c = this.#center;
     if (!c) return;
     const p = this.#kept;
     shown(c.querySelector('[data-part="none"]'), !p);
     shown(c.querySelector('[data-part="group"]'), !!p);
     shown(c.querySelector('[data-does="clear"]'), !!p);
-    if (!p) return;
-    text(c.querySelector(`[data-part="note-title"]`), p.title[this.#system]);
+    if (!p) {
+      const note = c.querySelector('[data-part="note"]');
+      note?.removeAttribute("data-expanded");
+      attr(note?.querySelector('[data-does="expand"]'), "aria-expanded", "false");
+      return;
+    }
+    text(c.querySelector(`[data-part="note-title"]`), p.title[frontOf(this.#system)]);
     const subtitle = c.querySelector<HTMLElement>("[data-subtitle]");
     shown(subtitle, p.subtitle !== null);
     if (p.subtitle) text(subtitle, p.subtitle);
     text(c.querySelector("[data-body]"), p.body);
     shown(c.querySelector("[data-switch-row]"), p.button !== null);
-    if (p.button) text(c.querySelector('[data-does="switch"]'), p.button.title[this.#system]);
+    if (p.button)
+      text(c.querySelector('[data-does="switch"]'), p.button.title[frontOf(this.#system)]);
   }
 
   // The desk at the moment: its clock, and Pitboard's figure in the menu bar or the tray.
   #draw() {
     const m = this.#moment;
     if (!m) return;
+    if (this.#system === "gnome") {
+      const clock = topBarClock(m.at);
+      const button = this.querySelector('[data-does="center"]');
+      said(button?.querySelector('[data-part="date"]') ?? null, clock.date);
+      said(button?.querySelector('[data-part="time"]') ?? null, clock.time);
+    }
     said(this.querySelector("[data-clock]"), menuBarClock(m.at));
     said(this.querySelector("[data-time]"), hm(m.at));
     said(this.querySelector("[data-date]"), shortDate(m.at));
@@ -176,14 +192,20 @@ class Notice extends LiveFigure {
       said(title, menuBarShown(m.state, model.get().general.menuBarShows));
       title.parentElement!.setAttribute("aria-label", menuBarSpoken(m.state));
     }
+    // the icon at its level, and on KDE Plasma its attention twin while the menu needs attention
     const level = menuBarLevel(m.state);
+    const attention = String(this.#system === "kde" && trayAttention(m.state));
     for (const svg of this.querySelectorAll<SVGElement>("[data-level]"))
-      svg.toggleAttribute("hidden", svg.dataset.level !== level);
+      svg.toggleAttribute(
+        "hidden",
+        svg.dataset.level !== level || (svg.dataset.attention ?? attention) !== attention,
+      );
+    attr(this.querySelector("button[data-attention]"), "data-attention", attention);
   }
 
   #fill(p: Posted) {
     const b = this.#banner;
-    said(b.querySelector(`#${this.id}-title`), p.title[this.#system]);
+    said(b.querySelector(`#${this.id}-title`), p.title[frontOf(this.#system)]);
     const subtitle = b.querySelector<HTMLElement>("[data-subtitle]")!;
     subtitle.hidden = p.subtitle === null;
     if (p.subtitle) said(subtitle, p.subtitle);
@@ -191,7 +213,7 @@ class Notice extends LiveFigure {
     const button =
       b.querySelector<HTMLElement>("[data-switch-row]") ?? b.querySelector("[data-switch]")!;
     button.hidden = p.button === null;
-    if (p.button) said(b.querySelector("[data-switch]"), p.button.title[this.#system]);
+    if (p.button) said(b.querySelector("[data-switch]"), p.button.title[frontOf(this.#system)]);
   }
 
   #arrive() {
@@ -207,7 +229,7 @@ class Notice extends LiveFigure {
     this.#kept = p;
     this.#drawCenter();
     this.#banner.dataset.state = this.#held() ? "held" : "in";
-    say([p.title[this.#system], p.subtitle, p.body].filter(Boolean).join(", "));
+    say([p.title[frontOf(this.#system)], p.subtitle, p.body].filter(Boolean).join(", "));
     this.#wait();
   }
 
@@ -225,7 +247,7 @@ class Notice extends LiveFigure {
     clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {
       if (!this.#held()) this.#leave();
-    }, SHOWN_MS);
+    }, SHOWN_MS[this.#system]);
   }
 
   #leave() {
@@ -246,11 +268,12 @@ class Notice extends LiveFigure {
     const to = this.#moment?.posted?.button;
     if (!to) return;
     this.#moment!.state.inUse[to.tool] = to.label;
+    this.#moment!.state.advice = [];
     this.#draw();
     this.#leave();
     // acted on, it leaves Notification Center too
     this.#forget();
-    this.#openCenter(false);
+    this.#opens?.open(false);
   }
 }
 

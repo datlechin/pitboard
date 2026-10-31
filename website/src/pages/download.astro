@@ -7,22 +7,27 @@ import Disclosure from "../components/Disclosure.astro";
 import DownloadButton from "../components/DownloadButton.astro";
 import Part from "../components/Part.astro";
 import PlatformTabs from "../components/PlatformTabs.astro";
-import { attestCommand, commands, linuxWays, windowsWays, type Command } from "../data/commands.ts";
+import {
+  attestCommand,
+  commands,
+  LINUX_KEY,
+  linuxWays,
+  windowsWays,
+  type Command,
+} from "../data/commands.ts";
 import { DOCS } from "../data/site.ts";
 import { escapeHtml, longDate } from "../lib/changelog.ts";
 import { siteData } from "../lib/data.ts";
 import {
-  ahead,
   appZip,
   fileRows,
   formatSize,
-  linuxApp,
   windowsMsi,
   windowsZip,
   type Asset,
   type FileRow,
 } from "../lib/github.ts";
-import { partOf, platformNames, platforms, type Platform } from "../lib/platform.ts";
+import { onOf, platformNames, platforms, type Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 
 const { downloads, windowsSigned } = await siteData();
@@ -65,21 +70,13 @@ const ways: { on: Platform[]; shell: "sh" | "pwsh"; rows: [string, Command[]][] 
 ];
 const released = (p: Platform) =>
   `Pitboard ${downloads[p].release.version} was released on ${longDate(downloads[p].notes.date)}.`;
-const windowsStatus = !windows.prerelease
-  ? ""
-  : windowsSigned
-    ? " Pitboard for Windows is in beta."
-    : " Pitboard for Windows is in beta, and its files are not signed.";
-const early = ahead(downloads.macos.release, {
-  macos: downloads.macos.release,
-  windows,
-  linux: downloads.linux.release,
-});
-const aheadOn = (p: Platform) =>
-  early && downloads[p].release.version !== downloads.macos.release.version ? ` ${early}` : "";
+const windowsStatus = windowsSigned ? "" : " Pitboard for Windows is not signed yet.";
 const linux = downloads.linux.release;
-const linuxHasApp = linuxApp(linux);
 const repository = linuxWays(linux);
+// what gpg must show before apt is given the repository
+const keyShown = {
+  note: `Go on only if it shows <code>${LINUX_KEY}</code> under <code>pub</code>.`,
+};
 // Cells written as one string: on a phone their text follows a label drawn by CSS, so a space
 // from the template's line breaks would show.
 const none = '<span class="text-muted" data-none>None</span>';
@@ -113,11 +110,7 @@ const jsonLd = [application(Astro.site!, downloads)];
 
 <Base
   title="Download Pitboard for macOS, Windows and Linux"
-  description={
-    linuxHasApp
-      ? "Download the Pitboard app and its command line for macOS, Windows and Linux."
-      : "Download the Pitboard app for macOS and Windows, and the command line for macOS, Windows and Linux."
-  }
+  description="Download the Pitboard app and its command line for macOS, Windows and Linux."
   current="download"
   path="/download"
   image="download"
@@ -133,13 +126,7 @@ const jsonLd = [application(Astro.site!, downloads)];
         panelId={(p) => p}
       />
 
-      <section
-        class={partOf(["macos"])}
-        id="macos"
-        data-for="macos"
-        role="tabpanel"
-        aria-labelledby="tab-macos"
-      >
+      <section id="macos" data-on={onOf(["macos"])} role="tabpanel" aria-labelledby="tab-macos">
         <h2 class={panelHead}>{platformNames.macos}</h2>
         <div class={versionLine}>
           <p>{released("macos")}</p>
@@ -182,17 +169,14 @@ const jsonLd = [application(Astro.site!, downloads)];
       </section>
 
       <section
-        class={partOf(["windows"])}
         id="windows"
-        data-for="windows"
+        data-on={onOf(["windows"])}
         role="tabpanel"
         aria-labelledby="tab-windows"
       >
         <h2 class={panelHead}>{platformNames.windows}</h2>
         <div class={versionLine}>
-          <p class="max-w-[40em] text-pretty">
-            {released("windows")}{windowsStatus}{aheadOn("windows")}
-          </p>
+          <p class="max-w-[40em] text-pretty">{released("windows")}{windowsStatus}</p>
           <p><a href={`/changelog#v${windows.version}`}>Release notes</a></p>
         </div>
         <div class={columns}>
@@ -244,53 +228,61 @@ const jsonLd = [application(Astro.site!, downloads)];
         </div>
       </section>
 
-      <section
-        class={partOf(["linux"])}
-        id="linux"
-        data-for="linux"
-        role="tabpanel"
-        aria-labelledby="tab-linux"
-      >
+      <section id="linux" data-on={onOf(["linux"])} role="tabpanel" aria-labelledby="tab-linux">
         <h2 class={panelHead}>{platformNames.linux}</h2>
         <div class={versionLine}>
-          <p class="max-w-[40em] text-pretty">
-            {released("linux")} Pitboard for Linux was run with real logins on GNOME and KDE Plasma
-            on 30 October 2026.{aheadOn("linux")}
-          </p>
+          <p>{released("linux")}</p>
           <p><a href={`/changelog#v${linux.version}`}>Release notes</a></p>
         </div>
         <div class={columns}>
-          {linuxHasApp && <section class={column} aria-labelledby="linux-app-title">
+          <section class={column} aria-labelledby="linux-app-title">
             <h3 class={head} id="linux-app-title">App</h3>
             <div class="mt-7">
               <p class={body}>
-                The app needs Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed,
-                and installs with its command line from Pitboard's repository:
+                The app needs Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed,
+                with GNOME or KDE Plasma, and installs with its command line from Pitboard's
+                repository, which your package manager then updates.
+              </p>
+              <p class:list={[body, "mt-4"]}>
+                Set up the repository and
+                <a href={`${DOCS}/install/linux-repository`}>check its key</a> before you install:
               </p>
               <CommandRows
                 class="mt-5"
                 heading="System"
                 rows={[
-                  ["On Debian and Ubuntu", repository.apt],
-                  ["On Fedora", repository.dnf],
-                  ["On openSUSE", repository.zypper],
+                  [
+                    "On Debian and Ubuntu",
+                    [...repository.setup.apt, repository.keyCheck, keyShown, ...repository.app.apt],
+                  ],
+                  ["On Fedora", [...repository.setup.dnf, ...repository.app.dnf]],
+                  ["On openSUSE", [...repository.setup.zypper, ...repository.app.zypper]],
                 ]}
               />
               <p class:list={[body, "mt-5"]}>
-                Before you install,
-                <a href={`${DOCS}/install/linux-repository`}>check the repository's key</a>.
+                On KDE Plasma 6.4 or later, <code>pitboard-plasma-widget</code> adds the Pitboard
+                widget.
               </p>
             </div>
-          </section>}
+          </section>
           <section class={column} aria-labelledby="linux-cli-title">
             <h3 class={head} id="linux-cli-title">Command line</h3>
             <div class="mt-7">
               <p class={body}>
-                {linuxHasApp
-                  ? "For the command line alone, run the install script:"
-                  : "The app runs on macOS and Windows, so on Linux, install the command line:"}
+                On Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, set up
+                Pitboard's repository as for the app, then install <code>pitboard</code>:
               </p>
-              <CommandBox class="mt-4" command={commands.installScript} />
+              <CommandRows
+                class="mt-5"
+                heading="System"
+                rows={[
+                  ["On Debian and Ubuntu", repository.cli.apt],
+                  ["On Fedora", repository.cli.dnf],
+                  ["On openSUSE", repository.cli.zypper],
+                ]}
+              />
+              <p class:list={[body, lead]}>On another distribution, run the install script:</p>
+              <CommandBox class="mt-2" command={commands.installScript} />
               <p class:list={[body, "mt-5"]}>
                 The script puts the command line of the most recent full release in
                 <code>~/.local/bin</code>, and you can
@@ -450,15 +442,11 @@ const jsonLd = [application(Astro.site!, downloads)];
           )}
         </Part>
         <Part class="mt-7 max-w-measure text-pretty" on={["linux"]}>
-          {linuxHasApp ? (
-            <p>
-              Each RPM package is signed with Pitboard's repository key, as the
-              <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says, and
-              other Linux files are not signed.
-            </p>
-          ) : (
-            <p>Linux files are not signed.</p>
-          )}
+          <p>
+            Each RPM package is signed with Pitboard's repository key, as the
+            <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says, and other
+            Linux files are not signed.
+          </p>
         </Part>
         <p>The docs <a href={`${DOCS}/install/verify`}>explain each check</a>.</p>
       </div>
@@ -484,9 +472,9 @@ const jsonLd = [application(Astro.site!, downloads)];
           </Part>
           <Part on={["linux"]}>
             <p>
-              Run <code>pitboard uninstall</code> before you
-              <a href={`${DOCS}/install/remove`}>delete Pitboard</a>, or its parked logins stay on
-              your computer.
+              Quit the app with Ctrl+Q and run <code>pitboard uninstall</code> before you
+              <a href={`${DOCS}/install/remove`}>remove its packages</a>, or its parked logins stay
+              on your computer.
             </p>
           </Part>
         </div>

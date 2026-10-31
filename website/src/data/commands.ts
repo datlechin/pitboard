@@ -92,32 +92,47 @@ function fetched(to: string, file: string): Command {
 
 const said = (copy: string): Command => ({ copy, html: copy });
 
-// The repository's beta channel until a full release has the Linux app, which stable then holds.
+// The repository key's fingerprint, which gpg shows under pub.
+export const LINUX_KEY = "22DCF748069770D807A1804F47C507760C9A97E3";
+const KEYRING = "/usr/share/keyrings/pitboard-archive-keyring.pgp";
+
+// The repository's beta channel until a full release has the Linux app, which stable then holds;
+// the app installs from it, and so does the command line alone, its own package.
 export function linuxWays(release: { prerelease: boolean }) {
   const setup = release.prerelease ? "pitboard-beta" : "pitboard";
+  const install = (name: "pitboard-app" | "pitboard") => ({
+    apt: [said("sudo apt update"), said(`sudo apt install ${name}`)],
+    dnf: [said(`sudo dnf install ${name}`)],
+    zypper: [said(`sudo zypper install ${name}`)],
+  });
   return {
-    apt: [
-      fetched("/usr/share/keyrings/pitboard-archive-keyring.pgp", "pitboard-archive-keyring.pgp"),
-      fetched(`/etc/apt/sources.list.d/${setup}.sources`, `${setup}.sources`),
-      fetched("/etc/apt/preferences.d/pitboard.pref", "pitboard.pref"),
-      said("sudo apt update"),
-      said("sudo apt install pitboard-app"),
-    ],
-    dnf: [
-      {
-        copy: `sudo dnf config-manager addrepo --from-repofile=${PACKAGES}/${setup}.repo`,
-        html: `sudo dnf config-manager <wbr>addrepo <wbr>--from-repofile=<wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
-      },
-      said("sudo dnf install pitboard-app"),
-    ],
-    zypper: [
-      {
-        copy: `sudo zypper addrepo --refresh ${PACKAGES}/${setup}.repo`,
-        html: `sudo zypper addrepo <wbr>--refresh <wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
-      },
-      said("sudo zypper install pitboard-app"),
-    ],
-  } satisfies Record<string, Command[]>;
+    setup: {
+      apt: [
+        fetched(KEYRING, "pitboard-archive-keyring.pgp"),
+        fetched(`/etc/apt/sources.list.d/${setup}.sources`, `${setup}.sources`),
+        fetched("/etc/apt/preferences.d/pitboard.pref", "pitboard.pref"),
+      ],
+      dnf: [
+        {
+          copy: `sudo dnf config-manager addrepo --from-repofile=${PACKAGES}/${setup}.repo`,
+          html: `sudo dnf config-manager <wbr>addrepo <wbr>--from-repofile=<wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
+        },
+      ],
+      zypper: [
+        {
+          copy: `sudo zypper addrepo --refresh ${PACKAGES}/${setup}.repo`,
+          html: `sudo zypper addrepo <wbr>--refresh <wbr>${slashed(`${PACKAGES}/${setup}.repo`)}`,
+        },
+      ],
+    },
+    // dnf and zypper show the key in their own prompts
+    keyCheck: {
+      copy: `gpg --show-keys ${KEYRING}`,
+      html: `gpg --show-keys <wbr>${slashed(KEYRING)}`,
+    },
+    app: install("pitboard-app"),
+    cli: install("pitboard"),
+  } satisfies Record<string, Command | Record<string, Command[]>>;
 }
 
 export function attestCommand(file: string): Command {

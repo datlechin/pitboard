@@ -233,16 +233,17 @@ const radio =
             <span aria-hidden="true" data-part="resets"></span>
           </span>
         </template>
-        {/* Settings > Advanced's question before Uninstall Pitboard, whose answer is no default */}
+        {/* each question's default button, in the accent, is its verb unless the model says
+           otherwise, as of Uninstall Pitboard?, whose default is Cancel (DialogHost.cs `Buttons`) */}
         <ContentDialog id="win-accounts-uninstall" alert>
           <Fragment slot="buttons">
             <Button value="uninstall" type="submit">{winAdvanced.uninstall.confirm}</Button>
-            <Button data-does="cancel">{CANCEL}</Button>
+            <Button accent data-does="cancel">{CANCEL}</Button>
           </Fragment>
         </ContentDialog>
         <ContentDialog id="win-accounts-forget" alert>
           <Fragment slot="buttons">
-            <Button value="forget" type="submit">{REMOVE}</Button>
+            <Button accent value="forget" type="submit">{REMOVE}</Button>
             <Button data-does="cancel">{CANCEL}</Button>
           </Fragment>
         </ContentDialog>

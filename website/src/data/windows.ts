@@ -13,12 +13,10 @@ import {
 } from "./world.ts";
 import {
   SIGN_IN_EXPIRED,
-  SWITCHING,
   accountSpoken,
   activity,
   dayAndMonth,
   figure,
-  fullest,
   headsUp,
   hm,
   isInUse,
@@ -28,6 +26,7 @@ import {
   resetsSaid,
   listed,
   menuLine,
+  menuTitle,
   windowsRowNote,
   signInExpired,
   switchSpoken,
@@ -79,19 +78,6 @@ export const sites: [site: string, tool: Tool][] = [
   ["chatgpt.com", "codex"],
 ];
 
-// An item has one line: the account's label, then the figure the menu bar would show of it, or why
-// it can't be switched to (present/words/accounts.rs `named_in_menu`).
-export function itemTitle(a: Account, w: World, switching = false): string {
-  const aside = switching
-    ? SWITCHING
-    : signInExpired(a, w)
-      ? SIGN_IN_EXPIRED
-      : a.limits.length > 0
-        ? `${fullest(a)}%`
-        : null;
-  return aside ? `${a.label} (${aside.charAt(0).toLowerCase()}${aside.slice(1)})` : a.label;
-}
-
 // IconMenu.cs `Entries` in Microsoft's order, Open Pitboard first and in bold and Exit last, a
 // group between each two separators but each tool's accounts, which follow on under their heading.
 // A beta's menu has no Check for updates. An account's tooltip is the line the menu bar app shows
@@ -102,7 +88,7 @@ export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
     ...toolsOn("windows").map(([tool, name]) => [
       { heading: name },
       ...listed(w, tool).map((a) => ({
-        account: itemTitle(a, w),
+        account: menuTitle(a, w, "windows"),
         label: a.label,
         checked: isInUse(a, w),
         tip: menuLine(a, w, "windows"),

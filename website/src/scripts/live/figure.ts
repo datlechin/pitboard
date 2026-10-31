@@ -15,6 +15,13 @@ export abstract class LiveFigure extends HTMLElement {
     this.menuBar?.close();
     this.restart();
   };
+  // a figure another system's or surface's choice hides draws nothing until it shows again
+  // (plan 3.5), but for one that keeps every state, as a terminal's running program does
+  protected drawsHidden = false;
+  #behind = false;
+  #shown = () => {
+    if (this.#behind && this.offsetParent !== null) this.#draw(model.get());
+  };
   protected menuBar: AppMenus | null = null;
 
   connectedCallback() {
@@ -22,17 +29,19 @@ export abstract class LiveFigure extends HTMLElement {
     this.menuBar = appMenus(this, {
       menus: () => this.windowMenus(),
       choose: (does, item) => {
-        if (!this.fromMenuBar(does, item)) fromApp(does, item, this);
+        if (!this.fromMenuBar(does, item)) fromMenuBar(does, item, this);
       },
     });
     const figure = this.closest("figure");
-    // `data-drawing` is "<surface> <platform>", as Figure.astro and Term.astro mark each drawing
-    const [surface, platform] = (
-      this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? ""
-    ).split(" ");
+    // Figure.astro and Term.astro mark each drawing "<surface> <system>" and the systems it shows
+    // to, and each caption the systems whose drawing it describes
+    const drawing = this.closest<HTMLElement>("[data-drawing]");
+    const surface = drawing?.dataset.drawing?.split(" ")[0];
+    const mine = drawing?.dataset.on?.split(" ") ?? [];
     for (const words of figure?.querySelectorAll<HTMLElement>("[data-describes]") ?? []) {
-      const on = words.dataset.platforms?.split(" ") ?? [];
-      if (words.dataset.describes === surface && on.includes(platform)) words.hidden = true;
+      const on = words.closest<HTMLElement>("[data-on]")?.dataset.on?.split(" ") ?? [];
+      if (words.dataset.describes === surface && on.some((s) => mine.includes(s)))
+        words.hidden = true;
     }
     const again = figure?.querySelector<HTMLButtonElement>("[data-reset]");
     if (again)
@@ -47,26 +56,31 @@ export abstract class LiveFigure extends HTMLElement {
         shown?.querySelector<HTMLElement>('[tabindex="0"], button:not(:disabled)')?.focus();
       };
     this.#stop = model.subscribe((state) => {
-      this.render(state);
-      if (this.menuBar) {
-        // the app's menus leave the menu bar once it has quit
-        shown(this.menuBar.bar, state.running);
-        if (!state.running) this.menuBar.close();
-        this.menuBar.render(state);
-        text(
-          this.menuBar.bar.parentElement!.querySelector("[data-clock]"),
-          menuBarClock(state.now),
-        );
-      }
       if (again) again.hidden = !state.changed;
+      this.#behind = !this.drawsHidden && this.offsetParent === null;
+      if (!this.#behind) this.#draw(state);
     });
     document.addEventListener(RESET, this.#restart);
+    document.addEventListener("choice", this.#shown);
     run();
+  }
+
+  #draw(state: State) {
+    this.#behind = false;
+    this.render(state);
+    if (this.menuBar) {
+      // the app's menus leave the menu bar once it has quit
+      shown(this.menuBar.bar, state.running);
+      if (!state.running) this.menuBar.close();
+      this.menuBar.render(state);
+      text(this.menuBar.bar.parentElement!.querySelector("[data-clock]"), menuBarClock(state.now));
+    }
   }
 
   disconnectedCallback() {
     this.#stop?.();
     document.removeEventListener(RESET, this.#restart);
+    document.removeEventListener("choice", this.#shown);
   }
 
   protected abstract render(state: State): void;
@@ -85,8 +99,9 @@ export abstract class LiveFigure extends HTMLElement {
   }
 }
 
-// What the app does for an item of the menu bar whichever of its windows is in front, on `desk`.
-function fromApp(does: string, item: HTMLElement, desk: HTMLElement) {
+// What the app does for an item of macOS's menu bar, the one system whose figures draw one,
+// whichever of its windows is in front, on `desk`.
+function fromMenuBar(does: string, item: HTMLElement, desk: HTMLElement) {
   const s = model.get();
   switch (does) {
     case "settings":

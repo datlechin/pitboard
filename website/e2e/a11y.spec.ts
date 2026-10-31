@@ -3,7 +3,7 @@
 // draws its system's own colours, which axe's contrast does not hold it to.
 import type AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
-import { choose, expect, platforms, roots, rules, test, withoutScripts } from "./fixtures.ts";
+import { choose, expect, roots, rules, systems, test, withoutScripts } from "./fixtures.ts";
 
 const schemes = ["light", "dark"] as const;
 
@@ -32,15 +32,15 @@ for (const colorScheme of schemes) {
       expect(await everything(page)).toEqual([]);
     });
 
-    for (const platform of platforms) {
-      test(`on ${platform}`, async ({ page }) => {
-        await choose(page.context(), { platform });
+    for (const system of systems) {
+      test(`on ${system}`, async ({ page }) => {
+        await choose(page.context(), { system });
         await page.goto("/");
         expect(await everything(page)).toEqual([]);
       });
 
-      test(`on ${platform}, every figure as it works`, async ({ page }) => {
-        await choose(page.context(), { platform });
+      test(`on ${system}, every figure as it works`, async ({ page }) => {
+        await choose(page.context(), { system });
         await page.goto("/");
         await page.locator(roots).evaluateAll((all) => {
           for (const root of all) (root as HTMLElement).inert = false;

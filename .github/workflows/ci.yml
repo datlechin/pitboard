@@ -1437,13 +1437,21 @@ jobs:
   # The site in Chromium, WebKit and Firefox and on two phones, served by wrangler with its CSP
   # enforced: e2e/ checks the figures' markup, axe, and in Chromium how each figure looks against
   # baselines made here. It builds from the recorded releases, which a new release leaves alone.
-  # One job a Playwright project, each with the one browser it runs.
+  # One job a Playwright project, each with the one browser it runs, and WebKit's and Firefox's in
+  # two halves, which each try every system's figures with a pointer and keys.
   website-browsers:
-    name: website-browsers (${{ matrix.project }})
+    name: website-browsers (${{ matrix.project }}${{ matrix.half && format(' {0}', matrix.half) || '' }})
     strategy:
       fail-fast: false
       matrix:
-        project: [chromium, webkit, firefox, iphone, pixel]
+        include:
+          - project: chromium
+          - { project: webkit, half: 1 }
+          - { project: webkit, half: 2 }
+          - { project: firefox, half: 1 }
+          - { project: firefox, half: 2 }
+          - project: iphone
+          - project: pixel
     runs-on: ubuntu-latest
     # Playwright's image for the version website/package.json pins, which holds every browser and
     # what each takes from apt: WebKit's 117 MB from Ubuntu's mirror ran out the job's 17 minutes
@@ -1488,12 +1496,13 @@ jobs:
         timeout-minutes: 10
         env:
           PROJECT: ${{ matrix.project }}
-        run: npm run test:browser -- --project="$PROJECT"
+          SHARD: ${{ matrix.half && format('{0}/2', matrix.half) || '1/1' }}
+        run: npm run test:browser -- --project="$PROJECT" --shard="$SHARD"
       # the report, and the drawing of a figure with no baseline yet, written where it belongs
       - if: failure() && steps.touched.outputs.run
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: website-browsers-${{ matrix.project }}
+          name: website-browsers-${{ matrix.project }}${{ matrix.half && format('-{0}', matrix.half) || '' }}
           path: |
             website/playwright-report
             website/test-results

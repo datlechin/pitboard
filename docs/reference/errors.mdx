@@ -118,7 +118,7 @@ An interrupted Claude Desktop move has its own codes, in [Claude Desktop](#claud
 | `state_wrong_machine` | 1 | The account list was written on another computer, so Pitboard does not use it. | Run `pitboard adopt`, then sign in to each account again. See [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer). |
 | `state_write_failed` | 1 | Pitboard could not save its account list. | Check that you can write to the file the message names. |
 | `home_unwritable` | 1 | Pitboard could not write to its directory, a lock file in it or the renewal schedule's files. | Check that you can write to the path the message names. |
-| `pitboard_open` | 1 | `pitboard uninstall` while the Pitboard app is open, which would make Pitboard's directory again. Nothing was deleted. | Quit the app with **Quit Pitboard**, or **Exit** in its icon's menu on Windows. Then run `pitboard uninstall` again. |
+| `pitboard_open` | 1 | `pitboard uninstall` while the Pitboard app is open, which would make Pitboard's directory again. Nothing was deleted. | Quit the app with **Quit Pitboard**, or **Exit** in its icon's menu on Windows. On Linux, press Ctrl+Q in its window, or choose **Quit** in its tray menu. Then run `pitboard uninstall` again. |
 
 `home_not_absolute` refuses these values:
 

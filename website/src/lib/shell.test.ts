@@ -58,7 +58,7 @@ function tabs(shell: Shell, typed: string, times: number) {
 test("the prompts are the ones Term.astro draws, as question 9 keeps them", () => {
   const term = repo("website/src/components/fig/Term.astro");
   assert.ok(term.includes('<span class="text-mac-term-dim">%</span>'));
-  assert.ok(term.includes('<span class="text-linux-term-dim">$</span>'));
+  assert.ok(term.includes('<span class="dim">$</span>'));
   assert.ok(term.includes('<span class="text-win-term-dim">PS C:\\\\Users\\\\me&gt;</span>'));
   assert.deepEqual(prompts, { zsh: "%", bash: "$", powershell: "PS C:\\Users\\me>" });
   assert.ok(facts.includes("whose\n  own prompt function writes `PS C:\\Users\\me>`"));

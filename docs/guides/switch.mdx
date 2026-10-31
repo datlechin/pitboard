@@ -1,6 +1,6 @@
 ---
 title: "Switch accounts"
-description: "Switch a tool to another enrolled account from the app, Shortcuts, Spotlight, the taskbar or the command line."
+description: "Switch a tool to another enrolled account from the app, search, Shortcuts, the taskbar or the command line."
 ---
 
 A switch puts another account's [parked login](/concepts/switching#parked-logins) in use for Claude Code, OpenAI's Codex CLI or Claude Desktop, and parks the login the tool had. Where nothing is signed in to the tool, as on a new computer, it puts the account's login in use and parks nothing.
@@ -18,6 +18,11 @@ A switch puts another account's [parked login](/concepts/switching#parked-logins
 
     In the Pitboard window, select **Switch** on the account's row, or press Enter on the row.
   </Tab>
+  <Tab title="Linux">
+    In the Pitboard window, click **Switch** in the account's group.
+
+    Where the desktop shows Pitboard's [tray icon](/reference/linux-app#tray-icon), open its tray menu, then choose the account.
+  </Tab>
 </Tabs>
 
 On the command line, run `pitboard use` with the account's label, such as `work`, `codex/work` or, on macOS, `desktop/work`. [Labels](/reference/commands#labels) says how Pitboard matches a label.
@@ -33,7 +38,7 @@ Claude Code sessions already running follow within 33 seconds.
 
 Where nothing was signed in, the first line names the tool instead: `Switched Claude Code to work.`
 
-## Switch from Shortcuts, Spotlight or the taskbar
+## Switch from search, Shortcuts or the taskbar
 
 <Tabs>
   <Tab title="macOS">
@@ -47,6 +52,13 @@ Where nothing was signed in, the first line names the tool instead: `Switched Cl
     Pin Pitboard to the taskbar or Start, right-click it there, then select **Switch to work**.
 
     If the switch cannot happen, Pitboard posts **Couldn't switch** with why, as [Jump List](/reference/windows-app#jump-list) says. Select it to open **Accounts**.
+  </Tab>
+  <Tab title="Linux">
+    While Pitboard runs, type a word of the account's name in GNOME's search or in KRunner, then choose **Switch to work**. Pitboard switches with no window. Neither search starts Pitboard, as [Search](/reference/linux-app#search) says.
+
+    On KDE Plasma 6.4 or later, the [Pitboard widget](/reference/linux-app#plasma-widget) lists the accounts: click **Switch** beside one.
+
+    If the switch cannot happen, Pitboard posts **Couldn't Switch** with why.
   </Tab>
 </Tabs>
 
@@ -91,6 +103,9 @@ While the app is open, it notifies you once a limit of the account in use reache
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Notify me** in **When a limit reaches**, then expand it and set the share in **At**. **Do nothing** turns the notification off.
   </Tab>
+  <Tab title="Linux">
+    In **Preferences** > **Limits**, choose **Notify Me** in **When a limit reaches**. Set the share in **At**, in its field or with its buttons. **Do Nothing** turns the notification off.
+  </Tab>
 </Tabs>
 
 The command line posts no notification. [Notifications](/reference/mac-app#notifications) gives its words and when it comes.
@@ -99,6 +114,6 @@ The command line posts no notification. [Notifications](/reference/mac-app#notif
 
 When the account in use runs out of a limit, the app offers another account of the same tool, under 100% in every limit, by the rules in [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to). If no account has room, it offers nothing. The command line offers no switch.
 
-The offer is **Switch to personal**, on a notice in **Accounts**. On macOS, Pitboard's menu offers it too.
+The offer is **Switch to personal**, on a notice in **Accounts**. Pitboard's menu on macOS, and its tray menu on Linux, offer it too.
 
 Pitboard can also [switch Claude Code by itself](/guides/automatic-switching) before an account runs out.

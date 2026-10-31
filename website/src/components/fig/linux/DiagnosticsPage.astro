@@ -1,0 +1,50 @@
+---
+// Diagnostics (data/ui/diagnostics.ui), pushed over the accounts: the back button, its title, Copy
+// Report and Check Again at its end, and while nothing is checked yet AdwStatusPage's spinner over
+// "Checking this computer…", where the page stays: it runs no checks of a machine it is not on.
+import Button from "./Button.astro";
+import HeaderBar from "./HeaderBar.astro";
+import Spinner from "./Spinner.astro";
+import { diagnostics as page } from "../../../data/linux-window.ts";
+
+interface Props {
+  prefix: string;
+  hidden?: boolean;
+}
+const { prefix, hidden = false } = Astro.props;
+---
+
+<div class="flex h-full flex-col" data-page="diagnostics" hidden={hidden}>
+  <HeaderBar title={page.title} titleId={`${prefix}-diagnostics-title`} back>
+    <Button
+      slot="end"
+      look="flat"
+      shape="image"
+      icon="edit-copy"
+      aria-label={page.copyReport}
+      title={page.copyReportHelp}
+      disabled
+      data-does="copy-report"
+    />
+    <Button
+      slot="end"
+      look="flat"
+      shape="image"
+      icon="view-refresh"
+      aria-label={page.checkAgain}
+      title={page.checkAgainHelp}
+      disabled
+      data-does="check-again"
+    />
+  </HeaderBar>
+  {/* AdwStatusPage (_misc.scss): 36 and 12 of margin, the icon 128 and dimmed, its title title-1 */}
+  {/* departs from the apps: Diagnostics stays on its spinner */}
+  <div class="flex flex-1 flex-col items-center justify-center gap-36 px-12 py-36 text-center">
+    <span class="flex flex-col items-center gap-12">
+      <span class="mb-24 flex size-128 items-center justify-center opacity-55">
+        <Spinner size={64} />
+      </span>
+      <span class="adw-title-1" role="status">{page.checking}</span>
+    </span>
+  </div>
+</div>

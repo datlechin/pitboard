@@ -36,6 +36,9 @@ Daily renewal runs `pitboard renew` once a day, from the system's own scheduler.
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Settings**. Under **Advanced**, turn on **Keep saved sign-ins fresh**.
   </Tab>
+  <Tab title="Linux">
+    In the Pitboard window, open the main menu and choose **Preferences**, or press Ctrl+Comma, then click **Advanced**. Turn on **Keep Saved Sign-Ins Fresh**.
+  </Tab>
 </Tabs>
 
 On the command line:
@@ -51,7 +54,7 @@ Parked logins will be renewed daily.
 It renews your own parked logins and does nothing else: it never switches account and never asks Anthropic for usage.
 ```
 
-The second line says where the schedule is: on Windows, the task's path, such as `\Pitboard\Renew S-1-5-21-…`.
+The second line says where the schedule is: on Windows, the task's path, such as `\Pitboard\Renew S-1-5-21-…`, and on Linux, the timer's, such as `/home/me/.config/systemd/user/pitboard-renew.timer`.
 
 Each run renews whatever is due. Behind a proxy, turn it on with `pitboard schedule install` from a shell that sets the proxy, and run it again after the proxy changes. [`schedule`](/reference/maintenance-commands#schedule) lists the variables it keeps.
 
