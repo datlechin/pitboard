@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><style id="current-color-scheme">.ColorScheme-Text{color:#232629}</style><path fill="currentColor" fill-rule="evenodd" d="M2 2H14V3H15V10H14V11H9V15H7V11H2V10H1V3H2ZM2 3V10H14V3Z" class="ColorScheme-Text"/><rect width="10" height="2" x="3" y="4" fill="currentColor" class="ColorScheme-Text" opacity=".32"/><rect width="7" height="1" x="3" y="7" fill="currentColor" class="ColorScheme-Text" opacity=".55"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <style id="current-color-scheme">.ColorScheme-Text { color: #232629; }</style>
+  <path class="ColorScheme-Text" fill="currentColor" fill-rule="evenodd" d="M2 2H14V3H15V10H14V11H9V15H7V11H2V10H1V3H2ZM2 3V10H14V3Z"/>
+  <rect class="ColorScheme-Text" fill="currentColor" width="10" height="2" x="3" y="4" opacity=".32"/>
+  <rect class="ColorScheme-Text" fill="currentColor" width="7" height="1" x="3" y="7" opacity=".55"/>
+</svg>
