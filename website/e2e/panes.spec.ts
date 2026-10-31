@@ -1,14 +1,14 @@
 // The windows' panes, Settings' tabs and the windows the menus open (answers 3 a and 4 a): the
 // Windows navigation shows each pane drawn from source, macOS draws the accounts and the log in
-// windows of their own, Settings' toolbar shows General and Advanced, and About and an account's
-// window open over the desk they are asked from.
+// windows of their own, the Linux window pushes Activity over its accounts, Settings' toolbar shows
+// General and Advanced, and About and an account's window open over the desk they are asked from.
 import type { Page } from "@playwright/test";
-import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
+import { axe, choose, expect, handedOver, test, type System } from "./fixtures.ts";
 
 const at = { position: { x: 200, y: 12 } };
 
-async function open(page: Page, platform: Platform, id: string) {
-  await choose(page.context(), { platform });
+async function open(page: Page, system: System, id: string) {
+  await choose(page.context(), { system });
   await page.goto("/");
   await handedOver(page);
   const fig = page.locator(`#${id}`);
@@ -284,3 +284,39 @@ test.describe("Windows", () => {
     await expect(submenu).toBeVisible();
   });
 });
+
+for (const system of ["gnome", "kde"] as const)
+  test.describe(`Linux under ${system}`, () => {
+    test("Activity, pushed over the accounts, lists each change, reads again, and goes back", async ({
+      page,
+    }) => {
+      const { fig } = await open(page, system, "security-linux");
+      const activity = fig.locator('[data-page="activity"]');
+      await expect(activity).toBeVisible();
+      const table = activity.getByRole("table", { name: "Activity" });
+      await expect(table.getByRole("columnheader")).toHaveText([
+        "Date",
+        "Change",
+        "Account",
+        "Result",
+        "By",
+      ]);
+      const first = table.locator("tbody tr").first();
+      await expect(first).toContainText("work");
+      await expect(first).toContainText("Pitboard app");
+      // a switch here is in the log once Refresh reads it again, the newest first
+      await page
+        .locator('#usage-linux [data-account="personal"]')
+        .getByRole("button", { name: "Switch to personal" })
+        .dispatchEvent("click");
+      await expect(
+        page.locator('#usage-linux [data-account="personal"] [data-part="in-use"]'),
+      ).toBeVisible();
+      await activity.getByRole("button", { name: "Refresh" }).click();
+      await expect(first).toContainText("personal");
+      expect(await axe(page, ["#security-linux"])).toEqual([]);
+      await activity.getByRole("button", { name: "Back" }).click();
+      await expect(fig.locator('[data-page="accounts"]')).toBeVisible();
+      await expect(fig.getByRole("button", { name: "Main Menu" })).toBeFocused();
+    });
+  });

@@ -12,8 +12,18 @@ import {
 export { expect };
 
 export type Platform = "macos" | "windows" | "linux";
+export type Desktop = "gnome" | "kde";
 export type Surface = "app" | "cli";
 export const platforms: Platform[] = ["macos", "windows", "linux"];
+export const desktops: Desktop[] = ["gnome", "kde"];
+
+// What a drawing draws: a platform, and Linux by its desktop, as src/lib/platform.ts has them.
+export type System = Exclude<Platform, "linux"> | Desktop;
+export const systems: System[] = ["macos", "windows", "gnome", "kde"];
+export const platformOf = (system: System): Platform =>
+  system === "macos" || system === "windows" ? system : "linux";
+export const desktopOf = (system: System): Desktop | undefined =>
+  system === "gnome" || system === "kde" ? system : undefined;
 
 // AGENTS.md: no test loads claude.ai or chatgpt.com.
 const theirs = /^https?:\/\/([^/?#]*\.)?(claude\.ai|chatgpt\.com)([:/?#]|$)/;
@@ -66,16 +76,27 @@ export async function axe(page: Page, parts: string[], off: string[] = []) {
   return found.violations.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => n.target) }));
 }
 
-// The platform, surface and theme a visitor chose, as head.js reads them before the first paint.
+// The platform, desktop, surface and theme a visitor chose, as head.js reads them before the first
+// paint; a `system` names a platform and, for Linux, its desktop.
 export async function choose(
   context: BrowserContext,
-  chosen: { platform?: Platform; surface?: Surface; theme?: "light" | "dark" },
+  chosen: {
+    platform?: Platform;
+    desktop?: Desktop;
+    system?: System;
+    surface?: Surface;
+    theme?: "light" | "dark";
+  },
 ) {
+  const { system, ...rest } = chosen;
+  const stored = system
+    ? { ...rest, platform: platformOf(system), desktop: desktopOf(system) ?? rest.desktop }
+    : rest;
   await context.addInitScript((c) => {
-    const keys = { platform: "platform", surface: "tab", theme: "theme" } as const;
+    const keys = { platform: "platform", desktop: "desktop", surface: "tab", theme: "theme" };
     for (const [name, value] of Object.entries(c))
       if (value) localStorage.setItem(keys[name as keyof typeof keys], value);
-  }, chosen);
+  }, stored);
 }
 
 // The page as a browser without JavaScript builds it, for a check that runs in the page: the same
@@ -117,8 +138,10 @@ export async function handedOver(page: Page) {
 }
 
 // The attributes a live figure changes (plan 2.4, rule 2), and a style that only sets custom
-// properties, which is how it places what it draws.
+// properties, which is how it places what it draws. A Linux terminal's shell is named by the title
+// its desktop shows.
 const changing = [
+  "aria-labelledby",
   "aria-checked",
   "aria-selected",
   "aria-expanded",

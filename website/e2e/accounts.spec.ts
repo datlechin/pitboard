@@ -641,6 +641,308 @@ test.describe("on Windows", () => {
   });
 });
 
+// The Linux window as libadwaita draws it on either desktop: an account group's button and its
+// menu, the main menu, the pages pushed over the accounts, and the dialogs (plan 3.3 "What each
+// account has left").
+async function window(page: Page, system: "gnome" | "kde", id = "usage-linux") {
+  await choose(page.context(), { system });
+  await page.goto("/");
+  await handedOver(page);
+  const fig = page.locator(`#${id}`);
+  await fig.scrollIntoViewIfNeeded();
+  await expect(fig).not.toHaveAttribute("inert");
+  return {
+    fig,
+    group: (account: string) => fig.locator(`[data-part="list"] > [data-account="${account}"]`),
+    menu: page.locator(`#${id}-account-menu`),
+    main: page.locator(`#${id}-main-menu`),
+    offers: page.locator(`#${id}-account-menu [role="menuitem"]:not([hidden])`),
+    dialog: (name: string) => page.locator(`#linux-accounts-${name}`),
+  };
+}
+
+for (const system of ["gnome", "kde"] as const)
+  test.describe(`on Linux under ${system}`, () => {
+    test.use({ reducedMotion: "reduce" });
+    test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
+
+    test("each group says its tool and plan, In Use or its Switch, and reads its limits as sentences", async ({
+      page,
+    }) => {
+      // the demo has switched to work
+      const { group } = await window(page, system);
+      await expect(group("work")).toHaveAccessibleName("work");
+      await expect(group("work")).toContainText("Claude Code, Max 20x");
+      await expect(group("work").locator('[data-part="in-use"]')).toHaveText("In Use");
+      await expect(group("work").getByRole("button", { name: /^Switch/ })).toBeHidden();
+      const personal = group("personal").getByRole("button", { name: "Switch to personal" });
+      await expect(personal).toHaveText("Switch");
+      await expect(
+        group("work").locator('[data-part="limit"] [data-part="spoken"]').first(),
+      ).toHaveText(/^5-hour limit, 12 percent used, resets 23:50/);
+      await expect(group("spare")).toContainText("Codex, Plus");
+      // Codex's accounts keep no warm-up
+      await expect(group("spare").locator('[data-part="warm"]')).toBeHidden();
+    });
+
+    test("an account's menu offers what its header's button does not, and Remove last", async ({
+      page,
+    }) => {
+      const { group, menu, offers } = await window(page, system);
+      const text = { useInnerText: true };
+      const button = group("personal").getByRole("button", { name: "Account" });
+      await button.click();
+      await expect(menu).toBeVisible();
+      await expect(button).toHaveAttribute("aria-expanded", "true");
+      await expect(offers).toHaveText(
+        ["Sign In Again…", "Rename…", "Warm Up Now", "Copy Email Address", "Remove Account…"],
+        text,
+      );
+      await expect(menu.getByRole("menuitem", { name: "Warm Up Now" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      await page.keyboard.press("Escape");
+      // the account in use keeps its Switch and Remove, dimmed, as the app's menu does
+      await group("work").getByRole("button", { name: "Account" }).click();
+      await expect(offers).toHaveText(
+        [
+          "Switch to work",
+          "Sign In Again…",
+          "Rename…",
+          "Warm Up Now",
+          "Copy Email Address",
+          "Remove Account…",
+        ],
+        text,
+      );
+      for (const name of ["Switch to work", "Remove Account…"])
+        await expect(menu.getByRole("menuitem", { name })).toHaveAttribute("aria-disabled", "true");
+      // a press outside puts it away
+      await page.locator("#usage-title").click();
+      await expect(menu).toBeHidden();
+      await expect(button).toHaveAttribute("aria-expanded", "false");
+    });
+
+    test("from the keyboard an account's menu opens on its first item it can, and Escape gives focus back", async ({
+      page,
+      browserName,
+    }) => {
+      test.skip(
+        process.platform === "darwin" && browserName === "webkit",
+        "WebKit on a Mac tabs past buttons, as Safari does until Option-Tab",
+      );
+      const { group, menu, offers } = await window(page, system);
+      await group("main").getByRole("button", { name: "Account" }).focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Enter");
+      await expect(offers).toHaveText(
+        ["Switch to main", "Sign In Again…", "Rename…", "Copy Email Address", "Remove Account…"],
+        { useInnerText: true },
+      );
+      // focus takes the first item GTK lets it, and wraps past the dimmed ones
+      await expect(menu.getByRole("menuitem", { name: "Sign In Again…" })).toBeFocused();
+      await page.keyboard.press("ArrowUp");
+      await expect(menu.getByRole("menuitem", { name: "Copy Email Address" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+      await expect(group("main").getByRole("button", { name: "Account" })).toBeFocused();
+    });
+
+    test("Switch shows the spinner named Switching, then In Use and the notice", async ({
+      page,
+    }) => {
+      const { fig, group } = await window(page, system);
+      await group("personal").getByRole("button", { name: "Switch to personal" }).click();
+      await expect(group("personal").getByRole("img", { name: "Switching" })).toBeVisible();
+      await expect(group("spare").getByRole("button", { name: "Switch to spare" })).toBeDisabled();
+      await expect(group("personal").locator('[data-part="in-use"]')).toBeVisible();
+      await expect(fig.locator("[data-notice]:not([hidden])")).toContainText(
+        "Switched Claude Code to personal",
+      );
+    });
+
+    test("F10 opens the main menu, its items cycle, and each opens what it names", async ({
+      page,
+    }) => {
+      const { fig, main } = await window(page, system);
+      const button = fig.getByRole("button", { name: "Main Menu" });
+      await button.focus();
+      await page.keyboard.press("F10");
+      await expect(main).toBeVisible();
+      const items = main.getByRole("menuitem");
+      await expect(items).toHaveText([
+        "Open Link…",
+        "Diagnostics",
+        "Activity",
+        "Preferences",
+        "Keyboard Shortcuts",
+        "Help",
+        "About Pitboard",
+      ]);
+      await expect(items.first()).toBeFocused();
+      await page.keyboard.press("ArrowUp");
+      await expect(items.last()).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(items.first()).toBeFocused();
+      // GtkPopoverMenu binds no Home or End
+      await page.keyboard.press("End");
+      await expect(items.first()).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      // Diagnostics, pushed over the accounts, its back button focused
+      const back = fig.locator('[data-page="diagnostics"]').getByRole("button", { name: "Back" });
+      await expect(back).toBeFocused();
+      await expect(fig.locator('[data-page="diagnostics"] [role="status"]')).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(fig.locator('[data-page="accounts"]')).toBeVisible();
+      await expect(button).toBeFocused();
+      await page.keyboard.press("F10");
+      await items.nth(2).click();
+      await expect(fig.locator('[data-page="activity"]')).toBeVisible();
+      await page.keyboard.press("Alt+ArrowLeft");
+      await expect(fig.locator('[data-page="accounts"]')).toBeVisible();
+    });
+
+    test("Add Account picks its tool, signs in, then names the account with Done alone", async ({
+      page,
+    }) => {
+      const { fig, dialog } = await window(page, system);
+      await fig.getByRole("button", { name: "Add Account…" }).click();
+      const signIn = dialog("sign-in");
+      await expect(signIn).toBeVisible();
+      await expect(signIn).toHaveAccessibleName("Add Account");
+      const tools = signIn.getByRole("group", { name: "Tool" });
+      await expect(tools.getByRole("button")).toHaveText(["Claude Code", "Codex"]);
+      await tools.getByRole("button", { name: "Codex" }).click();
+      await expect(tools.getByRole("button", { name: "Codex" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await signIn.getByRole("button", { name: "Sign In…" }).click();
+      await expect(signIn.getByRole("img", { name: "Waiting for your browser" })).toBeVisible();
+      const name = dialog("name");
+      await expect(name).toBeVisible({ timeout: 6000 });
+      await expect(name).toHaveAccessibleName("Name This Account");
+      await expect(name.getByRole("button")).toHaveText(["Done"]);
+      await expect(name.locator('input[name="name"]')).toHaveValue("travel");
+      await page.keyboard.press("Enter");
+      await expect(name).toBeHidden();
+      await expect(fig.locator('[data-part="list"] > [data-tool="codex"]')).toHaveCount(3);
+    });
+
+    test("Rename refuses an empty name, Escape cancels, and Remove asks with Remove focused", async ({
+      page,
+    }) => {
+      const { group, menu, dialog } = await window(page, system);
+      await group("personal").getByRole("button", { name: "Account" }).click();
+      await menu.getByRole("menuitem", { name: "Rename…" }).click();
+      const name = dialog("name");
+      await expect(name).toHaveAccessibleName("Rename “personal”");
+      await expect(name.getByRole("button")).toHaveText(["Cancel", "Rename"]);
+      await name.locator('input[name="name"]').fill("");
+      await expect(name.locator('[data-part="problem"]')).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(name).toBeHidden();
+      await expect(group("personal").locator('[data-part="group-title"]')).toHaveText("personal");
+      await group("personal").getByRole("button", { name: "Account" }).click();
+      await menu.getByRole("menuitem", { name: "Remove Account…" }).click();
+      const remove = dialog("remove");
+      await expect(remove).toBeVisible();
+      await expect(remove).toHaveAccessibleName("Remove “personal (Claude Code)”?");
+      await expect(remove.getByRole("button", { name: "Remove" })).toBeFocused();
+      expect(await axe(page, ["#linux-accounts-remove"])).toEqual([]);
+      await page.keyboard.press("Enter");
+      await expect(remove).toBeHidden();
+      await expect(group("personal")).toBeHidden();
+      await expect(
+        page.locator("#usage-linux").getByRole("button", { name: "Add Account…" }),
+      ).toBeFocused();
+    });
+
+    test("Open Link, Keyboard Shortcuts and About open from the main menu and close with Escape", async ({
+      page,
+    }) => {
+      const { fig, main, dialog } = await window(page, system);
+      const button = fig.getByRole("button", { name: "Main Menu" });
+      await button.click();
+      await main.getByRole("menuitem", { name: "Open Link…" }).click();
+      await expect(dialog("open-link")).toBeVisible();
+      await expect(dialog("open-link")).toContainText("No Link to Open");
+      // the page reads no clipboard: Paste Link opens nothing
+      await dialog("open-link").getByRole("button", { name: "Paste Link" }).click();
+      await expect(dialog("open-link")).toContainText("No Link to Open");
+      await page.keyboard.press("Escape");
+      await expect(dialog("open-link")).toBeHidden();
+      await button.click();
+      await main.getByRole("menuitem", { name: "Keyboard Shortcuts" }).click();
+      await expect(dialog("shortcuts")).toBeVisible();
+      await expect(dialog("shortcuts")).toContainText("Ctrl+N");
+      expect(await axe(page, ["#linux-accounts-shortcuts"])).toEqual([]);
+      await dialog("shortcuts").getByRole("button", { name: "Close" }).click();
+      await expect(dialog("shortcuts")).toBeHidden();
+      await button.click();
+      await main.getByRole("menuitem", { name: "About Pitboard" }).click();
+      await expect(dialog("about")).toBeVisible();
+      await expect(dialog("about")).toContainText("Pitboard");
+      await page.keyboard.press("Escape");
+      await expect(dialog("about")).toBeHidden();
+    });
+
+    test("with its menus open and a dialog up, the window keeps WAI-ARIA's rules", async ({
+      page,
+    }) => {
+      const { fig, group, main, dialog } = await window(page, system);
+      await group("work").getByRole("button", { name: "Account" }).click();
+      expect(await axe(page, ["#usage-linux"])).toEqual([]);
+      await page.keyboard.press("Escape");
+      await fig.getByRole("button", { name: "Main Menu" }).click();
+      await expect(main).toBeVisible();
+      expect(await axe(page, ["#usage-linux"])).toEqual([]);
+      await page.keyboard.press("Escape");
+      await fig.getByRole("button", { name: "Add Account…" }).click();
+      await expect(dialog("sign-in")).toBeVisible();
+      expect(await axe(page, ["#linux-accounts-sign-in"])).toEqual([]);
+    });
+  });
+
+test.describe("on Linux, the window's controls by desktop", () => {
+  test.use({ reducedMotion: "reduce" });
+  test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
+
+  test("KDE Plasma's layout adds Minimize and Maximize, and its tray keeps Pitboard past Close", async ({
+    page,
+  }) => {
+    const { fig } = await window(page, "kde");
+    await expect(fig.getByRole("button", { name: "Minimize" })).toBeVisible();
+    const before = (await fig.boundingBox())!;
+    await fig.getByRole("button", { name: "Maximize" }).click();
+    expect((await fig.boundingBox())!.width).toBe(before.width);
+    await fig.getByRole("button", { name: "Minimize" }).click();
+    await expect(fig).toBeHidden();
+    await page.locator("#hero-kde-icon").click({ button: "right" });
+    await page.locator('#hero-kde-menu [data-moment="after"] [data-does="open"]').click();
+    await expect(fig).toBeVisible();
+    await fig.getByRole("button", { name: "Close" }).click();
+    await expect(fig).toBeHidden();
+    // Pitboard runs on in the tray
+    await expect(page.locator("#hero-kde-icon")).toBeVisible();
+    await page.locator("#hero-kde-icon").click();
+    await expect(fig).toBeVisible();
+  });
+
+  test("on GNOME, Close quits Pitboard and every window goes until Reset", async ({ page }) => {
+    const { fig } = await window(page, "gnome");
+    await expect(fig.getByRole("button", { name: "Minimize" })).toBeHidden();
+    await fig.getByRole("button", { name: "Close" }).click();
+    await expect(fig).toBeHidden();
+    await expect(page.locator("#switch-linux")).toBeHidden();
+    await page.locator("figure:has(#usage-linux) [data-reset]").click();
+    await expect(fig).toBeVisible();
+  });
+});
+
 test.describe("on a phone", () => {
   test.use({ reducedMotion: "reduce" });
   test.skip(({ isMobile }) => !isMobile, "a touch");

@@ -1112,12 +1112,22 @@ PITBOARD_SITE_OFFLINE=1 npm run build
 npm run test:browser
 ```
 
-CI's `website-browsers` jobs run them, one for each project, and in Chromium also compare each
-figure with its baseline in `e2e/static.spec.ts-snapshots/`. The jobs run in Playwright's image
-for the version `website/package.json` pins, which holds the browsers, so raise
-`@playwright/test` and the image's tag and digest in `ci.yml` together. The baselines are made in
-that image: a figure whose look changes on purpose takes its new drawing from the Chromium job's
-`website-browsers-chromium` artifact.
+CI's `website-browsers` jobs run them, one for each project and two each for WebKit and Firefox,
+and in Chromium also compare each figure with its baseline in `e2e/static.spec.ts-snapshots/`.
+The jobs run in Playwright's image for the version `website/package.json` pins, which holds the
+browsers, so raise `@playwright/test` and the image's tag and digest in `ci.yml` together. The
+baselines are made in that image: a figure whose look changes on purpose takes its new drawing
+from the Chromium job's `website-browsers-chromium` artifact.
+
+`e2e/linux-pictures.spec.ts` draws the Linux window as CI's pictures of the app draw it and holds
+each element's metrics within a pixel and its colours within a byte. No job runs it: download a
+run's `linux-app-pictures` and name it in `PITBOARD_LINUX_PICTURES`, and a folder in
+`PITBOARD_LINUX_SHEETS` for the pictures side by side:
+
+```sh
+gh run download <run> -n linux-app-pictures -D <pictures>
+PITBOARD_LINUX_PICTURES=<pictures> npx playwright test e2e/linux-pictures.spec.ts --project=chromium
+```
 
 ## Changelog
 

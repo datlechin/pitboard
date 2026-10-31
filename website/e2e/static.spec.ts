@@ -1,29 +1,49 @@
 // Every figure's drawing, light and dark, against baselines made in CI's Linux image, so a change
 // to how a figure looks fails until its new look is approved. Each is drawn as Astro renders it,
-// before any of the page's modules runs: head.js alone shows the platform and surface chosen.
-import { choose, expect, platforms, roots, test, type Surface } from "./fixtures.ts";
+// before any of the page's modules runs: head.js alone shows the platform, desktop and surface
+// chosen.
+import {
+  choose,
+  desktopOf,
+  expect,
+  platformOf,
+  roots,
+  systems,
+  test,
+  type Surface,
+  type System,
+} from "./fixtures.ts";
 
 const surfaces: Surface[] = ["app", "cli"];
+const ends: Record<System, string[]> = {
+  macos: ["-mac"],
+  windows: ["-win"],
+  gnome: ["-linux", "-gnome"],
+  kde: ["-linux", "-kde"],
+};
 
-// a drawing is taken once, on its platform and surface: macOS's drawings shown on another platform,
+// a drawing is taken once, on its system and surface: macOS's drawings shown on another platform,
 // and an app's drawing a figure with no terminal shows on both surfaces, are the same drawing
-const own = (id: string, platform: string, surface: Surface) =>
+const own = (id: string, system: System, surface: Surface) =>
   surface === "cli"
-    ? id.includes("-cli-") && id.endsWith(`-${platform}`)
-    : !id.includes("-cli-") &&
-      ((platform === "macos" && id.endsWith("-mac")) ||
-        (platform === "windows" && id.endsWith("-win")));
+    ? id.includes("-cli-") && id.endsWith(`-${platformOf(system)}`)
+    : !id.includes("-cli-") && ends[system].some((end) => id.endsWith(end));
+
+// a Linux drawing both desktops share is taken under each, named for it
+const named = (id: string, system: System) => {
+  const desktop = desktopOf(system);
+  return desktop && !id.endsWith(`-${desktop}`) ? `${id}-${desktop}` : id;
+};
 
 test.skip(process.platform !== "linux", "the baselines are made in CI's Linux image");
 test.use({ reducedMotion: "reduce" });
 
 for (const colorScheme of ["light", "dark"] as const) {
-  for (const platform of platforms) {
+  for (const system of systems) {
     for (const surface of surfaces) {
-      if (platform === "linux" && surface === "app") continue;
-      test(`${platform} ${surface} ${colorScheme}`, async ({ page }) => {
+      test(`${system} ${surface} ${colorScheme}`, async ({ page }) => {
         await page.emulateMedia({ colorScheme });
-        await choose(page.context(), { platform, surface });
+        await choose(page.context(), { system, surface });
         await page.route("**/_astro/*.js", (route) =>
           route.fulfill({ contentType: "text/javascript", body: "" }),
         );
@@ -31,7 +51,7 @@ for (const colorScheme of ["light", "dark"] as const) {
         await page.evaluate(() => document.fonts.ready);
         const shown = page.locator(`${roots}:visible`);
         const ids = (await shown.evaluateAll((all) => all.map((root) => root.id))).filter((id) =>
-          own(id, platform, surface),
+          own(id, system, surface),
         );
         expect(ids.length).toBeGreaterThan(4);
         // every figure is compared, and every missing baseline written, before the test fails;
@@ -49,7 +69,9 @@ for (const colorScheme of ["light", "dark"] as const) {
             const top = document.getElementById(id)!.getBoundingClientRect().top + scrollY;
             root.style.paddingTop = `${Math.ceil(top) - top}px`;
           }, id);
-          await expect.soft(page.locator(`#${id}`)).toHaveScreenshot(`${id}-${colorScheme}.png`);
+          await expect
+            .soft(page.locator(`#${id}`))
+            .toHaveScreenshot(`${named(id, system)}-${colorScheme}.png`);
         }
       });
     }

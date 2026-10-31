@@ -1,14 +1,12 @@
-// Settings at When a limit reaches, and the notification row, on both systems: the pop-up and the
-// ComboBox, the share's field, stepper and NumberBox, the words under the choice, and the banner
-// the app posts at the share (plan 3.6 and 3.7).
+// Settings at When a limit reaches on macOS and Windows: the pop-up and the ComboBox, the share's
+// field, stepper and NumberBox, and the words under the choice (plan 3.6 and 3.7). notice.spec.ts
+// has the banner the app posts at the share.
 import type { Locator, Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
 
 const notify =
   "Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open.";
 const watching = "Watching work: 40% of its weekly limit, as of 20:50.";
-const heads = { macos: "Weekly Limit Almost Reached", windows: "Weekly limit almost reached" };
-const room = "personal has used 95%. work has used 40%.";
 
 async function open(page: Page, platform: Platform, id: string) {
   await choose(page.context(), { platform });
@@ -241,132 +239,179 @@ test.describe("Windows", () => {
   });
 });
 
-test.describe("Notification Center", () => {
-  test("on Windows the clock opens it, where the notification waits once its toast has gone", async ({
-    page,
-    isMobile,
-  }) => {
-    test.skip(isMobile, "a pointer and a keyboard");
-    await choose(page.context(), { platform: "windows" });
-    await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
-    await page.goto("/");
-    await page.waitForFunction(() => customElements.get("pb-notice") !== undefined);
-    const fig = page.locator("#offer-win");
-    const center = fig.locator('[data-part="center"]');
-    const clock = fig.getByRole("button", { name: "05:53 14/10/2026" });
-    await fig.scrollIntoViewIfNeeded();
-    await expect(fig.locator("[data-banner]")).toBeVisible();
-    await page.mouse.move(0, 0);
-    await page.clock.fastForward(5500);
-    await expect(fig.locator("[data-banner]")).toBeHidden();
-    await clock.click();
-    await expect(center).toBeVisible();
-    await expect(clock).toHaveAttribute("aria-expanded", "true");
-    await expect(center).toBeFocused();
-    const note = center.locator('[data-part="note"]');
-    await expect(note).toHaveAccessibleName(heads.windows);
-    await expect(note).toContainText(room);
-    await expect(note.getByRole("button", { name: "Switch to work" })).toBeVisible();
-    await expect(center).toContainText("Wednesday 14 October");
-    await page.keyboard.press("Escape");
-    await expect(center).toBeHidden();
-    await expect(clock).toBeFocused();
-    // dismissed, it is gone
-    await clock.click();
-    await note.getByRole("button", { name: "Dismiss" }).click();
-    await expect(center).toContainText("No new notifications");
-    await expect(center.getByRole("button", { name: "Clear all" })).toBeHidden();
-    expect(await axe(page, ["#offer-win"])).toEqual([]);
-  });
+// Preferences on Linux, an AdwPreferencesDialog over its window: the view switcher as a tablist,
+// When a limit reaches as a combobox and listbox, At as a spin button, and the words a desktop with
+// a tray and one without each say (plan 3.3 "Automatic switch, and Warm-up").
+async function preferences(page: Page, system: "gnome" | "kde") {
+  await choose(page.context(), { system });
+  await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
+  await page.goto("/");
+  await handedOver(page);
+  await page.waitForFunction(() => customElements.get("pb-linux-preferences") !== undefined);
+  const fig = page.locator("#auto-linux-preferences");
+  await fig.scrollIntoViewIfNeeded();
+  await expect(fig).not.toHaveAttribute("inert");
+  return fig;
+}
 
-  test("on macOS, which no reading of it drew, the clock opens nothing", async ({ page }) => {
-    await choose(page.context(), { platform: "macos" });
-    await page.goto("/");
-    const fig = page.locator("#offer-mac");
-    await fig.scrollIntoViewIfNeeded();
-    await expect(fig.locator('[data-part="center"]')).toHaveCount(0);
-    await expect(fig.locator("[data-clock]")).not.toHaveRole("button");
-  });
-});
+for (const system of ["gnome", "kde"] as const)
+  test.describe(`Linux under ${system}`, () => {
+    test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
+    const tray = system === "kde";
 
-for (const [platform, id] of [
-  ["macos", "offer-mac"],
-  ["windows", "offer-win"],
-] as const) {
-  test.describe(`the notification on ${platform}`, () => {
-    test("arrives once its row is in view, stays while held, and goes after the system's time", async ({
+    test("the view switcher is a tablist the arrows, Home and End move along", async ({ page }) => {
+      const fig = await preferences(page, system);
+      await expect(fig).toHaveAccessibleName("Preferences");
+      const tabs = fig.getByRole("tablist", { name: "Preferences" }).getByRole("tab");
+      await expect(tabs).toHaveText(["General", "Limits", "Advanced"], { useInnerText: true });
+      const limits = fig.getByRole("tab", { name: "Limits" });
+      await expect(limits).toHaveAttribute("aria-selected", "true");
+      await limits.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect(fig.getByRole("tab", { name: "Advanced" })).toBeFocused();
+      await expect(fig.getByRole("tabpanel", { name: "Advanced" })).toBeVisible();
+      await page.keyboard.press("ArrowRight");
+      await expect(fig.getByRole("tab", { name: "General" })).toBeFocused();
+      await page.keyboard.press("End");
+      await expect(fig.getByRole("tab", { name: "Advanced" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await page.keyboard.press("Home");
+      const general = fig.getByRole("tabpanel", { name: "General" });
+      await expect(general).toBeVisible();
+      // with no status item, closing the window quits Pitboard, and General says so
+      await expect(general.getByText("Pitboard quits once its window is closed.")).toBeVisible({
+        visible: !tray,
+      });
+      await expect(general.getByRole("switch", { name: "Start Pitboard at Login" })).toBeVisible();
+    });
+
+    test("When a limit reaches opens its list, and Switch Automatically says what it watches", async ({
       page,
     }) => {
-      await choose(page.context(), { platform });
-      await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
-      await page.goto("/");
-      await page.waitForFunction(() => customElements.get("pb-notice") !== undefined);
-      const fig = page.locator(`#${id}`);
-      const banner = fig.locator("[data-banner]");
-      await expect(banner).toBeHidden();
-      await fig.scrollIntoViewIfNeeded();
-      await expect(banner).toBeVisible();
-      await expect(banner).toHaveAccessibleName(heads[platform]);
-      await expect(page.locator("#status")).toHaveText(`${heads[platform]}, Claude Code, ${room}`);
-      await expect(banner.locator("[data-switch]")).toHaveText(
-        platform === "macos" ? "Switch" : "Switch to work",
+      const fig = await preferences(page, system);
+      const box = fig.getByRole("combobox", { name: "When a limit reaches" });
+      const list = page.locator("#auto-linux-at-limit-choices");
+      const note = fig.locator('[data-part="note"]');
+      await expect(chosen(box)).toHaveText("Notify Me");
+      await expect(note).toHaveText(notify);
+      await box.click();
+      await expect(list).toBeVisible();
+      await expect(box).toHaveAttribute("aria-expanded", "true");
+      await expect(list.getByRole("option")).toHaveText(
+        ["Do Nothing", "Notify Me", "Switch Automatically"],
+        { useInnerText: true },
       );
-      // focus inside it holds it, and shows its close button and Switch
-      await banner.locator("[data-close]").focus();
-      await expect(banner).toHaveAttribute("data-state", "held");
-      await expect(banner.locator("[data-close]")).toBeVisible();
-      await page.clock.fastForward(8000);
-      await expect(banner).toBeVisible();
-      await banner.locator("[data-switch]").focus();
+      expect(await axe(page, ["#auto-linux"])).toEqual([]);
+      await list.getByRole("option", { name: "Switch Automatically" }).click();
+      await expect(list).toBeHidden();
+      await expect(chosen(box)).toHaveText("Switch Automatically");
+      await expect(note).toContainText("Pitboard switches Claude Code at 95%");
+      await expect(fig).toContainText(watching);
+      await expect(fig.locator('[data-part="once-closed"]')).toBeVisible({ visible: !tray });
+      // the keyboard opens it on the choice, and Escape closes it on the box
+      await box.focus();
       await page.keyboard.press("Enter");
-      await expect(banner).toBeHidden();
-      // Switch acts in the row's moment
-      if (platform === "macos") await expect(fig.locator("[data-title]")).toHaveText("work 40%");
-      else await expect(fig.locator("[data-level=g]")).toBeVisible();
-      // the same notification does not come again
-      await page.evaluate(() => scrollTo(0, 0));
-      await fig.scrollIntoViewIfNeeded();
-      await page.clock.runFor(500);
-      await expect(banner).toBeHidden();
+      await expect(list).toBeVisible();
+      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+      await expect(box).toBeFocused();
+      await expect(chosen(box)).toHaveText("Switch Automatically");
     });
 
-    test("follows the choice and the share, and goes by itself", async ({ page }) => {
-      const pre = platform === "macos" ? "auto-mac" : "auto-win";
-      const settings = await open(page, platform, pre);
-      const share = page.locator(`#${pre}-share`);
-      await share.fill("90");
-      await share.press("Enter");
-      const fig = page.locator(`#${id}`);
-      const banner = fig.locator("[data-banner]");
-      await fig.scrollIntoViewIfNeeded();
-      await expect(banner).toHaveAccessibleName(heads[platform]);
-      await expect(banner.locator("[data-body]")).toHaveText(
-        "personal has used 90%. work has used 40%.",
+    test("At steps by a percent and a page, goes to its ends, and clamps what is typed", async ({
+      page,
+    }) => {
+      const fig = await preferences(page, system);
+      const at = fig.getByRole("spinbutton", { name: "At" });
+      await at.focus();
+      await page.keyboard.press("ArrowUp");
+      await expect(at).toHaveAttribute("aria-valuenow", "96");
+      await page.keyboard.press("PageDown");
+      await expect(at).toHaveAttribute("aria-valuenow", "91");
+      await page.keyboard.press("Control+End");
+      await expect(at).toHaveAttribute("aria-valuenow", "99");
+      // with no wrap, a step past an end stays on it
+      await page.keyboard.press("ArrowUp");
+      await expect(at).toHaveAttribute("aria-valuenow", "99");
+      await page.keyboard.press("Control+Home");
+      await expect(at).toHaveAttribute("aria-valuenow", "50");
+      await at.fill("120");
+      await at.press("Enter");
+      await expect(at).toHaveAttribute("aria-valuenow", "99");
+      await expect(at).toHaveValue("99%");
+      await at.fill("lots");
+      await at.press("Enter");
+      await expect(at).toHaveValue("99%");
+      await at.fill("80%");
+      await at.press("Enter");
+      await expect(at).toHaveAttribute("aria-valuenow", "80");
+      await expect(fig.locator('[data-part="note"]')).toContainText("reaches 80%");
+    });
+
+    test("Advanced offers Watch in the Background only where no status item keeps Pitboard", async ({
+      page,
+    }) => {
+      const fig = await preferences(page, system);
+      await fig.getByRole("tab", { name: "Advanced" }).click();
+      const panel = fig.getByRole("tabpanel", { name: "Advanced" });
+      await expect(panel.getByRole("switch", { name: "Keep Saved Sign-Ins Fresh" })).toBeVisible();
+      await expect(panel).toContainText("/usr/bin/pitboard");
+      const watch = panel.getByRole("switch", { name: "Watch in the Background" });
+      if (tray) return await expect(watch).toBeHidden();
+      await watch.click();
+      await expect(watch).toHaveAttribute("aria-checked", "true");
+      // Limits then says what goes on once the window is closed
+      await fig.getByRole("tab", { name: "Limits" }).click();
+      await expect(fig.locator('[data-part="once-closed"]')).toHaveText(
+        "Once its window is closed, nothing notifies you, and the watch service only warms up.",
       );
-      await page.mouse.move(0, 0);
-      await page.clock.fastForward(5500);
-      await expect(banner).toBeHidden();
-      await settings.scrollIntoViewIfNeeded();
-      const box = page.locator(`#${pre}-at`);
-      await box.focus();
-      if (platform === "macos") {
-        await page.keyboard.press("Space");
-        await expect(page.locator(`#${pre}-choices`)).toBeVisible();
-        await page.keyboard.press("ArrowDown");
-        await page.keyboard.press("Enter");
-      } else await page.keyboard.press("ArrowDown");
-      await expect(chosen(box)).toHaveText(
-        platform === "macos" ? "Switch Automatically" : "Switch automatically",
+    });
+
+    test("Uninstall asks with Cancel its default, then names dnf's command, and Quit quits until Reset", async ({
+      page,
+    }) => {
+      const fig = await preferences(page, system);
+      await fig.getByRole("tab", { name: "Advanced" }).click();
+      await fig.getByRole("button", { name: "Uninstall Pitboard…" }).click();
+      const question = page.locator("#auto-linux-uninstall-question");
+      await expect(question).toBeVisible();
+      await expect(question).toHaveAccessibleName("Uninstall Pitboard?");
+      await expect(question.getByRole("button", { name: "Cancel" })).toBeFocused();
+      await question.getByRole("button", { name: "Uninstall" }).click();
+      const removal = page.locator("#auto-linux-remove-the-app");
+      await expect(removal).toBeVisible();
+      await expect(removal).toContainText("sudo dnf remove pitboard-app pitboard");
+      expect(await axe(page, ["#auto-linux-remove-the-app"])).toEqual([]);
+      await removal.getByRole("button", { name: "Quit" }).click();
+      await expect(removal).toBeHidden();
+      await expect(page.locator("#auto-linux")).toBeHidden();
+      await page.locator("figure:has(#auto-linux) [data-reset]").click();
+      await expect(page.locator("#auto-linux")).toBeVisible();
+    });
+
+    test("Close and Escape put Preferences away, and focus goes back to the window", async ({
+      page,
+    }) => {
+      const fig = await preferences(page, system);
+      await fig.getByRole("spinbutton", { name: "At" }).focus();
+      await page.keyboard.press("Escape");
+      await expect(fig).toBeHidden();
+      await expect(
+        page.locator("#auto-linux").getByRole("button", { name: "Main Menu" }),
+      ).toBeFocused();
+      await page.keyboard.press("Control+Comma");
+      await expect(fig).toBeVisible();
+      await expect(fig.getByRole("tab", { name: "General" })).toHaveAttribute(
+        "aria-selected",
+        "true",
       );
-      await fig.scrollIntoViewIfNeeded();
-      await expect(banner).toHaveAccessibleName("Switched to work");
-      await expect(banner.locator("[data-switch]")).toHaveText(
-        platform === "macos" ? "Switch Back" : "Switch back",
-      );
-      await expect(banner.locator("[data-subtitle]")).toHaveText("Claude Code");
+      await fig.getByRole("button", { name: "Close" }).click();
+      await expect(fig).toBeHidden();
     });
   });
-}
 
 test("axe finds nothing in the open pop-up and the open ComboBox", async ({ page }) => {
   for (const [platform, id] of [
