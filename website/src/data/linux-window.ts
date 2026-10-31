@@ -328,7 +328,8 @@ export const prefs = {
     commandLine: "Command Line",
     path: "Path",
     inTerminal: "/usr/bin/pitboard",
-    updateNote: "The one inside this app, so it updates with the app.",
+    updateNote:
+      "The one from the pitboard package this app needs, so your package manager updates it with the app.",
     uninstall: "Uninstall",
     uninstallNote:
       "Deletes Pitboard’s saved sign-ins and settings, and leaves each tool signed in to the account in use.",

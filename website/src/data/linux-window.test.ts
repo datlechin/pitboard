@@ -277,7 +277,7 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
     prefs.advanced.watchAbout(true),
     "Pitboard quits once its window is closed. Turned on, this computer goes on switching Claude Code at 95% and warming up the accounts Warm-Up turns on, from each login.",
   );
-  says(machine, `"${prefs.advanced.updateNote}"`);
+  says(machine, `(Front::Gnome, true) => {\n            "${prefs.advanced.updateNote}"\n        }`);
   says(machine, `pub(crate) const UNINSTALL_QUESTION: &str = "${prefs.uninstallQuestion.title}";`);
   says(machine, `pub(crate) const REMOVE_THE_APP: &str = "${prefs.removeTheApp.title}";`);
   says(
