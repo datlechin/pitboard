@@ -63,14 +63,17 @@ for (const colorScheme of ["light", "dark"] as const) {
           document.documentElement.style.scrollPaddingTop = "0px";
         });
         for (const id of ids) {
-          await page.evaluate((id) => {
+          // a figure is its desk: a Linux window is taken with the desk that crops it, not the
+          // part of it the desk cuts off, which shows the page below
+          const desk = `.desk#${id}, .desk:has(> #${id})`;
+          await page.evaluate((desk) => {
             const root = document.documentElement;
             root.style.paddingTop = "0px";
-            const top = document.getElementById(id)!.getBoundingClientRect().top + scrollY;
+            const top = document.querySelector(desk)!.getBoundingClientRect().top + scrollY;
             root.style.paddingTop = `${Math.ceil(top) - top}px`;
-          }, id);
+          }, desk);
           await expect
-            .soft(page.locator(`#${id}`))
+            .soft(page.locator(desk))
             .toHaveScreenshot(`${named(id, system)}-${colorScheme}.png`);
         }
       });
