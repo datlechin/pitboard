@@ -21,6 +21,7 @@ import {
   barTip,
   menuTitle,
 } from "../../lib/words.ts";
+import { needsAttention } from "../../data/window.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
 // WinUI's tooltip waits twice SPI_GETMOUSEHOVERTIME, 400 ms by default, for the pointer and for
@@ -162,7 +163,8 @@ class TrayDesk extends LiveFigure {
     if (!s.running) this.#menu.closeAll(false);
     text(this.querySelector("[data-time]"), hm(s.now));
     text(this.querySelector("[data-date]"), shortDate(s.now));
-    const tip = shellTip(barTip(s, "windows"));
+    // departs from the apps: The Windows icon draws no warning over it while its menu needs attention
+    const tip = shellTip(barTip(s, "windows", needsAttention(s, "windows")));
     attr(icon, "aria-label", tip);
     const level = menuBarLevel(s);
     for (const svg of icon.querySelectorAll("[data-level]"))

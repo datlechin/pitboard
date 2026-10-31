@@ -433,8 +433,13 @@ export const menuBarLevel = (w: World) => level(fullest(barAccount(w)));
 
 // The menu bar item's spoken name: Pitboard, its title, and the tool where more than one is read
 // (present/words/status_item.rs `bar_spoken`).
-export const menuBarSpoken = (w: World) =>
-  ["Pitboard", menuBarTitle(w), toolName(barAccount(w).tool)].join(", ");
+export const menuBarSpoken = (w: World, attention = false) =>
+  [
+    "Pitboard",
+    menuBarTitle(w),
+    toolName(barAccount(w).tool),
+    ...(attention ? ["needs attention"] : []),
+  ].join(", ");
 
 // An account's row and its button, as VoiceOver and Narrator say them (present/words/accounts.rs
 // `row_spoken` and `switch_account`).
@@ -449,12 +454,14 @@ export const accountSpoken = (a: Account, w: World) =>
     .join(", ");
 export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
-// A status item's tooltip, the Windows icon's and the Linux tray's: Pitboard, then each account in
-// use with its tool and the line the menu shows under it, going on in lower case after its colon
-// (present/words/status_item.rs `bar_tip`, from present/accounts.rs `summary`).
-export const barTip = (w: World, front: Front) =>
+// A status item's tooltip, the Windows icon's and the Linux tray's: Pitboard, whether it needs
+// attention, then each account in use with its tool and the line the menu shows under it, going on
+// in lower case after its colon (present/words/status_item.rs `bar_tip`, from present/accounts.rs
+// `summary`).
+export const barTip = (w: World, front: Front, attention = false) =>
   [
     "Pitboard",
+    ...(attention ? ["Needs attention"] : []),
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
       return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, front))}`;

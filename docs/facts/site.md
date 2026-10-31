@@ -370,6 +370,10 @@ cannot tell apart:
 - Notification Center on macOS: a click on Control Center's clock opened nothing (run
   40196222517).
 - Whether a disabled menu item shows its tooltip.
+- The macOS menu's issues entry, "1 Issue" over the first pressing notice's title, and the badged
+  mark in the menu bar: no fixture leaves a notice that presses. The site draws the entry from
+  `MenuBarContent.swift` and the mark from the asset catalog's
+  `pitboard.badge.exclamationmark.symbolset`.
 - macOS 27's own drawing: the chosen item's blink, the alert, and the red of a destructive
   button.
 - A macOS window under a sheet in dark. The site draws black at 40% over it until it is read.
@@ -401,6 +405,9 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - Check Now and Uninstall Pitboard do nothing: the page updates and removes no app.
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
+- The Windows icon draws no warning over it while its menu needs attention, where the app lays the
+  Shell's stock `SIID_WARNING` over it: the page has no drawing of that icon. Its tooltip and name
+  say "Needs attention", as the app's do.
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
 - Uninstall Pitboard on Windows quits Pitboard until Reset, after its question: the page removes
   nothing and starts no installer.

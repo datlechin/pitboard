@@ -145,11 +145,12 @@ class KdeDesk extends LiveFigure {
     }
     // the icon at its level, or its attention twin, which Plasma pulses
     const level = menuBarLevel(s);
-    const attention = String(trayAttention(s));
+    const needs = trayAttention(s);
+    const attention = String(needs);
     attr(icon, "data-attention", attention);
     for (const svg of icon.querySelectorAll<SVGElement>("[data-level]"))
       shown(svg, svg.dataset.level === level && svg.dataset.attention === attention);
-    const tip = trayTip(s);
+    const tip = trayTip(s, needs);
     text(this.#tip.querySelector('[data-part="title"]'), tip.title);
     text(this.#tip.querySelector('[data-part="text"]'), tip.text);
     html(this.querySelector('[data-part="status"]'), statusLine(s));

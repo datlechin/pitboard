@@ -3,7 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as w from "./window.ts";
 import { account, moments } from "./world.ts";
-import { changeOutcome, changeVerb } from "../lib/words.ts";
+import { model, reset, use } from "../lib/model.ts";
+import { barTip, changeOutcome, changeVerb, menuBarSpoken } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
@@ -249,4 +250,41 @@ test("Activity names each change and its end as present/words/machine.rs does", 
     words.includes('"parked_login_refused" => sign_in_standing(Standing::LoginRefused).into(),'),
   );
   assert.ok(standing.includes(`_ => "${changeOutcome("parked_login_refused")}",`));
+});
+
+test("a status item's menu opens on the window's pressing notices, counted, and its item says it needs attention", () => {
+  const notices = present("notices.rs");
+  for (const part of [
+    ".filter(|notice| notice.severity != Severity::Info)",
+    ".filter(|notice| !notice.actions.iter().any(|action| action.switches))",
+    "title: words::issues(seen.front, others.len()),",
+    "subtitle: Some(first.title.clone()),",
+  ])
+    assert.ok(notices.includes(part), part);
+  assert.ok(words.includes('titled(front, "1 Issue", "1 issue")'));
+  assert.ok(words.includes('&format!("{count} Issues"),'));
+  assert.equal(w.issues("windows", 2), "2 issues");
+  assert.ok(words.includes('said.push("needs attention");'));
+  assert.ok(words.includes('tip.push("Needs attention".into());'));
+  assert.ok(
+    repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarLabel.swift").includes(
+      'var symbol: String { attention ? "pitboard.badge.exclamationmark" : Self.mark }',
+    ),
+  );
+
+  reset();
+  assert.equal(w.issuesOf(model.get(), "macos"), null);
+  assert.equal(w.needsAttention(model.get(), "windows"), false);
+  // a switch of Codex warns that its running sessions keep the old account
+  use("codex", "spare", "app");
+  assert.deepEqual(w.issuesOf(model.get(), "macos"), {
+    title: "1 Issue",
+    subtitle: "Switched Codex to spare",
+  });
+  assert.equal(w.needsAttention(model.get(), "windows"), true);
+  assert.ok(menuBarSpoken(model.get(), true).endsWith(", needs attention"));
+  assert.deepEqual(barTip(model.get(), "windows", true).split("\n").slice(0, 2), [
+    "Pitboard",
+    "Needs attention",
+  ]);
 });

@@ -1,17 +1,22 @@
 ---
 import template from "../assets/logo/template.svg?raw";
+import mark from "../../../apps/macos/App/Assets.xcassets/pitboard.symbolset/pitboard.svg?raw";
+import badged from "../../../apps/macos/App/Assets.xcassets/pitboard.badge.exclamationmark.symbolset/pitboard.badge.exclamationmark.svg?raw";
 import tray from "../../../apps/windows/Icon/icon-16.svg?raw";
 import trayPlenty from "../../../apps/windows/Icon/tray-plenty-16.svg?raw";
 import trayLow from "../../../apps/windows/Icon/tray-low-16.svg?raw";
 import trayOut from "../../../apps/windows/Icon/tray-out-16.svg?raw";
 import linuxApp from "../../../apps/linux/data/icons/scalable/apps/com.usepitboard.Pitboard.svg?raw";
 import { bar, fluent, heavy, line, menuSymbol } from "../data/glyphs.ts";
+import { sfSymbol } from "../lib/sfsymbol.ts";
 import { symbolOf, symbolsOf } from "../lib/symbolic.ts";
 
 const paths = [...template.matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)];
 if (paths.length !== 2) throw new Error("template.svg is not the kit's two paths");
 const [board, dim] = paths.map((m) => m[1]);
 const dimOpacity = /fill-opacity="([^"]+)"/.exec(template)?.[1] ?? "0.35";
+// the menu bar item's mark while its menu has something to look at (MenuBarLabel.swift)
+const badge = sfSymbol(badged, mark, template);
 // an icon's drawing, its gradient's id made the page's own
 const body = (svg: string, id: string) => {
   const drawn = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(svg)?.[1].replaceAll("face", `${id}-face`);
@@ -41,6 +46,11 @@ const linux = symbolOf(linuxApp, false);
   <symbol id="pb-template" viewBox="0 0 16 16">
     <path d={board} fill="currentColor"></path>
     <path d={dim} fill="currentColor" fill-opacity={dimOpacity}></path>
+  </symbol>
+  <symbol id="pb-template-badge" viewBox={badge.viewBox}>
+    {badge.paths.map((p) => (
+      <path d={p.d} fill="currentColor" fill-opacity={p.secondary ? dimOpacity : undefined} />
+    ))}
   </symbol>
   {/* a figure that draws a symbol larger sets --stroke to keep its line as thin as macOS does */}
   {Object.entries(line).map(([id, d]) => <symbol id={id} viewBox="0 0 20 20">

@@ -292,6 +292,23 @@ test.describe("on macOS", () => {
     await expect(page.locator(mac.account("work"))).toHaveAttribute("aria-checked", "true");
   });
 
+  test("a switch of Codex badges the item and opens the menu on 1 Issue, which shows the window", async ({
+    page,
+  }) => {
+    const item = page.locator(mac.item);
+    await expect(item.locator('[data-part="badged"]')).toBeHidden();
+    await item.click();
+    await page.locator(mac.account("spare")).click();
+    await expect(item).toHaveAccessibleName(/, needs attention$/);
+    await expect(item.locator('[data-part="badged"]')).toBeVisible();
+    await expect(item.locator('[data-part="mark"]')).toBeHidden();
+    await item.click();
+    const issues = page.locator('#hero-mac-menu [data-does="issues"]');
+    await expect(issues).toHaveText(/^\s*1 Issue\s+Switched Codex to spare\s*$/);
+    await issues.click();
+    await expect(page.locator("#switch-mac")).toBeInViewport();
+  });
+
   test("Refresh reads again, dimmed while it reads", async ({ page }) => {
     await page.locator(mac.item).click();
     await hold(page);
@@ -447,6 +464,12 @@ test.describe("on Windows", () => {
   }) => {
     await page.locator(win.icon).click();
     await expect(page.locator("#switch-win")).toBeInViewport();
+  });
+
+  test("a switch of Codex makes the icon say it needs attention", async ({ page }) => {
+    await page.locator(win.icon).click({ button: "right" });
+    await page.locator(win.account("spare")).click();
+    await expect(page.locator(win.icon)).toHaveAccessibleName(/^Pitboard\s+Needs attention\s/);
   });
 
   test("Exit takes the icon off the taskbar until Reset", async ({ page }) => {

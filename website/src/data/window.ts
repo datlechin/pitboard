@@ -4,7 +4,7 @@
 import { toolOn, tools, type Account, type Tool, type World } from "./world.ts";
 import { countdown as countdownOf, type State } from "../lib/model.ts";
 import { platformOf, type Front, type System } from "../lib/platform.ts";
-import { thisMachine, titled } from "../lib/words.ts";
+import { signInExpired, thisMachine, titled } from "../lib/words.ts";
 
 const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 
@@ -237,6 +237,29 @@ export function noticeOf(
     back,
   };
 }
+
+// What a status item's menu opens on (present/notices.rs `menu_notices`): the pressing notices no
+// switch of theirs answers, counted under the first one's title (present/words/accounts.rs
+// `issues`), and whether the item needs attention (present/accounts.rs `status_item`), as it does
+// while the menu holds those, a switch a pressing notice offers or a sign-in to make again: on the
+// page, the warning a switch of Codex leaves, advice at 100% and a sign-in that expired.
+export const issues = (front: Front, count: number) =>
+  count === 1
+    ? titled(front, "1 Issue", "1 issue")
+    : titled(front, `${count} Issues`, `${count} issues`);
+const pressing = (s: State, front: Front) =>
+  tools
+    .filter(([tool]) => toolOn[tool].includes(platformOf(front)))
+    .map(([tool]) => noticeOf(s, tool, front))
+    .filter((n): n is Notice => n?.severity === "warning");
+export function issuesOf(s: State, front: Front): { title: string; subtitle: string } | null {
+  const others = pressing(s, front).filter((n) => !n.back);
+  return others.length ? { title: issues(front, others.length), subtitle: others[0].title } : null;
+}
+export const needsAttention = (s: State, front: Front) =>
+  pressing(s, front).length > 0 ||
+  s.advice.length > 0 ||
+  s.accounts.some((a) => signInExpired(a, s));
 
 // The step asking for a second account of the first tool with one, unless put off for it
 // (present/setup.rs `footing`, `OnlyOne`).
