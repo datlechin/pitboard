@@ -17,15 +17,33 @@ cargo install --locked pitboard
 
 Neither installs the man page or the completions. [`pitboard manpage`](/reference/integration-commands#manpage) and [`pitboard completions`](/reference/integration-commands#completions) print them. To update, run the same command again.
 
-On Windows, name the version. Without one, Cargo installs the most recent full release, and a Windows build of a release before 1.0.0 changes nothing: it refuses with [`windows_not_released`](/reference/errors#windows). [Download Pitboard](https://usepitboard.com/download#other-ways) gives both commands with the Windows release's version.
+On Windows, name the version. Without one, Cargo installs the most recent full release, and a Windows build of a release before 1.0.0 changes nothing: it refuses with [`windows_not_released`](/reference/errors#windows). Give the version of the newest Windows release, which [Download Pitboard](https://usepitboard.com/download#windows) shows:
+
+```powershell
+cargo binstall pitboard@<version>
+cargo install --locked pitboard@<version>
+```
 
 On Windows, building from source needs Rust's MSVC toolchain on x64 or ARM64, and clang as well on ARM64.
 
 ## A release file
 
-[Download Pitboard](https://usepitboard.com/download#release-files) lists each file of the most recent release and what it is for. To check a file before you open it, follow [Verify a download](/install/verify).
+Each [release on GitHub](https://github.com/datlechin/pitboard/releases) lists its files with their checksums. To check a file before you open it, follow [Verify a download](/install/verify).
 
-Each tarball, for macOS or Linux, holds `pitboard`, `pitboard.1`, `completions/`, `LICENSE`, `NOTICE` and `README.md`. Copy `pitboard` to a directory on your `PATH`.
+| File | Holds |
+| --- | --- |
+| `Pitboard-v<version>-macos.zip` | The macOS app, for Apple silicon and Intel |
+| `Pitboard-v<version>-windows-x64.msi` and `-arm64.msi` | The Windows app's installer, for x64 or ARM64 |
+| `pitboard-v<version>-<target>.tar.gz` | The command line for macOS or Linux |
+| `pitboard-v<version>-<target>.zip` | The command line for Windows |
+| `install.sh` | The [install script](/install/script) |
+| `SHA256SUMS` | The checksums of the files above and the Linux packages |
+| `appcast.xml` and `appcast-windows.xml` | The feeds the apps update from |
+| `<file>.cdx.json` | The bill of materials of a file |
+
+`<target>` is `aarch64-apple-darwin` or `x86_64-apple-darwin` for macOS on Apple silicon or Intel, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl` for Linux, and `x86_64-pc-windows-msvc` or `aarch64-pc-windows-msvc` for Windows.
+
+Each tarball, for macOS or Linux, unpacks into a folder named like it, which holds `pitboard`, `pitboard.1`, `completions/`, `LICENSE`, `NOTICE` and `README.md`. Copy `pitboard` to a directory on your `PATH`.
 
 On Windows, each zip holds `pitboard.exe`, `completions/pitboard.ps1`, `completions/pitboard.bash`, `LICENSE`, `NOTICE` and `README.md`, with no man page. [Install the command line on Windows](/install#install-the-command-line-on-windows) shows how to put `pitboard.exe` on your `PATH`.
 
