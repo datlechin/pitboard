@@ -93,6 +93,13 @@ test("leaves program output and the changelog their own words", () => {
   assert.match(problems('<div data-source="changelog"><p>a – b</p></div>').join(), /dash/);
 });
 
+test("needs each id once, but in the templates live code copies from", () => {
+  assert.deepEqual(problems('<p id="a"></p><template><p id="a"></p></template><p id="b"></p>'), []);
+  assert.deepEqual(problems('<p id="a"></p><div><span id="a"></span></div>'), [
+    "p.html: gives #a to 2 elements",
+  ]);
+});
+
 test("needs the metadata every page carries", () => {
   const bare = "<!doctype html><html><head></head><body><h1>X</h1></body></html>";
   const found = checkPage("bare.html", bare, rules).problems.join("\n");

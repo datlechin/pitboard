@@ -152,6 +152,12 @@ export function checkPage(name, html, rules) {
     }
   }
 
+  // an id names one element, but in a template live code copies and names again
+  const given = new Map();
+  for (const e of all.filter((e) => e.attrs.id && !closest(e.parent, (p) => p.tag === "template")))
+    given.set(e.attrs.id, (given.get(e.attrs.id) ?? 0) + 1);
+  for (const [id, n] of given) if (n > 1) fail(`gives #${id} to ${n} elements`);
+
   const ids = new Set(all.map((e) => e.attrs.id).filter(Boolean));
   for (const e of all) {
     for (const key of ["aria-labelledby", "aria-controls", "aria-describedby"]) {
