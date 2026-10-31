@@ -1,6 +1,7 @@
 // What the Accounts window says on each system, in the app's own words: its notices, its setup
 // step, its rows' menus and its sheets and dialogs. window.test.ts finds each in the file that
 // says it.
+import { DOCS } from "./site.ts";
 import { toolOn, tools, type Account, type Tool, type World } from "./world.ts";
 import { countdown as countdownOf, type State } from "../lib/model.ts";
 import { platformOf, type Front, type System } from "../lib/platform.ts";
@@ -206,6 +207,10 @@ export const DISMISS = "Dismiss";
 export const switchBack = (front: Front) => titled(front, "Switch Back", "Switch back");
 // present/mod.rs `spoken_severity`
 export const severitySaid = { info: "Note", warning: "Warning" } as const;
+// A warning nothing in the app puts right links to what the docs say of it (present/next.rs
+// `of_warning`, present/words/mod.rs `learn_more`).
+export const learnMore = (front: Front) => titled(front, "Learn More", "Learn more");
+export const WARNING_CODES = `${DOCS}/reference/errors#warning-codes`;
 
 // The setup step a tool with one account shows (present/setup.rs `OnlyOne`).
 export const addASecond = (tool: string | null) =>
@@ -223,13 +228,15 @@ export const notNow = (front: Front) => titled(front, "Not Now", "Not now");
 // What the window's notice of a tool's last switch or new login says, at `now`, or null where it
 // says nothing: a Claude Code switch's notice is its countdown, and goes with it (present/notices.rs
 // `of_last_switch`; Banner.swift), unless it offers Switch Back, as a switch Pitboard made by
-// itself does. Codex's warns that running sessions keep the old account.
+// itself does. Codex's warns that running sessions keep the old account, and with no Switch Back
+// offers Learn More.
 export interface Notice {
   title: string;
   lines: string[];
   countdown: string | null;
   severity: "info" | "warning";
   back: string | null;
+  learn: { title: string; link: string } | null;
 }
 export function noticeOf(
   s: Pick<State, "now" | "accounts" | "inUse" | "lastSwitch" | "newLogin">,
@@ -262,6 +269,7 @@ export function noticeOf(
     countdown,
     severity: restart ? "warning" : "info",
     back,
+    learn: restart && !back ? { title: learnMore(front), link: WARNING_CODES } : null,
   };
 }
 

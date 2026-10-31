@@ -214,6 +214,7 @@ export abstract class AccountsFigure extends LiveFigure {
       shown(back?.closest('[data-part="actions"]') ?? null, !!n.back);
       if (n.back) text(back, n.back);
       attr(back, "disabled", s.switching ? "" : null);
+      shown(part(box, "learn"), !!n.learn);
       for (const icon of box.querySelectorAll<HTMLElement>("[data-severity]"))
         shown(icon, icon.dataset.severity === n.severity);
       if (this.#saying === tool && !s.switching) {

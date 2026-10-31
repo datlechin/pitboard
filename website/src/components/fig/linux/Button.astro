@@ -3,7 +3,7 @@
 // 34 tall with 17 a side for its words, 10 for a `label` button whose style classes the app set in
 // place of GTK's text-button, or 34 square for an icon; `flat` on nothing until hovered,
 // `suggested` on the accent, `destructive` in the error colour; a `pill` 44 tall and round, and a
-// `circular` one 34 round.
+// `circular` one 34 round. With `href`, a link the browser opens, as the app opens its link there.
 import Symbolic from "./Symbolic.astro";
 import type { Icon } from "../../../data/linux-window.ts";
 
@@ -12,6 +12,7 @@ interface Props extends Omit<astroHTML.JSX.ButtonHTMLAttributes, "class"> {
   shape?: "text" | "label" | "image" | "pill" | "circular";
   icon?: Icon;
   class?: string;
+  href?: string;
 }
 const {
   look = "raised",
@@ -19,8 +20,11 @@ const {
   icon,
   class: extra,
   type = "button",
+  href,
   ...rest
 } = Astro.props;
+const Tag = href ? "a" : "button";
+const link = href ? { href, target: "_blank", rel: "noopener" } : { type };
 const looks = {
   raised: "bg-current/10 live:hover:bg-current/15 live:active:bg-current/30",
   flat: "live:hover:bg-current/7 live:active:bg-current/16",
@@ -37,16 +41,17 @@ const shapes = {
 };
 ---
 
-<button
+<Tag
   class:list={[
     "inline-flex shrink-0 items-center justify-center font-bold whitespace-nowrap outline-none focus-adw disabled:opacity-50 live:cursor-default",
+    { "text-inherit no-underline": href },
     looks[look],
     shapes[shape],
     extra,
   ]}
-  type={type}
+  {...link}
   {...rest}
 >
   {icon && <Symbolic name={icon} />}
   <slot />
-</button>
+</Tag>
