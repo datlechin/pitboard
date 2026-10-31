@@ -145,6 +145,9 @@ export interface State extends World {
   posted: Posted[];
   // accounts with a window of their site open, by id
   windowsOpen: string[];
+  // the Linux app's window, which a status item keeps Pitboard running without: Close puts it
+  // away and the tray's Open Pitboard brings it back (application.rs `activate`)
+  windowShown: boolean;
   decidedAt: number;
   // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
   switching: { id: string; token: number } | null;
@@ -212,6 +215,7 @@ export function start(): State {
     log: logged.filter((e) => e.at !== clock.switched).map((e) => ({ ...e })),
     posted: [],
     windowsOpen: [id("work")],
+    windowShown: true,
     decidedAt: clock.menuBar,
     switching: null,
     reading: null,
@@ -1048,6 +1052,21 @@ export function closeWindow(id: string) {
   if (!model.get().windowsOpen.includes(id)) return;
   change((s) => {
     s.windowsOpen = s.windowsOpen.filter((open) => open !== id);
+  });
+}
+
+// The Linux app's window closed where the tray keeps Pitboard running, and shown again.
+export function closeAppWindow() {
+  if (!model.get().windowShown) return;
+  change((s) => {
+    s.windowShown = false;
+  });
+}
+
+export function showAppWindow() {
+  if (model.get().windowShown) return;
+  change((s) => {
+    s.windowShown = true;
   });
 }
 

@@ -8,13 +8,16 @@
 // level 4 heading in DemiBold; the body, the tool's name over the sentence on lines of their own,
 // as the app joins them (notices.rs `posted`); and the one action's button at the end of a row. A
 // popup under a minute old shows no age. Its frame, band and button are approx. The bell is in
-// the tray while the notification is unread, Pitboard's icon at the share's level beside it.
+// the tray while the notification is unread, Pitboard's icon at the share's level beside it; the
+// window's advice, which puts a switch in the menu and so wants attention, comes only at 100%.
 import Icon from "./Icon.astro";
 import Panel from "./Panel.astro";
 import StatusItem from "./StatusItem.astro";
 import { CLOSE, panelClock } from "../../../data/kde.ts";
-import { app } from "../../../data/linux.ts";
+import { app, trayAttention } from "../../../data/linux.ts";
 import { clock, share } from "../../../data/world.ts";
+import { start } from "../../../lib/model.ts";
+import { noticeMoment } from "../../../lib/moment.ts";
 import { headsUp, level } from "../../../lib/words.ts";
 
 interface Props {
@@ -22,6 +25,8 @@ interface Props {
 }
 const { prefix } = Astro.props;
 const { time, date } = panelClock(clock.warned);
+// as the model words it at the moment
+const attention = trayAttention(noticeMoment(start())!.state);
 // a ToolButton showing its icon alone, square to the band
 const tool =
   "flex size-28 items-center justify-center rounded-u-4 outline-none focus-visible:inset-ring-1 focus-visible:inset-ring-kde-focus";
@@ -61,6 +66,10 @@ const tool =
     </span>
   </div>
   <Panel time={time} date={date} prefix={prefix} bell>
-    <StatusItem id={`${prefix}-icon`} level={level(share)} levels />
+    <StatusItem id={`${prefix}-icon`} level={level(share)} attention={attention} levels />
   </Panel>
 </pb-notice>
+
+<script>
+  import "../../../scripts/live/notice.ts";
+</script>

@@ -1,7 +1,16 @@
 // What the Linux app shows in the site's figures, in its own words: the model's for GNOME's front,
 // which it says on both desktops, and its own. linux.test.ts finds each in the file that says it.
-import { listed, isInUse, menuTitle, settings, toolsOn, barTip } from "../lib/words.ts";
-import { ADD_HELP, REFRESH_HELP, addAccountAsks } from "./window.ts";
+import {
+  listed,
+  isInUse,
+  menuTitle,
+  settings,
+  signInExpired,
+  toolsOn,
+  barTip,
+} from "../lib/words.ts";
+import type { State } from "../lib/model.ts";
+import { ADD_HELP, REFRESH_HELP, addAccountAsks, noticeOf } from "./window.ts";
 import type { Tool, World } from "./world.ts";
 
 export const app = "Pitboard";
@@ -94,4 +103,16 @@ export function trayMenu(w: World): TrayEntry[][] {
 export function trayTip(w: World) {
   const [title, ...text] = barTip(w, "gnome").split("\n");
   return { title, text: text.join("\n") };
+}
+
+// present/accounts.rs `status_item`: the item needs attention, and Plasma draws its attention icon,
+// while the menu holds a switch a pressing notice offers, a sign-in to make again, or another
+// pressing notice (present/notices.rs `menu_notices`): on the page, advice at the share, a sign-in
+// that expired, and the warning a switch of Codex leaves.
+export function trayAttention(s: State): boolean {
+  return (
+    s.advice.length > 0 ||
+    s.accounts.some((a) => signInExpired(a, s)) ||
+    toolsOn("linux").some(([tool]) => noticeOf(s, tool, "gnome")?.severity === "warning")
+  );
 }

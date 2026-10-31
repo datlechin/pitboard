@@ -16,9 +16,11 @@ import {
   prefs,
   switchNotice,
   warmAccounts,
+  type Holding,
   type Icon,
 } from "./linux-window.ts";
 import { shortcuts } from "./linux.ts";
+import type { AtLimit } from "../lib/model.ts";
 import { account, accounts, moments } from "./world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -156,6 +158,28 @@ test("an account's menu is its actions less the header's, then Copy Email Addres
     ["Copy Email Address"],
     ["Remove Account…"],
   ]);
+  // what holds an entry back: a switch to the account, whose header shows the spinner and so
+  // offers nothing, a sign-in under way, and a warm-up that is due
+  const held = (label: string, now: Holding) =>
+    accountMenu(account(label, "claude"), moments.before, now)[0].map((o) =>
+      o.enabled ? o.title : `(${o.title})`,
+    );
+  assert.deepEqual(
+    held("work", { switching: account("work").id, signing: false, warmDue: false }),
+    ["(Switch to work)", "Sign In Again…", "Rename…", "(Warm Up Now)"],
+  );
+  assert.deepEqual(held("work", { switching: null, signing: true, warmDue: true }), [
+    "(Sign In Again…)",
+    "Rename…",
+    "Warm Up Now",
+  ]);
+  const accounts = present("accounts.rs");
+  says(accounts, "words::sign_in_again(seen.front, true),");
+  says(
+    accounts,
+    "enabled: !halted && warm.running.is_none() && choice.now == warm::Standing::Due,",
+  );
+  says(accounts, "enabled: !account.signed_in,");
   const group = linux("src/window/account_group.rs");
   says(group, "if action.intent.is_some() && action.intent == offered {");
   says(group, "let section = if kind == ActionKind::Remove { 2 } else { 0 };");
@@ -212,11 +236,33 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
     machine,
     "Once its window is closed, nothing switches it unless {WATCH_IN_THE_BACKGROUND} is on.",
   );
-  assert.equal(atLimitNote("nothing", true), null);
-  assert.equal(atLimitNote("switch", true)?.endsWith("33 seconds."), true);
+  const at = (atLimit: AtLimit) => ({ atLimit, share: 95 });
+  assert.equal(atLimitNote(at("nothing"), true), null);
+  assert.equal(atLimitNote(at("switch"), true)?.endsWith("33 seconds."), true);
   assert.equal(
-    atLimitNote("switch", false),
+    atLimitNote(at("switch"), false),
     "Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Once its window is closed, nothing switches it unless Watch in the Background is on.",
+  );
+  // with Watch in the Background on, what the watch service does once the window is closed
+  for (const said of [
+    "Once its window is closed, the watch service goes on switching it.",
+    "Once its window is closed, nothing notifies you, and the watch service only warms up.",
+    "The watch service only warms up, and never switches.",
+  ])
+    says(machine, said);
+  assert.equal(
+    atLimitNote(at("switch"), false, true)?.endsWith("the watch service goes on switching it."),
+    true,
+  );
+  assert.equal(atLimitNote(at("notify"), true, true)?.endsWith("while the app is open."), true);
+  assert.equal(
+    atLimitNote(at("nothing"), false, true),
+    "The watch service only warms up, and never switches.",
+  );
+  says(machine, `Some(true) => "and the watch service goes on once its window is closed",`);
+  assert.equal(
+    prefs.limits.warm.note(false, true),
+    "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, and the watch service goes on once its window is closed.",
   );
   says(machine, `None => "while it’s open",\n        Some(false) => "while its window is open",`);
   assert.equal(
@@ -245,9 +291,13 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
   assert.deepEqual(
     warmAccounts(moments.after).map((a) => [a.label, a.on, a.standing]),
     [
-      ["work", false, null],
       ["personal", true, "Warms up again at 22:00"],
+      ["work", false, null],
     ],
+  );
+  says(
+    repo("crates/pitboard-core/src/duty/warm/mod.rs"),
+    "accounts: state\n            .accounts\n            .iter()\n            .filter(|account| account.provider() == ProviderId::Claude)",
   );
   assert.ok(linux("data/ui/preferences.ui").includes("battery-level-50-symbolic"));
 });

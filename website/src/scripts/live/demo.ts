@@ -26,13 +26,27 @@ export function handOver(take: (frame: Frame) => void) {
   else takers.push(take);
 }
 
+// A desk whose switch the demo makes as its app makes one, as GNOME's window does with its
+// spinner, rather than at once as a menu's choice is.
+export interface Switches {
+  switches(done: () => void): void;
+}
+
 function pick() {
   if (switched) return;
   switched = true;
-  use("claude", "work", "app");
   // the page rests here: Reset comes back to it
+  const desk = shownDesk();
+  if (phase === "playing" && desk && "switches" in desk)
+    return (desk as HTMLElement & Switches).switches(() => settle());
+  use("claude", "work", "app");
   settle();
 }
+
+const shownDesk = () =>
+  [...document.querySelectorAll<HTMLElement>("[data-demo-desk]")].find(
+    (d) => d.offsetParent !== null,
+  );
 
 function end(at: Frame) {
   if (phase === "over") return;
@@ -69,7 +83,7 @@ function watch() {
   const ratios = new Map<Element, number>();
   const check = () => {
     if (phase !== "waiting") return;
-    const desk = root.dataset.surface !== "cli" && desks.find((d) => d.offsetParent !== null);
+    const desk = root.dataset.surface !== "cli" && shownDesk();
     const shown = desk || figure;
     if ((ratios.get(shown) ?? 0) < 0.6 - 1e-3) return;
     if (desk && root.getAttribute("data-demo") === "start") play();

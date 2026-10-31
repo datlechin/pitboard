@@ -2,8 +2,8 @@
 // Preferences (data/ui/preferences.ui, preferences/): an AdwPreferencesDialog floating over the
 // dimmed window, 540 by 600 in it, its view switcher in the header bar with each page's icon and
 // title side by side, and Close. General: Start Pitboard at Login and the version; Limits: what
-// happens before an account runs out, chosen Switch Automatically, at 95%, then Warm-Up's hours and
-// a switch an account; Advanced: Keep Saved Sign-Ins Fresh, the command line the package puts
+// happens before an account runs out, the page's choice at its share, then Warm-Up's hours and a
+// switch an account; Advanced: Keep Saved Sign-Ins Fresh, the command line the package puts
 // beside the app, and Uninstall, whose question and Remove the App wait over it. Where a desktop
 // shows no status item, as stock GNOME does, it says that closing the window quits Pitboard, and
 // offers Watch in the Background; KDE Plasma's tray keeps Pitboard running, so it says neither.
@@ -21,6 +21,7 @@ import Symbolic from "./Symbolic.astro";
 import Window from "./Window.astro";
 import { accountsPage, atLimitNote, prefs, warmAccounts } from "../../../data/linux-window.ts";
 import { moments } from "../../../data/world.ts";
+import { start } from "../../../lib/model.ts";
 
 interface Props {
   prefix: string;
@@ -31,8 +32,12 @@ const { prefix, show, version } = Astro.props;
 const id = (part: string) => `${prefix}-${part}`;
 const { general, limits, advanced } = prefs;
 const world = moments.after;
-const chosen = "switch";
-const [note, closed] = [atLimitNote(chosen, true)!, atLimitNote(chosen, false)!];
+// the choice the page starts at, which live code keeps to the state, and where no status item
+// keeps Pitboard running what follows the note
+const { atLimit: chosen, share } = start().preferences;
+const note = atLimitNote({ atLimit: chosen, share }, true);
+const whole = atLimitNote({ atLimit: chosen, share }, false);
+const closed = whole && note ? whole.slice(note.length).trim() : (whole ?? "");
 const tab =
   "group/tab flex h-34 items-center justify-center gap-6 rounded-u-9 px-12 font-bold whitespace-nowrap outline-none focus-adw aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/7 live:aria-selected:hover:bg-current/15";
 const caption = "mt-12 adw-caption opacity-55";
@@ -123,17 +128,18 @@ const caption = "mt-12 adw-caption opacity-55";
           >
             <Group id={id("at-limit")} title={limits.title}>
               <Fragment slot="description"
-                ><span data-part="note">{note}</span
-                ><span data-on="gnome" data-part="once-closed"
-                  >{closed.slice(note.length)}</span
+                ><span data-part="note" hidden={!note}>{note}</span>
+                <span data-on="gnome" data-part="once-closed" hidden={!closed}
+                  >{closed}</span
                 ></Fragment
               >
               <List>
                 {/* AdwComboRow: the choice and its arrow at its end, its list in a popover */}
                 <Row
                   title={limits.heading}
-                  subtitle={limits.standing}
+                  subtitle={chosen === "switch" ? limits.standing : null}
                   titleId={id("at-limit-title")}
+                  data-part="at-limit-row"
                 >
                   <button
                     slot="suffix"
@@ -146,7 +152,12 @@ const caption = "mt-12 adw-caption opacity-55";
                     aria-controls={id("at-limit-choices")}
                     data-part="choice"
                   >
-                    <span data-part="chosen">{limits.choices.find(([v]) => v === chosen)![1]}</span>
+                    {limits.choices.map(([value, title]) => <span
+                      data-value={value}
+                      hidden={value !== chosen}
+                    >
+                      {title}
+                    </span>)}
                     <Symbolic name="pan-down" />
                   </button>
                 </Row>
@@ -196,12 +207,18 @@ const caption = "mt-12 adw-caption opacity-55";
                 {warmAccounts(world).map((a) => <Row
                   title={a.label}
                   subtitle={a.standing}
-                  titleId={id(`warm-${a.label}`)}
-                  data-warm={a.label}
+                  titleId={id(`warm-${a.id}`)}
+                  data-account={a.id}
                 >
-                  <Switch slot="suffix" on={a.on} labelledby={id(`warm-${a.label}`)} />
+                  <Switch slot="suffix" on={a.on} labelledby={id(`warm-${a.id}`)} />
                 </Row>)}
               </List>
+              {/* an account a visitor adds, whose ids live/ makes */}
+              <template data-part="warm-row">
+                <Row title="" titleId={id("warm-added")} data-account="">
+                  <Switch slot="suffix" labelledby={id("warm-added")} />
+                </Row>
+              </template>
               <p class={caption} data-part="warm-standing">{limits.warm.standing}</p>
             </Group>
           </div>
@@ -220,8 +237,9 @@ const caption = "mt-12 adw-caption opacity-55";
             <List data-on="gnome">
               <Row
                 title={advanced.watch}
-                subtitle={advanced.watchAbout(true)}
+                subtitle={advanced.watchAbout(chosen === "switch")}
                 titleId={id("watch")}
+                data-part="watch-row"
               >
                 <Switch slot="suffix" labelledby={id("watch")} data-part="watch" />
               </Row>
@@ -262,15 +280,17 @@ const caption = "mt-12 adw-caption opacity-55";
           hidden
         >
           {limits.choices.map(([value, title]) => <div
-            class="flex h-32 items-center gap-6 rounded-u-9 px-12 whitespace-nowrap live:cursor-default live:hover:bg-current/10"
+            class="group/option flex h-32 items-center gap-6 rounded-u-9 px-12 whitespace-nowrap aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/10"
+            id={id(`at-limit-${value}`)}
             role="option"
             aria-selected={value === chosen ? "true" : "false"}
+            aria-checked={value === chosen ? "true" : "false"}
             data-value={value}
           >
             {title}
             <Symbolic
               name="object-select"
-              class:list={["size-16", { invisible: value !== chosen }]}
+              class="invisible size-16 group-aria-checked/option:visible"
             />
           </div>)}
         </div>
@@ -312,3 +332,7 @@ const caption = "mt-12 adw-caption opacity-55";
     </Fragment>
   </Window>
 </div>
+
+<script>
+  import "../../../scripts/live/linux-preferences.ts";
+</script>

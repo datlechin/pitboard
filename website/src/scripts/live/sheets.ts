@@ -4,6 +4,7 @@
 import { combobox, type Combobox } from "./combobox.ts";
 import { closeDialog, isOpen, openDialog, type Cancelled } from "./dialog.ts";
 import { attr, shown, text } from "./draw.ts";
+import { linuxSheets } from "./linux-sheets.ts";
 import { say } from "./say.ts";
 import {
   cancelSignIn,
@@ -355,21 +356,22 @@ class AppSheets implements Sheets {
   }
 }
 
-// Each system's sheets, by the ids its top view's window draws them under, which both of Linux's
-// desktops share.
-const drawnAs: Record<Platform, string> = {
+// Each system's sheets, by the ids its top view's window draws them under; both of Linux's
+// desktops share the Linux app's (linux-sheets.ts).
+const drawnAs: Record<Exclude<Platform, "linux">, string> = {
   macos: "mac-accounts",
   windows: "win-accounts",
-  linux: "linux-accounts",
 };
 const made = new Map<Platform, Sheets | null>();
 export function sheets(system: System): Sheets | null {
   const platform = platformOf(system);
-  if (!made.has(platform)) {
+  if (made.has(platform)) return made.get(platform)!;
+  if (platform === "linux") made.set(platform, linuxSheets());
+  else {
     const get = (name: string) =>
       document.getElementById(`${drawnAs[platform]}-${name}`) as HTMLDialogElement | null;
     const [f, r, i] = [get("forget"), get("rename"), get("sign-in")];
-    made.set(platform, platform !== "linux" && f && r && i ? new AppSheets(system, f, r, i) : null);
+    made.set(platform, f && r && i ? new AppSheets(system, f, r, i) : null);
   }
   return made.get(platform)!;
 }

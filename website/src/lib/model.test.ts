@@ -19,6 +19,7 @@ import {
   advance,
   cancelSignIn,
   clamped,
+  closeAppWindow,
   countdown,
   decide,
   declineSecond,
@@ -36,6 +37,7 @@ import {
   setChoice,
   setShare,
   settle,
+  showAppWindow,
   signInAgain,
   signInFromApp,
   start,
@@ -687,6 +689,22 @@ test("Quit stops the app's reads and notifications, and Reset brings every figur
   assert.equal(model.get().readAt, clock.read);
   reset();
   assert.deepEqual(model.get(), start());
+});
+
+test("the Linux window closes where a tray keeps Pitboard running, and Open Pitboard shows it", () => {
+  reset();
+  assert.equal(model.get().windowShown, true);
+  closeAppWindow();
+  assert.equal(model.get().windowShown, false);
+  assert.equal(model.get().running, true);
+  assert.equal(model.get().changed, true);
+  showAppWindow();
+  assert.equal(model.get().windowShown, true);
+  closeAppWindow();
+  reset();
+  assert.equal(model.get().windowShown, true);
+  assert.deepEqual(surfaces("gnome"), { statusItem: false });
+  assert.deepEqual(surfaces("kde"), { statusItem: true });
 });
 
 test("a view hears each action once", () => {

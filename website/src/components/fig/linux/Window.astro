@@ -5,7 +5,8 @@
 // the main menu at their end, a back button and the page's own buttons on the others. The main menu
 // opens under its button, in two sections and no Quit (window/mod.rs), an account's under its
 // group's. An open dialog dims the window (floating-sheet's dimming) and floats over it from the
-// `dialogs` slot. Every node a state shows is drawn; `pane` is the page shown.
+// `dialogs` slot. Every node a state shows is drawn; `pane` is the page shown. Closed, or once
+// Pitboard quits, the window leaves its desk.
 import AccountMenu from "./AccountMenu.astro";
 import ActivityPage from "./ActivityPage.astro";
 import Button from "./Button.astro";
@@ -16,14 +17,24 @@ import MenuSeparator from "./MenuSeparator.astro";
 import Popover from "./Popover.astro";
 import { header, mainMenu } from "../../../data/linux.ts";
 
+// its default height, or the shorter one the hero draws, as a window can be made
+const heights = { 640: "h-640", 520: "h-520" };
 interface Props {
   prefix: string;
   pane?: "accounts" | "diagnostics" | "activity";
   updated: string;
   dimmed?: boolean;
+  height?: keyof typeof heights;
   class?: string;
 }
-const { prefix, pane = "accounts", updated, dimmed = false, class: extra } = Astro.props;
+const {
+  prefix,
+  pane = "accounts",
+  updated,
+  dimmed = false,
+  height = 640,
+  class: extra,
+} = Astro.props;
 // what each of the main menu's items opens, in its order
 const opens = [
   ["open-link", "diagnostics", "activity"],
@@ -36,8 +47,10 @@ if (mainMenu.some((s, i) => s.length !== opens[i]?.length))
 <pb-linux-window
   id={prefix}
   class:list={[
-    "relative block h-640 w-600 shrink-0 [anchor-name:var(--window)] rounded-u-15 bg-adw-window adw-type text-adw-text shadow-linux-window outline-1 -outline-offset-1 outline-adw-outline select-none",
-    extra,
+    "block w-600 shrink-0 [anchor-name:var(--window)] rounded-u-15 bg-adw-window adw-type text-adw-text shadow-linux-window outline-1 -outline-offset-1 outline-adw-outline select-none data-[state=closed]:invisible",
+    heights[height],
+    // where its desk places it, or in the desk's flow
+    extra ?? "relative",
   ]}
   inert
   data-output
@@ -104,3 +117,7 @@ if (mainMenu.some((s, i) => s.length !== opens[i]?.length))
   ></div>
   <slot name="dialogs" />
 </pb-linux-window>
+
+<script>
+  import "../../../scripts/live/linux-window.ts";
+</script>

@@ -103,15 +103,17 @@ export async function defined(page: Page): Promise<string[]> {
   });
 }
 
-// The hero's opening demo has handed over, and so made its switch to work: under reduced motion
-// at once, once the hero is mostly in view (src/scripts/live/demo.ts), which then takes the root's
-// frame away.
+// The hero's opening demo has made its switch to work: under reduced motion at once, once the hero
+// is mostly in view (src/scripts/live/demo.ts), and otherwise at its pick, past which the root's
+// frame moves on or goes, whichever system's desk is shown.
 export async function handedOver(page: Page) {
   await page
     .locator("figure:has([data-demo-desk])")
     .evaluate((hero) => hero.scrollIntoView({ block: "center" }));
-  // the demo runs 3.8 s once it starts
-  await expect(page.locator("html")).not.toHaveAttribute("data-demo", /./, { timeout: 10_000 });
+  // the demo picks 1.9 s after it starts
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo", /^(start|move|hl|pick)$/, {
+    timeout: 10_000,
+  });
 }
 
 // The attributes a live figure changes (plan 2.4, rule 2), and a style that only sets custom

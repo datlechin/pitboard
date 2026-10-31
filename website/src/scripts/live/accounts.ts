@@ -211,7 +211,7 @@ export abstract class AccountsFigure extends LiveFigure {
       text(part(box, "countdown"), n.countdown ?? "");
       const back = box.querySelector<HTMLButtonElement>('[data-does="switch-back"]');
       shown(back?.closest('[data-part="actions"]') ?? null, !!n.back);
-      text(back, n.back ?? "");
+      if (n.back) text(back, n.back);
       attr(back, "disabled", s.switching ? "" : null);
       for (const icon of box.querySelectorAll<HTMLElement>("[data-severity]"))
         shown(icon, icon.dataset.severity === n.severity);

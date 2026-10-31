@@ -42,6 +42,7 @@ import {
   CLOSING_QUITS,
   SIGN_IN_EXPIRED,
   activity,
+  atLimitNote as wordsAtLimitNote,
   hm,
   isInUse,
   limitRow,
@@ -57,7 +58,7 @@ import {
   warmsAgainNote,
   type LimitRow,
 } from "../lib/words.ts";
-import type { AtLimit } from "../lib/model.ts";
+import type { AtLimit, Preferences } from "../lib/model.ts";
 import type { Desktop } from "../lib/platform.ts";
 
 const FRONT = "gnome";
@@ -114,22 +115,36 @@ export const levelOf = { g: "plenty", y: "low", r: "out" } as const;
 
 // An account's menu (window/account_group.rs `offer`): what it does to the account but the
 // header's own button, each dimmed while the model holds it back, then copying its address, then
-// removing it (present/accounts.rs `actions`). Warm Up Now is due for none of the page's
-// accounts.
+// removing it (present/accounts.rs `actions`): Switch while the header offers it, Sign In Again
+// while no sign-in runs, Warm Up Now while a warm-up is due, and Remove for an account not in use.
+// `now` says what holds them back; none of the page's drawn moments is switching, signing in or
+// due a warm-up.
 export interface Offer {
   title: string;
   offer: "use" | "sign-in-again" | "rename" | "warm" | "copy" | "forget";
   enabled: boolean;
 }
-export function accountMenu(a: Account, w: World): Offer[][] {
+export interface Holding {
+  switching: string | null;
+  signing: boolean;
+  warmDue: boolean;
+}
+export const headerOffer = (a: Account, w: World, switching: string | null = null) =>
+  isInUse(a, w) || switching === a.id ? null : signInExpired(a, w) ? "sign-in-again" : "use";
+export function accountMenu(
+  a: Account,
+  w: World,
+  now: Holding = { switching: null, signing: false, warmDue: false },
+): Offer[][] {
   const inUse = isInUse(a, w);
-  const header = inUse ? null : signInExpired(a, w) ? "sign-in-again" : "use";
+  const header = headerOffer(a, w, now.switching);
+  const switches = header === "use" && now.switching === null && !now.signing;
   const does: Offer[] = [
-    { title: switchOffer(a.label), offer: "use" as const, enabled: header === "use" },
-    { title: signInAgain(FRONT), offer: "sign-in-again" as const, enabled: true },
+    { title: switchOffer(a.label), offer: "use" as const, enabled: switches },
+    { title: signInAgain(FRONT), offer: "sign-in-again" as const, enabled: !now.signing },
     { title: RENAME_OFFER, offer: "rename" as const, enabled: true },
     ...(a.tool === "claude"
-      ? [{ title: warmUpNow(FRONT), offer: "warm" as const, enabled: false }]
+      ? [{ title: warmUpNow(FRONT), offer: "warm" as const, enabled: now.warmDue }]
       : []),
   ].filter((o) => o.offer !== header);
   return [
@@ -156,7 +171,7 @@ export interface Group {
 
 // The Sign-In row: in use, expired, or until when its saved sign-in is valid
 // (present/accounts.rs `detail`).
-function signInOf(a: Account, w: World): string | null {
+export function signInOf(a: Account, w: World): string | null {
   if (isInUse(a, w)) return "In use";
   if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
   return a.refreshExpiresAt === undefined
@@ -243,26 +258,33 @@ export const activityPage = {
 };
 
 // What a desktop with no status item says, and one with one does not (present/words/setup.rs,
-// present/words/machine.rs): on stock GNOME, closing the window quits Pitboard.
-const watchAbout = (switching: boolean) =>
+// present/words/machine.rs): on stock GNOME, closing the window quits Pitboard, and the watch
+// service goes on switching at the share or never.
+const watchAbout = (switching: boolean, at = share) =>
   switching
-    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code at ${share}% and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
+    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code at ${at}% and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
     : `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on warming up the accounts ${WARM_UP_LABEL} turns on, from each login, and never switches Claude Code.`;
 
-// The at-limit note under Before an account runs out, joined with what switches once the window
-// is closed where nothing keeps Pitboard running (present/machine.rs `at_limit`), the watch
-// service off.
-export function atLimitNote(choice: AtLimit, statusItem: boolean): string | null {
-  const note = {
-    nothing: null,
-    notify: `Pitboard notifies you once a limit of the account in use reaches ${share}%, while the app is open.`,
-    switch: `Pitboard switches Claude Code at ${share}%, and its running sessions follow within about 33 seconds.`,
-  }[choice];
-  const closed =
-    !statusItem && choice === "switch"
-      ? "Once its window is closed, nothing switches it unless Watch in the Background is on."
-      : null;
-  const said = [note, closed].filter(Boolean);
+// The at-limit note under Before an account runs out, then, where nothing keeps Pitboard running
+// once its window is closed, what goes on then: switching, or with the watch service on its
+// warm-ups alone (present/machine.rs `at_limit`).
+export function atLimitNote(
+  p: Pick<Preferences, "atLimit" | "share">,
+  statusItem: boolean,
+  watched = false,
+): string | null {
+  const closed = statusItem
+    ? null
+    : p.atLimit === "switch"
+      ? watched
+        ? "Once its window is closed, the watch service goes on switching it."
+        : "Once its window is closed, nothing switches it unless Watch in the Background is on."
+      : !watched
+        ? null
+        : p.atLimit === "notify"
+          ? "Once its window is closed, nothing notifies you, and the watch service only warms up."
+          : "The watch service only warms up, and never switches.";
+  const said = [wordsAtLimitNote({ ...p, chosen: true }), closed].filter(Boolean);
   return said.length ? said.join(" ") : null;
 }
 
@@ -291,8 +313,8 @@ export const prefs = {
     terms,
     warm: {
       title: WARM_UP_LABEL,
-      note: (statusItem: boolean) =>
-        `Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, ${statusItem ? "while it’s open" : "while its window is open"}.`,
+      note: (statusItem: boolean, watched = false) =>
+        `Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, ${statusItem ? "while it’s open" : watched ? "and the watch service goes on once its window is closed" : "while its window is open"}.`,
       from: warmUp.from,
       to: warmUp.to,
       standing: `Next warm-up: ${warmUp.accounts[0]} at ${hm(clock.warmsAgain)}.`,
@@ -331,12 +353,17 @@ export const prefs = {
 };
 
 // The warm-up's switches, a Claude Code account each, the one turned on saying when it warms up.
+// Each Claude Code account in the core's order, which warm/mod.rs `overview` keeps, not the one in
+// use first.
 export const warmAccounts = (w: World) =>
-  listed(w, "claude").map((a) => ({
-    label: a.label,
-    on: warmUp.accounts.includes(a.label),
-    standing: warmUp.accounts.includes(a.label) ? warmsAgainNote(a) : null,
-  }));
+  w.accounts
+    .filter((a) => a.tool === "claude")
+    .map((a) => ({
+      id: a.id,
+      label: a.label,
+      on: warmUp.accounts.includes(a.label),
+      standing: warmUp.accounts.includes(a.label) ? warmsAgainNote(a) : null,
+    }));
 
 // Open Link with no link waiting, and with one (present/words/windows.rs `no_link`, `no_windows`;
 // app_words.rs `gnome_words`).

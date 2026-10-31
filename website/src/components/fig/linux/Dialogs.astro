@@ -21,11 +21,9 @@ import {
   TOOL,
   OPEN,
   REMOVE,
-  RENAME,
   WAITING_FOR_BROWSER,
   addAccount,
   copyLink,
-  finishInBrowser,
   nameThisAccount,
   signInAsking,
   signInMessage,
@@ -81,7 +79,6 @@ const toggle =
       <Button shape="pill" disabled>{OPEN}</Button>
     </div>
   </div>
-  <template data-part="waiting-message">{finishInBrowser(null)}</template>
 </Dialog>
 
 {/* Name This Account, which has no Cancel, and Rename */}
@@ -108,13 +105,16 @@ const toggle =
       </label>
     </List>
     <p class="text-adw-error adw-caption" data-part="problem" hidden></p>
+    <p class="whitespace-pre-line text-adw-error" data-part="failure" hidden></p>
   </div>
-  <template data-part="rename">{RENAME}</template>
 </Dialog>
 
+{/* Remove is the default response, which the alert focuses (adw-alert-dialog.c grab_focus) */}
 <AlertDialog id={id("remove")}>
-  <Button slot="responses" data-does="cancel" autofocus>{CANCEL}</Button>
-  <Button slot="responses" look="destructive" type="submit" value="forget">{REMOVE}</Button>
+  <Button slot="responses" data-does="cancel">{CANCEL}</Button>
+  <Button slot="responses" look="destructive" type="submit" value="forget" autofocus
+    >{REMOVE}</Button
+  >
 </AlertDialog>
 
 {/* AdwStatusPage, compact (_misc.scss): 24 and 12 of margin, the icon 96 and dimmed */}

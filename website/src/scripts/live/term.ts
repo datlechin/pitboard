@@ -5,7 +5,7 @@ import { Prompt } from "./prompt.ts";
 import { toolbar } from "./toolbar.ts";
 import type { Machine, Running, Step } from "../../lib/cli.ts";
 import type { State } from "../../lib/model.ts";
-import type { Platform } from "../../lib/platform.ts";
+import { systemOf, type Platform } from "../../lib/platform.ts";
 import { escaped } from "../../lib/words.ts";
 import {
   builtin,
@@ -83,12 +83,44 @@ class Term extends LiveFigure {
         this.inTurn(() => this.enter(text));
       });
     // a click in the window gives the prompt focus, as a terminal's does, and a drag selects
-    this.log.addEventListener("click", (e) => {
+    this.addEventListener("click", (e) => {
+      if (!this.log.contains(e.target as Node)) return;
       if ((e as PointerEvent).pointerType === "touch" || e.target === this.prompt.field) return;
       if (getSelection()?.isCollapsed !== false) this.prompt.field.focus({ preventScroll: true });
     });
+    // one shell for a Linux computer, in the terminal of the desktop shown
+    this.chromes = new Map(
+      [...this.querySelectorAll<HTMLElement>("[data-chrome]")].map((c) => [
+        c.dataset.chrome!,
+        c.querySelector<HTMLElement>('[role="log"]')!,
+      ]),
+    );
+    if (this.chromes.size) {
+      this.follow();
+      document.addEventListener("choice", this.follow);
+    }
     super.connectedCallback();
   }
+
+  disconnectedCallback() {
+    document.removeEventListener("choice", this.follow);
+    super.disconnectedCallback();
+  }
+
+  private chromes = new Map<string, HTMLElement>();
+
+  // the shell's lines and prompt, into the chrome the desktop shows, the field named by its title
+  private follow = () => {
+    const log = this.chromes.get(systemOf(this));
+    if (!log || log === this.log) return;
+    log.append(...this.log.childNodes);
+    const min = this.log.style.getPropertyValue("--min");
+    if (min) log.style.setProperty("--min", min);
+    this.log.style.removeProperty("--min");
+    this.log = log;
+    this.prompt.field.setAttribute("aria-labelledby", log.getAttribute("aria-labelledby")!);
+    log.scrollTop = log.scrollHeight;
+  };
 
   protected render(state: State) {
     if (this.running) this.print(this.running.next(state));
@@ -116,9 +148,10 @@ class Term extends LiveFigure {
 
   // PowerShell's prompt names the folder it is in; zsh's and bash's, as drawn, do not.
   private ps(): string {
+    // bash's in the dim of the chrome it is shown in, Ptyxis's or Konsole's
     const dim = {
       zsh: "text-mac-term-dim",
-      bash: "text-linux-term-dim",
+      bash: "dim",
       powershell: "text-win-term-dim",
     }[this.shell];
     const said = this.shell === "powershell" ? `PS ${this.cwd}>` : this.shell === "zsh" ? "%" : "$";

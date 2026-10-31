@@ -16,8 +16,10 @@ interface Props {
   moment: Moment;
   // the accounts of one tool alone, as the hero's window shows Claude Code's
   only?: "claude";
+  // the account whose Switch the hero's demo presses
+  demo?: string;
 }
-const { prefix, moment, only } = Astro.props;
+const { prefix, moment, only, demo } = Astro.props;
 const page = accountsPage(moments[moment]);
 const groups = page.groups.filter((g) => !only || g.tool === only);
 const tools = toolsOn("linux");
@@ -36,7 +38,7 @@ const tools = toolsOn("linux");
   </List>
   <div class="flex flex-col gap-24" data-part="list">
     {groups.map((g) => (
-      <AccountGroup prefix={prefix} group={g} />
+      <AccountGroup prefix={prefix} group={g} demo={g.label === demo} />
     ))}
   </div>
   <template data-part="group"><AccountGroup prefix={prefix} /></template>

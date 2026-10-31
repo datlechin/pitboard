@@ -1,7 +1,8 @@
 ---
 // The Pitboard window on its desk, on the accounts or pushed to Activity: whole at its default 600
 // by 640, or a `crop` desk that shows its top, which draws the dialogs every view of the window
-// shares, as the macOS and Windows figures draw theirs once with their top view's.
+// shares under ids of their own, as the macOS and Windows figures draw theirs once with their top
+// view's.
 import AccountsPage from "./AccountsPage.astro";
 import Dialogs from "./Dialogs.astro";
 import Window from "./Window.astro";
@@ -34,6 +35,6 @@ const page = accountsPage(moments[moment]);
     class={crop ? "absolute top-24 left-40" : undefined}
   >
     <AccountsPage slot="accounts" prefix={prefix} moment={moment} />
-    {crop && <Dialogs slot="dialogs" prefix={prefix} version={version} />}
+    {crop && <Dialogs slot="dialogs" prefix="linux-accounts" version={version} />}
   </Window>
 </div>

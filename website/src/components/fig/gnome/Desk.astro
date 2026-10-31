@@ -1,12 +1,17 @@
 ---
 // The hero's desk on stock GNOME 50: the top bar and its date menu, a Claude Code session in Ptyxis
-// behind, and the window of the default slot over it, with focus. With `demo`, the status line
-// shows the moment before the switch until the demo plays it. Its ids start `prefix`.
+// behind, and over it, with focus, the Pitboard window made short to its header bar and the Claude
+// Code groups, with no tray to stand for it. With `demo`, the pointer presses work's Switch and the
+// window switches with its spinner, and the status line shows the moment before the switch until
+// the demo plays it. Its ids start `prefix`.
 import DateMenu from "./DateMenu.astro";
 import Ptyxis from "./Ptyxis.astro";
 import TopBar from "./TopBar.astro";
+import AccountsPage from "../linux/AccountsPage.astro";
+import Window from "../linux/Window.astro";
 import { topBarClock } from "../../../data/gnome.ts";
 import { session } from "../../../data/desk.ts";
+import { accountsPage } from "../../../data/linux-window.ts";
 import { clock, moments } from "../../../data/world.ts";
 import { statusLine } from "../../../lib/words.ts";
 
@@ -22,11 +27,16 @@ const status =
     : `<span data-part="status">${now}</span>`;
 const rule =
   "bg-linear-to-b from-linux-term-dim to-linux-term-dim bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
+// the window as the page starts, before the demo's switch
+const window = `${prefix}-window`;
+// The pointer comes up from the session to work's Switch, at 668 by 497 on the desk, and rests
+// there. It is the site's arrow in the colours of Adwaita's cursors, black inside white.
+const pointer = "demo-start:-translate-x-260 demo-start:translate-y-120";
 ---
 
 <pb-gnome-desk
   id={prefix}
-  class="desk block h-680 desk-px-800"
+  class="desk block h-680 [anchor-name:var(--desk)] desk-px-800"
   data-demo-desk={demo ? "" : undefined}
   inert
   data-output
@@ -55,7 +65,41 @@ const rule =
     <div class={rule}></div>
     <div set:html={`  ${status}`} />
   </Ptyxis>
-  <slot />
+  <Window
+    prefix={window}
+    updated={accountsPage(moments.before).updated}
+    height={520}
+    class="absolute top-46 right-14 z-1"
+  >
+    <AccountsPage
+      slot="accounts"
+      prefix={window}
+      moment="before"
+      only="claude"
+      demo={demo ? "work" : undefined}
+    />
+  </Window>
   <TopBar clock={topBarClock(clock.menuBar)} prefix={prefix} />
   <DateMenu prefix={prefix} at={clock.menuBar} />
+  {demo && <svg
+    aria-hidden="true"
+    class:list={[
+      "pointer-events-none absolute top-497 left-668 z-4 h-21 w-13 origin-[1px_1px] transition-transform duration-800 ease-out data-[state=gone]:opacity-0",
+      "demo-pick:scale-86 demo-pick:duration-100",
+      pointer,
+    ]}
+    viewBox="0 0 13 21"
+    data-part="pointer"
+  >
+    <path
+      class="fill-black stroke-white"
+      d="M.5.5v17.6l4.3-4.2 2.9 6.7 2.6-1.1-2.9-6.6h6Z"
+      stroke-width="1"
+      stroke-linejoin="round"
+    ></path>
+  </svg>}
 </pb-gnome-desk>
+
+<script>
+  import "../../../scripts/live/gnome-desk.ts";
+</script>

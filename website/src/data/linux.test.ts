@@ -11,12 +11,15 @@ import {
   mainMenu,
   preferences,
   shortcuts,
+  trayAttention,
   trayMenu,
   trayTip,
 } from "./linux.ts";
 import { ADD_HELP, REFRESH_HELP } from "./window.ts";
 import { moments } from "./world.ts";
 import { CLOSING_QUITS } from "../lib/words.ts";
+import { advised, start } from "../lib/model.ts";
+import { noticeMoment } from "../lib/moment.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const linux = (file: string) => repo(`apps/linux/${file}`);
@@ -259,4 +262,21 @@ test("the tray's tooltip is Pitboard over a line for each account in use", () =>
       'tooltip "Pitboard" over a line per\n  account in use.',
     ),
   );
+});
+
+test("the tray's icon needs attention while its menu offers a switch, as status_item says", () => {
+  const accounts = present("accounts.rs");
+  for (const part of [
+    "let attention = notices.install.is_some()",
+    "|| !notices.switches.is_empty()",
+    "|| !notices.sign_ins.is_empty()",
+    "|| notices.others.is_some();",
+  ])
+    assert.ok(accounts.includes(part), part);
+  assert.equal(trayAttention(start()), false);
+  // the notification at the share offers its switch, and the window's advice comes at 100%
+  assert.equal(trayAttention(noticeMoment(start())!.state), false);
+  const out = start();
+  for (const l of out.accounts.find((a) => a.id === "personal")!.limits) l.percent = 100;
+  assert.equal(trayAttention(advised(out)), true);
 });

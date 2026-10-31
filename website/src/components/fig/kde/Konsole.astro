@@ -7,7 +7,7 @@
 // Fedora's 9 point toolbar font (breezemetrics.h), then the terminal in Konsole's Breeze scheme
 // and Noto Sans Mono 10 with its 1 pixel margin, 80 columns where its profile opens 110, the
 // scrollbar's 21 pixels kept empty (approx). Output colours spans g, y, r, dim (SGR 2's faint)
-// and b (bold's intense).
+// and b (bold's intense), and --term-bg is the ground a cursor's character takes.
 import Icon from "./Icon.astro";
 import { konsoleMenus, konsoleTools } from "../../../data/kde.ts";
 
@@ -70,7 +70,7 @@ const mark = "size-20 shrink-0 fill-none stroke-current";
   </div>
   <div
     class:list={[
-      "flex min-h-0 flex-1 flex-col overflow-hidden py-1 pr-22 pl-1 font-kde-mono text-kde/18 whitespace-pre text-kde-term-text ligatures-none *:min-h-18 [&_.dim]:text-kde-term-faint [&_.g]:text-kde-term-green [&_.r]:text-kde-term-red [&_.y]:text-kde-term-yellow [&_b]:font-bold [&_b]:text-kde-term-intense",
+      "flex min-h-0 flex-1 flex-col overflow-hidden py-1 pr-22 pl-1 font-kde-mono text-kde/18 whitespace-pre text-kde-term-text ligatures-none [--term-bg:var(--color-kde-term-bg)] *:min-h-18 [&_.dim]:text-kde-term-faint [&_.g]:text-kde-term-green [&_.r]:text-kde-term-red [&_.y]:text-kde-term-yellow [&_b]:font-bold [&_b]:text-kde-term-intense",
       solo
         ? "justify-start *:whitespace-pre-wrap live:max-h-[calc(28lh+var(--spacing)*2)] live:min-h-(--min) live:overflow-y-auto live:select-text"
         : "justify-end",

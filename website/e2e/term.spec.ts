@@ -25,7 +25,7 @@ async function open(
   await expect(term).not.toHaveAttribute("inert");
   const field = term.locator("[data-line]");
   await field.focus();
-  return { term, field, log: term.locator("[role=log]") };
+  return { term, field, log: term.locator("[role=log]:visible") };
 }
 
 // what the window shows, its last `n` lines
@@ -254,7 +254,9 @@ test("on a phone, a tap on a command runs it, and focus stays on the button", as
   const use = row.getByRole("button").nth(1);
   await use.tap();
   await expect(use).toBeFocused();
-  await expect(term.locator("[role=log]")).toContainText("Switched to personal; work is parked.");
+  await expect(term.locator("[role=log]:visible")).toContainText(
+    "Switched to personal; work is parked.",
+  );
   await expect(use).toHaveText("pitboard use work");
   // the field takes no tap, which iOS would zoom the page for
   await expect(term.locator("[data-line]")).toHaveCSS("pointer-events", "none");

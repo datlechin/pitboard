@@ -1,7 +1,7 @@
-// A select-only combobox (WAI-ARIA APG) with the keys and pointer rules of macOS's pop-up button
-// or WinUI's ComboBox. Focus stays on the box.
+// A select-only combobox (WAI-ARIA APG) with the keys and pointer rules of macOS's pop-up button,
+// WinUI's ComboBox or GTK's GtkDropDown, as an AdwComboRow holds it. Focus stays on the box.
 
-export type Kind = "popup" | "combobox";
+export type Kind = "popup" | "combobox" | "dropdown";
 
 export interface Combobox {
   set(value: string): void;
@@ -71,7 +71,7 @@ export function combobox(
 
   function commit(i: number) {
     if (i < 0) return close();
-    if (kind === "combobox") {
+    if (kind !== "popup") {
       close();
       return take(values[i]);
     }
@@ -178,9 +178,11 @@ export function combobox(
     if (busy) return e.preventDefault();
     const typing = e.key.length === 1 && e.key !== " " && !e.metaKey && !e.ctrlKey && !e.altKey;
     if (!isOpen()) {
-      if (kind === "popup") {
-        // full keyboard access: Space opens the pop-up, as the arrows do
-        if (e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (kind !== "combobox") {
+        // full keyboard access: Space opens the pop-up, as the arrows do, and Return opens
+        // GtkDropDown's too
+        const opens = [" ", "ArrowDown", "ArrowUp", ...(kind === "dropdown" ? ["Enter"] : [])];
+        if (opens.includes(e.key)) {
           e.preventDefault();
           open();
         }
@@ -235,7 +237,7 @@ export function combobox(
         e.preventDefault();
         return commit(active);
       case "F4":
-        if (kind === "popup") return;
+        if (kind !== "combobox") return;
         e.preventDefault();
         return commit(active);
       case "Escape":
@@ -248,7 +250,7 @@ export function combobox(
       e.preventDefault();
       return commit(active);
     }
-    if (typing) {
+    if (typing && kind !== "dropdown") {
       e.preventDefault();
       const i = find(e.key);
       if (i >= 0) activate(i);
@@ -267,7 +269,7 @@ export function combobox(
       if (v === value) return;
       value = v;
       for (const s of shown) s.hidden = s.dataset.value !== v;
-      if (kind === "popup")
+      if (kind !== "combobox")
         options.forEach((o) => o.setAttribute("aria-checked", String(o.dataset.value === v)));
       if (!isOpen()) activate(chosen());
     },

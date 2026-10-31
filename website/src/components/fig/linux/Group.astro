@@ -13,8 +13,10 @@ const { title, description, id, class: extra, ...data } = Astro.props;
 const header = title || description || Astro.slots.has("suffix");
 ---
 
-<section
+{/* adw-preferences-group.c gives it the role group, which is no landmark */}
+<div
   class:list={["flex flex-col", extra]}
+  role="group"
   aria-labelledby={title ? `${id}-title` : undefined}
   {...data}
 >
@@ -36,4 +38,4 @@ const header = title || description || Astro.slots.has("suffix");
     <slot name="suffix" />
   </div>}
   <slot />
-</section>
+</div>

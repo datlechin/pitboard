@@ -2,7 +2,8 @@
 // Ptyxis 50.1 in its GNOME palette (src/palettes/gnome.palette) on libadwaita 1.9, 80 columns of
 // 11 point type under ptyxis-window.ui's header bar. With `backdrop`, another window has focus: the
 // header bar takes the terminal's ground (ptyxis-window-dressing.c), its contents half their
-// opacity, and the window libadwaita's backdrop shadow. Output colours spans g, y, r, dim.
+// opacity, and the window libadwaita's backdrop shadow. Output colours spans g, y, r, dim, and
+// --term-bg is the ground a cursor's character takes.
 interface Props {
   // what the title says, unless a `title` slot draws it
   title?: string;
@@ -62,7 +63,7 @@ const icon = "size-16 shrink-0";
   </div>
   <div
     class:list={[
-      "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow",
+      "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre text-linux-term-text ligatures-none [--term-bg:var(--color-linux-term-bg)] *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow",
       solo
         ? "justify-start *:whitespace-pre-wrap live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text"
         : "justify-end",

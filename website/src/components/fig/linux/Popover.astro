@@ -1,7 +1,9 @@
 ---
 // A GtkPopoverMenu (_popovers.scss, _menus.scss): the popover's ground at radius 15 inside its
 // hairline, with its shadow and its arrow, 24 by 8, at the button it opens from; 6 of padding, its
-// items 32 tall at radius 9 with 12 a side, each section 6 from the next across a separator.
+// items 32 tall at radius 9 with 12 a side, each section 6 from the next across a separator. As
+// its surface keeps to the screen, live/ slides it by --dx, the arrow staying at the button, and
+// flips it above the button where it has no room below.
 interface Props {
   id: string;
   label: string;
@@ -13,7 +15,7 @@ const { id, label, class: extra, role = "menu" } = Astro.props;
 
 <div
   class:list={[
-    "absolute z-3 min-w-120 -translate-x-1/2 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 text-adw-text shadow-adw-popover outline-none live:cursor-default",
+    "group/popover absolute z-3 min-w-120 translate-x-[calc(var(--dx,0px)-50%)] rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 text-adw-text shadow-adw-popover outline-none live:cursor-default",
     extra,
   ]}
   id={id}
@@ -23,7 +25,7 @@ const { id, label, class: extra, role = "menu" } = Astro.props;
   hidden
 >
   <svg
-    class="absolute -top-8 left-1/2 h-8 w-24 -translate-x-1/2 overflow-visible fill-adw-popover stroke-black/14"
+    class="absolute -top-8 left-[calc(50%-var(--dx,0px))] h-8 w-24 -translate-x-1/2 overflow-visible fill-adw-popover stroke-black/14 group-data-[side=above]/popover:top-auto group-data-[side=above]/popover:-bottom-8 group-data-[side=above]/popover:rotate-180"
     viewBox="0 0 24 8"
     aria-hidden="true"
   >

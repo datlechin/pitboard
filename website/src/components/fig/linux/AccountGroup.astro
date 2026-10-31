@@ -18,8 +18,10 @@ import { SWITCH } from "../../../data/window.ts";
 interface Props {
   prefix: string;
   group?: Shown;
+  // the hero's demo presses this group's button, which looks hovered then pressed as it does
+  demo?: boolean;
 }
-const { prefix, group } = Astro.props;
+const { prefix, group, demo = false } = Astro.props;
 const id = `${prefix}-${group?.id ?? "added"}`;
 ---
 
@@ -39,7 +41,11 @@ const id = `${prefix}-${group?.id ?? "added"}`;
       <Spinner label={words.switching} />
     </span>
     <span data-part="action" hidden={!group?.button}>
-      <Button aria-label={group?.button?.spoken} data-does="use">
+      <Button
+        aria-label={group?.button?.spoken}
+        class={demo ? "demo-hl:bg-current/15 demo-pick:bg-current/30" : undefined}
+        data-does="use"
+      >
         {group?.button?.title ?? SWITCH}
       </Button>
     </span>
