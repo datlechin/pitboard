@@ -172,6 +172,11 @@ export const moments: Record<Moment, World> = {
   after: { now: clock.read, readAt: clock.read, accounts, inUse: inUse.after },
 };
 
+// The Claude Code accounts whose claude.ai window is open as the page starts, and the link a
+// browser shares with Pitboard on macOS, which waits in the Open Link window for an account.
+export const openWindows = ["work"];
+export const sharedLink = "https://claude.ai/project/0199c2f4-8e3b-7a51-b6d0-4f2e9c7a1d38";
+
 // The share of a limit the app notifies or switches at until someone sets another
 // (autoswitch.rs `Threshold::DEFAULT`).
 export const share = 95;

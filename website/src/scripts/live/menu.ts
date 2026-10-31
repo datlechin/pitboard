@@ -232,6 +232,12 @@ export class Menu {
     top.o.shown(false, refocus && had);
   }
 
+  // the submenu `item` opens, opened as a pointer resting on the item opens it
+  expand(item: HTMLElement) {
+    const sub = this.subs.get(item);
+    if (sub) this.#openSub(sub, "pointer");
+  }
+
   #openSub(sub: Menu, how: How) {
     clearTimeout(this.#rest);
     for (const other of this.subs.values()) if (other !== sub && other.open) other.close();

@@ -2,9 +2,9 @@
 // IconMenu.cs's menu over Windows Terminal, opened where the pointer right-clicked the icon: its
 // right edge at the point and its bottom on the taskbar's top, as the app's UI tests read it on
 // windows-2025 (docs/facts/site.md). The icon is a button the Shell names by its tooltip, and its
-// menu's ids each start `prefix`. The
-// hero's desk is live/tray.ts's, and the moment after its switch follows the one state; with
-// `submenu`, the desk shows a site's submenu open, a drawing of its own.
+// menu's ids each start `prefix`. live/tray.ts works the desk, and the moment after the hero's
+// switch follows the one state; with `submenu`, the desk opens on that site's submenu, where the
+// pointer rests on its item.
 import IconMenu from "./IconMenu.astro";
 import Taskbar from "./Taskbar.astro";
 import Terminal from "./Terminal.astro";
@@ -31,8 +31,7 @@ interface Props {
   updates?: boolean;
 }
 const { prefix, demo = false, submenu, updates = false } = Astro.props;
-const live = submenu === undefined;
-const Root = live ? "pb-tray" : "pb-open-link";
+const Root = submenu === undefined ? "pb-tray" : "pb-open-link";
 const icon = `${prefix}-icon`;
 const after = moments.after;
 // The session's status line follows the switch after the menu does.
@@ -67,6 +66,7 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
   id={prefix}
   class:list={["desk block desk-px-720", updates ? "h-572" : "h-540"]}
   data-demo-desk={demo ? "" : undefined}
+  data-submenu={submenu}
   inert
   data-output
 >
@@ -94,12 +94,10 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
       name={shellTip(barTip(after, "windows"))}
       level={menuBarLevel(after)}
       was={demo ? menuBarLevel(moments.before) : undefined}
-      levels={live}
+      levels
       class={[
         demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : "",
-        live
-          ? "data-[state=closed]:bg-transparent data-[state=closed]:hover:bg-win-subtle live:cursor-default"
-          : "",
+        "data-[state=closed]:bg-transparent data-[state=closed]:hover:bg-win-subtle live:cursor-default",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -110,7 +108,7 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
     prefix={prefix}
     owner={icon}
     demo={demo}
-    live={live}
+    live
     updates={updates}
     submenu={submenu}
   />
@@ -132,14 +130,14 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
     >)}</Tooltip
   >}
   {/* WinUI's tooltip of each account in the menu, its UI Automation help text */}
-  {live && <div data-part="tips">
+  <div data-part="tips">
     {accounts.map((a) => <Tooltip class={tipAt} id={`${prefix}-tip-${a.id}`} hidden>
       {menuLine(a, after, "windows")}
     </Tooltip>)}
     <template data-part="tip">
       <Tooltip class={tipAt} hidden />
     </template>
-  </div>}
+  </div>
   <svg
     aria-hidden="true"
     class:list={[
@@ -148,7 +146,7 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
       pointer,
     ]}
     viewBox="0 0 13 21"
-    data-part={live ? "pointer" : undefined}
+    data-part="pointer"
   >
     <path
       class="fill-white stroke-black"

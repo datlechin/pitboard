@@ -3,7 +3,8 @@
 // a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading, each
 // following the one before with no separator. With
 // `live`, the moment after the switch is the one live/tray.ts keeps to the state, and every node a
-// state shows is drawn: each site's single item, and a template for an account a visitor adds.
+// state shows is drawn: each site's single item, and a template for an account a visitor adds. With
+// `submenu`, that site's submenu is drawn open beside its item.
 import { iconMenu, joinsTheGroupBefore, sites, type MenuEntry } from "../../../data/windows.ts";
 import { account, moments, type Moment, type Tool } from "../../../data/world.ts";
 import { toolsOn } from "../../../lib/words.ts";
@@ -128,7 +129,7 @@ const tip = (key: string) => `${prefix}-tip-${key}`;
                   <div
                     class:list={[
                       item,
-                      { "bg-win-subtle": open(e) },
+                      { "bg-win-subtle": open(e) && !own },
                       { [`${works} aria-expanded:bg-win-subtle`]: own },
                     ]}
                     id={`${prefix}-${moment}-${e.site}`}
@@ -154,19 +155,21 @@ const tip = (key: string) => `${prefix}-tip-${key}`;
                   >
                     <span class="flex-1" data-part="title"></span>
                   </div>}
+                  {/* live/menu.ts places a submenu it opens, and one drawn open sits where it
+                     would: level with its item, its first item's top at the item's */}
                   {(open(e) || own) && <div
                     class:list={[
                       "absolute",
                       flyout,
                       own
-                        ? "top-(--y) left-(--x) w-max min-w-120 outline-none"
+                        ? "top-[var(--y,calc(var(--spacing)*-4))] left-[var(--x,100%)] w-max min-w-120 outline-none"
                         : "-top-4 left-full",
                     ]}
                     id={own ? `${prefix}-${e.site}-menu` : undefined}
                     role="menu"
                     aria-labelledby={`${prefix}-${moment}-${e.site}`}
                     tabindex={own ? "-1" : undefined}
-                    hidden={own}
+                    hidden={own && !open(e)}
                   >
                     {e.submenu.map((label) => <div
                       class:list={[row, "pl-11", { [works]: own }]}

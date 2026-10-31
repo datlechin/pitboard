@@ -112,6 +112,61 @@ test.describe("macOS", () => {
     await page.locator("#mac-accounts-forget").getByRole("button", { name: "Remove" }).click();
     await expect(window).toHaveCount(0);
   });
+
+  test("the Open Link window lists claude.ai's accounts as the state has them, and Open opens the one selected in its window", async ({
+    page,
+  }) => {
+    const { fig } = await open(page, "macos", "windows-mac");
+    const list = fig.getByRole("listbox", { name: "Open this claude.ai link as:" });
+    const option = (account: string) => list.locator(`[role="option"][data-account="${account}"]`);
+    await expect(list.getByRole("option")).toHaveText([
+      /^\s*work\s+me@company\.com, window open\s*$/,
+      /^\s*personal\s+me@example\.com\s*$/,
+    ]);
+    await expect(option("work")).toHaveAttribute("aria-selected", "true");
+    expect(await axe(page, ["#windows-mac"])).toEqual([]);
+    // a rename in the Accounts window shows in the list
+    const row = page.locator('#usage-mac [role="row"][data-account="personal"]');
+    await row.click({ button: "right", ...at });
+    await page.locator('#usage-mac-menu [data-offer="rename"]').click();
+    await page.locator('#mac-accounts-rename input[name="name"]').fill("side");
+    await page.keyboard.press("Enter");
+    await expect(option("personal").locator('[data-part="label"]')).toHaveText("side");
+    await option("work").click();
+    await expect(option("work")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(option("personal")).toHaveAttribute("aria-selected", "true");
+    // Return presses Open, the default button
+    await page.keyboard.press("Enter");
+    await expect(fig.locator('[data-part="window"]')).toBeHidden();
+    const window = fig.locator('[data-part="account-window"][data-account="personal"]');
+    await expect(window).toBeVisible();
+    await expect(window.locator('[data-part="title"]')).toHaveText("side");
+  });
+
+  test("Escape, Cancel or the close button put the link away, and Reset brings it back", async ({
+    page,
+  }) => {
+    const { fig } = await open(page, "macos", "windows-mac");
+    const window = fig.locator('[data-part="window"]');
+    const reset = page.locator("figure:has(#windows-mac) [data-reset]");
+    await fig.getByRole("option", { name: /^personal/ }).click();
+    await page.keyboard.press("Escape");
+    await expect(window).toBeHidden();
+    await expect(reset).toBeFocused();
+    await reset.click();
+    await expect(window).toBeVisible();
+    // the selection is the account in use again
+    await expect(fig.getByRole("option", { name: /^work/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await window.getByRole("button", { name: "Cancel" }).click();
+    await expect(window).toBeHidden();
+    await reset.click();
+    await window.getByRole("button", { name: "Close" }).click();
+    await expect(window).toBeHidden();
+  });
 });
 
 test.describe("Windows", () => {
@@ -203,5 +258,29 @@ test.describe("Windows", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  test("#account-windows' desk opens on Open claude.ai's submenu of the state's accounts, and one chosen opens its window", async ({
+    page,
+  }) => {
+    const { fig } = await open(page, "windows", "windows-win");
+    const submenu = page.locator('[id="windows-win-claude.ai-menu"]');
+    // a press elsewhere on the page leaves it open until the visitor comes to it
+    await page.locator("#hero-title").click();
+    await expect(submenu).toBeVisible();
+    await expect(
+      page.locator('#windows-win-menu [data-does="claude.ai"]:not([data-one])'),
+    ).toHaveAttribute("aria-expanded", "true");
+    await expect(submenu.getByRole("menuitem")).toHaveText(["work", "personal"]);
+    expect(await axe(page, ["#windows-win"])).toEqual([]);
+    await submenu.locator('[data-account="personal"]').click();
+    await expect(submenu).toBeHidden();
+    const window = fig.locator('[data-part="account-window"][data-account="personal"]');
+    await expect(window.locator('[data-part="title"]')).toHaveText("personal");
+    // the visitor's pointer took over from the one drawn, and Reset opens the submenu again
+    await expect(fig.locator('[data-part="pointer"]')).toHaveAttribute("data-state", "gone");
+    await page.locator("figure:has(#windows-win) [data-reset]").click();
+    await expect(window).toHaveCount(0);
+    await expect(submenu).toBeVisible();
   });
 });

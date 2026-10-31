@@ -4,7 +4,7 @@
 import { toolOn, tools, type Account, type Tool, type World } from "./world.ts";
 import { countdown as countdownOf, type State } from "../lib/model.ts";
 import { platformOf, type Front, type System } from "../lib/platform.ts";
-import { signInExpired, thisMachine, titled } from "../lib/words.ts";
+import { isInUse, listed, signInExpired, thisMachine, titled } from "../lib/words.ts";
 
 const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 
@@ -24,6 +24,33 @@ export const program = (tool: Tool) => (tool === "desktop" ? "Claude" : toolName
 // The site an account's window opens (pitboard_sites).
 export const siteOf = (tool: Tool) =>
   tool === "claude" ? "claude.ai" : tool === "codex" ? "chatgpt.com" : null;
+
+// macOS's Open Link window, while a link a browser shared waits for an account (present/windows.rs
+// `picker`, present/words/windows.rs, present/app_words.rs)
+export const OPEN_LINK = "Open Link";
+export const openLinkAs = (site: string) => `Open this ${site} link as:`;
+export const windowOpen = (email: string) => `${email}, window open`;
+// the link on one line, without its scheme (present/windows.rs `link_text`)
+export const linkText = (url: string) => url.replace(/^https:\/\//, "");
+
+// The accounts it offers for a link to `site`, as their windows are listed, the one in use first
+// (status.rs `assemble`), each said with its email and whether its window is open, and the one
+// chosen as it opens: the one in use, or the first (model/windows.rs `picking`). The page's link
+// arrives once, so no account was chosen for the site before it.
+export function pickerOf(
+  s: World & { windowsOpen: string[] },
+  site: string,
+): { accounts: { a: Account; detail: string }[]; chosen: string | null } {
+  const tool = tools.find(([t]) => siteOf(t) === site)?.[0];
+  const offered = tool ? listed(s, tool) : [];
+  return {
+    accounts: offered.map((a) => ({
+      a,
+      detail: s.windowsOpen.includes(a.id) ? windowOpen(a.email) : a.email,
+    })),
+    chosen: (offered.find((a) => isInUse(a, s)) ?? offered[0])?.id ?? null,
+  };
+}
 
 // the Accounts window's and AccountsPage.xaml's toolbar help, and the macOS inspector's button
 // (present/app_words.rs)

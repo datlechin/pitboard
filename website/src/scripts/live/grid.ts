@@ -1,14 +1,18 @@
-// The account list as SwiftUI's List(selection:) and WinUI's ListView run it, in WAI-ARIA's grid
-// pattern with focus on the row (plan 3.3, 3.4 and section 6).
+// A list as SwiftUI's List(selection:) and WinUI's ListView run it, with focus on the row: the
+// account list in WAI-ARIA's grid pattern (plan 3.3, 3.4 and section 6), and the Open Link
+// window's in its listbox pattern.
 import type { System } from "../../lib/platform.ts";
 
 export interface GridOptions {
   system: System;
   grid: HTMLElement;
+  // what a row is, the grid pattern's row unless said
+  row?: string;
   rows: () => HTMLElement[];
   act: (row: HTMLElement) => void;
-  forget: (row: HTMLElement) => void;
-  rename: (row: HTMLElement) => void;
+  // what Delete and F2 do to a row, where the list does anything
+  forget?: (row: HTMLElement) => void;
+  rename?: (row: HTMLElement) => void;
   // what a row is called, for typing its name
   name: (row: HTMLElement) => string;
   // the selection changed
@@ -49,7 +53,8 @@ export class Grid {
   }
 
   #rowOf(target: EventTarget | null): HTMLElement | null {
-    const row = target instanceof Element ? target.closest<HTMLElement>('[role="row"]') : null;
+    const row =
+      target instanceof Element ? target.closest<HTMLElement>(this.o.row ?? '[role="row"]') : null;
     return row && this.o.grid.contains(row) ? row : null;
   }
 
@@ -137,12 +142,12 @@ export class Grid {
         // macOS's Delete and Forward Delete, Windows' Delete, on the selection
         if (!mac && e.key === "Backspace") return;
         const on = mac ? this.#selected : row;
-        if (!on) return;
+        if (!on || !this.o.forget) return;
         e.preventDefault();
         return this.o.forget(on);
       }
       case "F2":
-        if (mac || !row) return;
+        if (mac || !row || !this.o.rename) return;
         e.preventDefault();
         return this.o.rename(row);
       case " ":

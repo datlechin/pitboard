@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as w from "./window.ts";
-import { account, moments } from "./world.ts";
-import { model, reset, use } from "../lib/model.ts";
+import { account, moments, sharedLink } from "./world.ts";
+import { dismissLink, model, openLink, reset, use } from "../lib/model.ts";
 import { barTip, changeOutcome, changeVerb, menuBarSpoken } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -250,6 +250,59 @@ test("Activity names each change and its end as present/words/machine.rs does", 
     words.includes('"parked_login_refused" => sign_in_standing(Standing::LoginRefused).into(),'),
   );
   assert.ok(standing.includes(`_ => "${changeOutcome("parked_login_refused")}",`));
+});
+
+test("the Open Link window offers the site's accounts in use first, the one in use chosen, as windows.rs does", () => {
+  assert.ok(words.includes('format!("Open this {site} link as:")'));
+  assert.equal(w.openLinkAs("claude.ai"), "Open this claude.ai link as:");
+  assert.ok(words.includes('format!("{email}, window open")'));
+  assert.ok(words.includes(`pub(crate) const OPEN: &str = "${w.OPEN}";`));
+  assert.ok(appWords.includes(`open_link: titled(front, "${w.OPEN_LINK}", "Open link"),`));
+  const picker = present("windows.rs");
+  assert.ok(picker.includes('url.strip_prefix("https://").unwrap_or(url).to_owned()'));
+  assert.equal(w.linkText(sharedLink), sharedLink.slice("https://".length));
+  assert.ok(picker.includes("words::window_open(&window.email)"));
+  const picking = repo("crates/pitboard-model/src/model/windows.rs");
+  assert.ok(picking.includes(".find(|account| account.in_use)"));
+  assert.ok(
+    picking.includes(".or_else(|| accounts.first().map(|account| store_key(&account.store)));"),
+  );
+  // the list with its selection, then Cancel and Open, Return's, which a double click presses too
+  const swift = repo("apps/macos/Sources/PitboardApp/AccountWindows/AccountPicker.swift");
+  assert.ok(swift.includes("List(accounts, selection: selection)"));
+  assert.ok(/cancelButton\s*Button\(open\)/.test(swift));
+  assert.ok(
+    swift.includes(".keyboardShortcut(.defaultAction)\n                .disabled(!picker.armed)"),
+  );
+  assert.ok(swift.includes(".keyboardShortcut(.cancelAction)"));
+  assert.ok(swift.includes("} primaryAction: { stores in"));
+
+  const opened = { ...moments.after, windowsOpen: [account("work").id] };
+  assert.deepEqual(
+    w.pickerOf(opened, "claude.ai").accounts.map(({ a, detail }) => [a.label, detail]),
+    [
+      ["work", "me@company.com, window open"],
+      ["personal", "me@example.com"],
+    ],
+  );
+  assert.equal(w.pickerOf(opened, "claude.ai").chosen, account("work").id);
+  assert.equal(
+    w.pickerOf({ ...moments.before, windowsOpen: [] }, "claude.ai").chosen,
+    account("personal").id,
+  );
+});
+
+test("the link waits until it opens as an account, in that account's window, or is put away", () => {
+  reset();
+  assert.ok(model.get().linkWaiting);
+  openLink(account("personal").id);
+  assert.ok(!model.get().linkWaiting);
+  assert.ok(model.get().windowsOpen.includes(account("personal").id));
+  assert.ok(model.get().changed);
+  reset();
+  dismissLink();
+  assert.ok(!model.get().linkWaiting);
+  assert.deepEqual(model.get().windowsOpen, [account("work").id]);
 });
 
 test("a status item's menu opens on the window's pressing notices, counted, and its item says it needs attention", () => {

@@ -12,6 +12,7 @@ import {
   clock,
   inUse as drawnInUse,
   logged,
+  openWindows,
   share as defaultShare,
   tools,
   warmUp as drawnWarmUp,
@@ -145,6 +146,9 @@ export interface State extends World {
   posted: Posted[];
   // accounts with a window of their site open, by id
   windowsOpen: string[];
+  // the claude.ai link shared from a browser that waits in macOS's Open Link window for an
+  // account, until one is chosen or the window goes (windows.rs `arrival`)
+  linkWaiting: boolean;
   // the Linux app's window, which a status item keeps Pitboard running without: Close puts it
   // away and the tray's Open Pitboard brings it back (application.rs `activate`)
   windowShown: boolean;
@@ -214,7 +218,8 @@ export function start(): State {
     schedule: false,
     log: logged.filter((e) => e.at !== clock.switched).map((e) => ({ ...e })),
     posted: [],
-    windowsOpen: [id("work")],
+    windowsOpen: openWindows.map(id),
+    linkWaiting: true,
     windowShown: true,
     decidedAt: clock.menuBar,
     switching: null,
@@ -1037,6 +1042,25 @@ export function openWindow(tool: Tool, label: string) {
   change((s) => {
     const a = find(s, tool, label);
     if (a && !s.windowsOpen.includes(a.id)) s.windowsOpen.push(a.id);
+  });
+}
+
+// The link waiting opened as `id`, in its window, which opens where it is not open
+// (windows.rs `open_link`), or put away with no account chosen (`dismiss_link`).
+export function openLink(id: string) {
+  const s = model.get();
+  const a = s.accounts.find((x) => x.id === id);
+  if (!s.linkWaiting || !a) return;
+  change((s) => {
+    s.linkWaiting = false;
+    if (!s.windowsOpen.includes(a.id)) s.windowsOpen.push(a.id);
+  });
+}
+
+export function dismissLink() {
+  if (!model.get().linkWaiting) return;
+  change((s) => {
+    s.linkWaiting = false;
   });
 }
 
