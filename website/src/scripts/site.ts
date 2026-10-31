@@ -250,6 +250,24 @@ function afterDownload() {
   }
 }
 
+// A browser that names its machine gives an Arm PC the file its download link keeps for one.
+interface Hints {
+  platform?: string;
+  getHighEntropyValues?(hints: string[]): Promise<{ architecture?: string; bitness?: string }>;
+}
+function armDownloads() {
+  const links = all<HTMLAnchorElement>("a[data-arm]");
+  const hints = (navigator as Navigator & { userAgentData?: Hints }).userAgentData;
+  if (!links.length || hints?.platform !== "Windows" || !hints.getHighEntropyValues) return;
+  hints.getHighEntropyValues(["architecture", "bitness"]).then(
+    ({ architecture }) => {
+      if (architecture !== "arm") return;
+      for (const a of links) a.href = a.dataset.arm!;
+    },
+    () => {},
+  );
+}
+
 // The hero's demo is its live module's (live/demo.ts); a page without the hero has none to play.
 function demo() {
   if (!document.querySelector("[data-demo-desk]")) d.removeAttribute("data-demo");
@@ -265,4 +283,5 @@ openTarget(showPlatform, showDesktop);
 addEventListener("hashchange", () => openTarget(showPlatform, showDesktop));
 copying();
 afterDownload();
+armDownloads();
 demo();

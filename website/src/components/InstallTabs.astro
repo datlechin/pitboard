@@ -1,10 +1,7 @@
 ---
-import { commands } from "../data/commands.ts";
-import { DOCS } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
 import { appZip, windowsMsi } from "../lib/github.ts";
 import { onOf, type Platform } from "../lib/platform.ts";
-import CommandBox from "./CommandBox.astro";
 import DownloadButton from "./DownloadButton.astro";
 import PlatformTabs from "./PlatformTabs.astro";
 
@@ -15,14 +12,15 @@ interface Props {
   class?: string;
 }
 const { n, desktop, class: extra } = Astro.props;
-const { downloads } = await siteData();
+const { downloads, windowsSigned } = await siteData();
 const zip = appZip(downloads.macos.release);
 const windows = downloads.windows.release;
+const linux = downloads.linux.release;
+const unsigned = windowsSigned ? "" : " Pitboard for Windows is not signed yet.";
 const tabId = (p: Platform) => `tab-${p}-${n}`;
 const panelId = (p: Platform) => `tp-${p}-${n}`;
-const note = "mt-4 max-w-measure text-note text-pretty text-muted";
-const lead = "mt-6 text-note text-fg";
-const after = "js:not-data-shown:hidden";
+const line = "mt-3 max-w-measure text-ui text-pretty text-muted";
+const after = "mt-3 max-w-measure text-note text-pretty text-fg js:not-data-shown:hidden";
 ---
 
 <div class={extra}>
@@ -34,17 +32,10 @@ const after = "js:not-data-shown:hidden";
       id={panelId("macos")}
       aria-labelledby={tabId("macos")}
     >
-      <p class={note}>The app needs macOS 14 or later and includes the command line.</p>
-      <DownloadButton class="mt-4" platform="macos" href={zip.url} after />
-      <p class:list={[note, after]} data-after="macos">
+      <DownloadButton platform="macos" href={zip.url} after />
+      <p class={line}>{`Pitboard ${downloads.macos.release.version} for macOS 14 or later.`}</p>
+      <p class={after} data-after="macos">
         Move Pitboard to your Applications folder before you open it.
-      </p>
-      <p class={lead}>For the command line alone, run the install script:</p>
-      <CommandBox class="mt-2" command={commands.installScript} />
-      <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
-      <p class:list={[note, "hidden no-js:block"]}>
-        Pitboard also runs on <a href="/download#windows">Windows</a> and
-        <a href="/download#linux">Linux</a>.
       </p>
     </div>
     <div
@@ -54,25 +45,17 @@ const after = "js:not-data-shown:hidden";
       id={panelId("windows")}
       aria-labelledby={tabId("windows")}
     >
-      <p class={note}>
-        The app needs Windows 11 24H2 or later and includes the command line; Arm PCs take the
-        <a href={windowsMsi(windows, "arm64").url} data-download="windows">ARM64 installer</a>.
-      </p>
       <DownloadButton
-        class="mt-4"
         platform="windows"
         href={windowsMsi(windows, "x64").url}
+        arm={windowsMsi(windows, "arm64").url}
         beta={windows.prerelease}
         after
       />
-      <p class:list={[note, after]} data-after="windows">
+      <p class={line}>{`Pitboard ${windows.version} for Windows 11 24H2 or later.${unsigned}`}</p>
+      <p class={after} data-after="windows">
         If Windows says it protected your PC, select <b>More info</b>, then <b>Run anyway</b>.
       </p>
-      <p class={note}>
-        For the command line alone,
-        <a href={`${DOCS}/install#install-the-command-line-on-windows`}>install it from its zip</a>.
-      </p>
-      <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
     <div
       class="no-js:hidden"
@@ -81,16 +64,11 @@ const after = "js:not-data-shown:hidden";
       id={panelId("linux")}
       aria-labelledby={tabId("linux")}
     >
-      <p class={note}>
-        The app needs Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with
-        GNOME or KDE Plasma, and <a href="/download#linux">installs from Pitboard's repository</a>.
+      <DownloadButton platform="linux" href="/download#linux" />
+      <p class={line}>
+        {`Pitboard ${linux.version} for Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma.`}
       </p>
-      <p class={lead}>
-        For the command line alone, install <code>pitboard</code> from it, or on another
-        distribution run the install script:
-      </p>
-      <CommandBox class="mt-2" command={commands.installScript} />
-      <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
+    <p class="mt-5 text-ui"><a href="/download">Other platforms and the command line</a></p>
   </div>
 </div>
