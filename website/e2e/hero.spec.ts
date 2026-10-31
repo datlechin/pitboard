@@ -726,9 +726,13 @@ test.describe("on KDE Plasma", () => {
     test("Shift+F10 opens it from the keyboard, arrows wrap, Tab moves as Down, Space does nothing, Escape gives focus back", async ({
       page,
     }) => {
-      await page.locator(kde.icon).focus();
+      const icon = page.locator(kde.icon);
+      await expect(icon).toHaveAttribute("aria-keyshortcuts", "Shift+F10");
+      await expect(icon).toHaveAttribute("aria-expanded", "false");
+      await icon.focus();
       await page.keyboard.press("Shift+F10");
       await expect(page.locator(kde.menu)).toBeVisible();
+      await expect(icon).toHaveAttribute("aria-expanded", "true");
       // a QMenu opened from the keyboard has no item current until an arrow makes one
       await page.keyboard.press("ArrowDown");
       await expect(page.locator(kde.does("open"))).toBeFocused();
@@ -749,7 +753,8 @@ test.describe("on KDE Plasma", () => {
       await expect(page.locator(kde.menu)).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(page.locator(kde.menu)).toBeHidden();
-      await expect(page.locator(kde.icon)).toBeFocused();
+      await expect(icon).toBeFocused();
+      await expect(icon).toHaveAttribute("aria-expanded", "false");
       await expect(page.locator(kde.account("work"))).toHaveAttribute("aria-checked", "true");
     });
 

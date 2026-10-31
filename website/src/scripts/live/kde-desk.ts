@@ -36,6 +36,7 @@ class KdeDesk extends LiveFigure {
       desk: this,
       choose: (item) => this.#choose(item),
       shown: (open, refocus) => {
+        attr(this.#icon, "aria-expanded", String(open));
         if (open) this.#showTip(false);
         if (refocus) this.#icon.focus({ preventScroll: true });
       },
