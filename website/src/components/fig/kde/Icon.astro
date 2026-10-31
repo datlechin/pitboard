@@ -1,0 +1,25 @@
+---
+// A Breeze icon as Plasma and a Qt app draw it, named as breeze-icons files it
+// ("actions/22/edit-copy"), at its own size unless a class sizes it. A full-colour icon keeps its
+// gradients, whose ids `key` makes this drawing's own.
+import { breeze } from "../../../lib/breeze.ts";
+
+interface Props {
+  name: string;
+  key?: string;
+  class?: string;
+}
+const { name, key = name.replaceAll("/", "-"), class: extra } = Astro.props;
+const files = import.meta.glob<string>("../../../assets/icons/breeze/*/*/*.svg", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const file = files[`../../../assets/icons/breeze/${name}.svg`];
+if (!file) throw new Error(`no Breeze icon ${name} in assets/icons/breeze`);
+const { viewBox, body } = breeze(file, key);
+const sizes: Record<string, string> = { "16": "size-16", "22": "size-22", "32": "size-32" };
+const size = /(^|\s)size-/.test(extra ?? "") ? null : sizes[name.split("/")[1]];
+---
+
+<svg class:list={[size, "shrink-0", extra]} viewBox={viewBox} aria-hidden="true" set:html={body} />

@@ -1,0 +1,104 @@
+/* KDE Plasma 6.7.5 as Fedora 44 sets it up (research/kde-portal.md). Its global theme gives Plasma
+   the breeze-dark style, so the panel, its tooltips and popups are dark in both of the site's
+   schemes, while apps and their menus take BreezeLight, or BreezeDark under Fedora's Dark theme,
+   the site's dark. Colours are libplasma's breeze-dark `colors`, the colour schemes of breeze's
+   `colors/`, and what KColorScheme and Breeze's style derive from them, computed. */
+@theme {
+  /* the panel's, a tooltip's and a popup's frame: Window under translucent/ SVGs at 85%, over what
+     KWin's blur leaves behind it; its text; ButtonFocus */
+  --color-kde-plasma: rgb(32 35 38 / 0.85);
+  --color-kde-plasma-text: #fcfcfc;
+  --color-kde-focus: #3daee9;
+  /* plasmoidheading.svg's header: Header's ground at 75% over the frame, a Frame line under it */
+  --color-kde-plasma-heading: rgb(41 44 48 / 0.75);
+  --color-kde-plasma-frame: #535659;
+  /* a Plasma button in the Button set, and its outline (approx) */
+  --color-kde-plasma-button: #292c30;
+  --color-kde-plasma-button-edge: #53565a;
+
+  /* a QMenu in Breeze's widget style: mix(Window, Base, 0.3), outlined and separated by
+     mix(Window, WindowText, frameContrast 0.2), an item under the pointer the focus colour at 30%
+     ringed by mix(focus, WindowText, 0.15), pressed the focus colour under HighlightedText, and a
+     disabled item's text faded 65% into Window then darkened 10% (breezestyle.cpp
+     drawMenuItemControl, breezehelper.cpp, kcolorscheme.cpp StateEffects) */
+  --color-kde-menu: light-dark(#f4f4f5, #1c1f22);
+  --color-kde-menu-edge: light-dark(#c6c8c9, #4c4e51);
+  --color-kde-menu-text: light-dark(#232629, #fcfcfc);
+  --color-kde-menu-off: light-dark(#a0a1a3, #686a6c);
+  --color-kde-menu-hl: rgb(61 174 233 / 0.3);
+  --color-kde-menu-hl-edge: light-dark(#399acc, #5abaec);
+  --color-kde-menu-on-focus: light-dark(#ffffff, #fcfcfc);
+  /* a radio's well, the Button set's ground */
+  --color-kde-radio: light-dark(#fcfcfc, #292c30);
+
+  /* KWin's Breeze decoration and Breeze's tools area under it: the Header set, and the window's
+     outline, mix(Header, text, frameContrast 0.2), which also rules off the tools area */
+  --color-kde-header: light-dark(#dee0e2, #292c30);
+  --color-kde-header-text: light-dark(#232629, #fcfcfc);
+  --color-kde-header-edge: light-dark(#b9bbbd, #535659);
+
+  /* Konsole's Breeze colour scheme, the same under either: faint for SGR 2, intense for bold */
+  --color-kde-term-bg: #232627;
+  --color-kde-term-text: #fcfcfc;
+  --color-kde-term-faint: #eff0f1;
+  --color-kde-term-intense: #3daee9;
+  --color-kde-term-red: #ed1515;
+  --color-kde-term-green: #11d116;
+  --color-kde-term-yellow: #f67400;
+
+  /* the system tray's pulse while an item needs attention: up a fifth and back in 15% each of
+     Kirigami's veryLongDuration five times over, then a pause (PulseAnimation.qml) */
+  --animate-kde-pulse: kde-pulse 2s ease-in infinite;
+  @keyframes kde-pulse {
+    0%,
+    30%,
+    100% {
+      scale: 1;
+    }
+    15% {
+      scale: 1.2;
+    }
+  }
+
+  /* Fedora's kde-profile names Noto Sans Mono 10 for fixed type; neither ships with the site */
+  --font-kde-mono: "Noto Sans Mono", "JetBrains Mono", ui-monospace, monospace;
+}
+
+@theme inline {
+  /* Noto Sans 10 point with Qt's line of 19 pixels, Fedora's toolbar font at 9, and Kirigami's
+     headings 3 and 4 at 1.15 and 1.1 times the 10 */
+  --text-kde: calc(40 / 3 * var(--u));
+  --text-kde--line-height: calc(19 * var(--u));
+  --text-kde-tool: calc(12 * var(--u));
+  --text-kde-tool--line-height: calc(17 * var(--u));
+  --text-kde-h3: calc(46 / 3 * var(--u));
+  --text-kde-h3--line-height: calc(21 * var(--u));
+  --text-kde-h4: calc(44 / 3 * var(--u));
+  --text-kde-h4--line-height: calc(20 * var(--u));
+  /* the panel clock's time, the largest whole size whose line fits 56% of the clock's 38 pixels
+     (DigitalClock.qml); its date is 12 in 80% of that */
+  --text-kde-clock: calc(15 * var(--u));
+  --text-kde-clock--line-height: calc(21 * var(--u));
+
+  /* a highlighted menu item's corners, the 5 pixel frame radius less half its pen
+     (breezehelper.cpp renderFocusRect) */
+  --radius-kde-item: calc(4.5 * var(--u));
+
+  /* Breeze's large shadows, whose radius blurs as CSS's does (breezeboxshadowrenderer.cpp): the
+     widget style's for a menu (breezeshadowhelper.cpp) and the decoration's for a window
+     (breezedecoration.cpp), its outline drawn by the window */
+  --shadow-kde-menu:
+    0 calc(5 * var(--u)) calc(20 * var(--u)) rgb(0 0 0 / 0.22),
+    0 calc(2 * var(--u)) calc(10 * var(--u)) rgb(0 0 0 / 0.12);
+  --shadow-kde-window:
+    0 calc(12 * var(--u)) calc(48 * var(--u)) rgb(0 0 0 / 0.8),
+    0 calc(6 * var(--u)) calc(24 * var(--u)) rgb(0 0 0 / 0.2);
+  /* KWin's blur behind a translucent frame at its default strength, 15 of 15, which samples 150
+     pixels out, and its 150% saturation (plugins/blur), as CSS blurs it (approx) */
+  --blur-kde: calc(48 * var(--u));
+  /* the Frame line under a plasmoid heading's band */
+  --inset-shadow-kde-heading: inset 0 calc(-1 * var(--u)) var(--color-kde-plasma-frame);
+  /* a Plasma frame's shadow ring, 10 pixels from 20% black to none (dialogs/background.svg
+     shadow-side, approx) */
+  --shadow-kde-plasma: 0 0 calc(10 * var(--u)) rgb(0 0 0 / 0.35);
+}

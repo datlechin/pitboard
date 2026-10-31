@@ -403,6 +403,7 @@
 }
 @import "./adwaita.css";
 @import "./gnome.css";
+@import "./kde.css";
 
 @font-face {
   font-family: "Inter";

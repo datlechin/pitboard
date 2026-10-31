@@ -185,25 +185,65 @@ test("the tray's menu is presence.rs's, in the entries a Linux session saw it dr
   assert.ok(menu.includes("add_account: words::add_account(front, true),"));
   assert.ok(menu.includes('Front::Gnome => "Quit",'));
   assert.deepEqual(trayMenu(moments.after), [
-    [{ command: "Open Pitboard" }],
+    [{ command: "Open Pitboard", does: "open" }],
     [
-      { heading: "Claude Code" },
-      { account: "work (40%)", label: "work", checked: true },
-      { account: "personal (73%)", label: "personal", checked: false },
-      { heading: "Codex" },
-      { account: "main (7%)", label: "main", checked: true },
-      { account: "spare (0%)", label: "spare", checked: false },
+      { heading: "Claude Code", tool: "claude" },
+      { account: "work (40%)", label: "work", tool: "claude", checked: true },
+      { account: "personal (73%)", label: "personal", tool: "claude", checked: false },
+      { heading: "Codex", tool: "codex" },
+      { account: "main (7%)", label: "main", tool: "codex", checked: true },
+      { account: "spare (0%)", label: "spare", tool: "codex", checked: false },
     ],
-    [{ command: "Add Account…" }, { command: "Refresh" }],
-    [{ command: "Preferences" }, { command: "Help" }],
-    [{ command: "Quit" }],
+    [
+      { command: "Add Account…", does: "add-account" },
+      { command: "Refresh", does: "refresh" },
+    ],
+    [
+      { command: "Preferences", does: "preferences" },
+      { command: "Help", does: "help" },
+    ],
+    [{ command: "Quit", does: "quit" }],
   ]);
+  // each command under the id presence.rs gives its item, in the menu's order
+  inOrder(
+    linux("src/presence.rs"),
+    ["open", "add-account", "refresh", "preferences", "help", "quit"].map((id) => `"${id}".into()`),
+  );
   // docs/facts/linux-session.md: what GNOME's AppIndicator extension and Plasma drew of it
   const session = joined(repo("docs/facts/linux-session.md")).replace(/\s+/g, " ");
   assert.ok(
     session.includes(
       "Open Pitboard, each tool's name as a disabled header where there are two, its accounts as radio entries with the one in use checked, then Add Account…, Refresh, Preferences, Help and Quit.",
     ),
+  );
+});
+
+test("the tray's menu heads a tool's accounts with its name only while two tools have accounts", () => {
+  const sections = present("accounts.rs").split("pub(crate) fn sections(")[1];
+  inOrder(sections, [
+    "if providers.len() <= 1 {",
+    "heading: None,",
+    "heading: Some(tool.name().into()),",
+  ]);
+  assert.ok(linux("src/presence.rs").includes("if let Some(heading) = &section.heading {"));
+  const codexGone = {
+    ...moments.after,
+    accounts: moments.after.accounts.filter((a) => a.tool !== "codex"),
+  };
+  assert.deepEqual(trayMenu(codexGone)[1], [
+    { account: "work (40%)", label: "work", tool: "claude", checked: true },
+    { account: "personal (73%)", label: "personal", tool: "claude", checked: false },
+  ]);
+});
+
+test("the tray's menu leaves out a group with nothing in it, as presence.rs does", () => {
+  assert.ok(
+    linux("src/presence.rs").includes("groups.into_iter().filter(|group| !group.is_empty())"),
+  );
+  const none = { ...moments.after, accounts: [] };
+  assert.deepEqual(
+    trayMenu(none).map((group) => group.map((e) => ("does" in e ? e.does : null))),
+    [["open"], ["add-account", "refresh"], ["preferences", "help"], ["quit"]],
   );
 });
 

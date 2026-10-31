@@ -1,0 +1,62 @@
+---
+// Plasma's default panel (plasma-desktop's defaultPanel layout.js) along the desk's bottom edge,
+// 46 pixels thick and floating 8 from the edges while no window touches it (Panel.qml), its
+// applets 8 from its ends and 4 apart. Kickoff shows Plasma's own icon, 22 pixels in its 30: on
+// Fedora it shows the Fedora logo, which fedora-logos licenses for approved uses alone. The pager
+// hides with one virtual desktop. Konsole's task is the active window's, 46 square with its 32
+// pixel icon. The system tray's cells are 30 wide round 22 pixel icons, notifications first,
+// then the slot's status item, Audio Volume at WirePlumber's 40% and Networks wired, then the
+// arrow to the hidden items; the bell shows only while a notification is unread
+// (notifications' main.qml). The clock shows the time over the date (digital-clock's
+// DigitalClock.qml), and Peek at Desktop ends the row. Every piece but the slot's is drawn as the
+// desktop has it and does nothing.
+import Icon from "./Icon.astro";
+
+interface Props {
+  time: string;
+  date: string;
+  // a notification is unread
+  bell?: boolean;
+  // the ids the drawing's full-colour icons take
+  prefix: string;
+}
+const { time, date, bell = false, prefix } = Astro.props;
+const cell = "flex h-38 w-30 items-center justify-center";
+---
+
+<div
+  class="absolute inset-x-8 bottom-8 z-2 flex h-46 items-center gap-4 rounded-u-6 bg-kde-plasma backdrop-blur-kde backdrop-saturate-150 px-8 font-kde text-kde-plasma-text shadow-kde-plasma"
+>
+  <span class="flex size-30 items-center justify-center" aria-hidden="true">
+    <Icon name="places/22/start-here-kde-symbolic" />
+  </span>
+  <span class="flex h-46 flex-1" aria-hidden="true">
+    <span class="relative flex h-46 w-46 items-center justify-center">
+      <span class="absolute inset-x-1 top-0 h-3 bg-kde-focus/90"></span>
+      <span class="absolute inset-x-1 top-3 bottom-0 bg-kde-focus/45"></span>
+      <Icon name="apps/32/utilities-terminal" key={`${prefix}-task`} class="relative size-32" />
+    </span>
+  </span>
+  <span class="flex h-38 items-center">
+    {bell && <span class={cell} aria-hidden="true" data-part="bell">
+      <Icon name="actions/22/notification-active-symbolic" />
+    </span>}
+    <slot />
+    <span class={cell} aria-hidden="true">
+      <Icon name="status/22/audio-volume-medium-symbolic" />
+    </span>
+    <span class={cell} aria-hidden="true">
+      <Icon name="status/22/network-wired-activated-symbolic" />
+    </span>
+    <span class="flex h-38 w-22 items-center justify-center" aria-hidden="true">
+      <Icon name="actions/22/arrow-up-symbolic" />
+    </span>
+  </span>
+  <span class="flex h-38 flex-col justify-center px-4 text-center tabular-nums" aria-hidden="true">
+    <span class="text-kde-clock" data-time>{time}</span>
+    <span class="text-u-12/17" data-date>{date}</span>
+  </span>
+  <span class="flex h-38 w-32 items-center justify-center" aria-hidden="true">
+    <Icon name="places/32/user-desktop-symbolic" />
+  </span>
+</div>
