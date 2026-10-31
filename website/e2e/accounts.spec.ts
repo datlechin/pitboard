@@ -277,12 +277,16 @@ test.describe("on macOS", () => {
   }) => {
     await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
     const { fig, row } = await accounts(page, "macos");
+    // the clock moves only as the test moves it, so a slow browser takes none of the sign-in's time
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
     const sheet = page.locator("#mac-accounts-sign-in");
     const window = fig.locator('[data-part="window"]');
     const start = async () => {
       await fig.locator('[data-does="add"]').first().click();
       await sheet.locator('[role="combobox"]').click();
       await sheet.locator('[role="option"][data-value="desktop"]').click();
+      // the menu blinks the choice, then fades
+      await page.clock.runFor(300);
       await expect(sheet.locator('[role="combobox"] [data-value="desktop"]')).toBeVisible();
       const confirm = sheet.locator('[data-part="confirm"]');
       await expect(confirm).toHaveText("Continue");
@@ -294,6 +298,8 @@ test.describe("on macOS", () => {
         ],
       );
       await confirm.click();
+      // the login in use is saved, then Claude waits to be quit
+      await page.clock.runFor(200);
       await expect(sheet.locator('[data-does="cancel"]')).toHaveText("Later");
       await expect(sheet.locator('[data-does="put-back"]')).toHaveText("Switch Back to home");
     };

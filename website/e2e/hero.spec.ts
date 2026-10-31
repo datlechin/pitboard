@@ -136,6 +136,8 @@ test.describe("the opening demo", () => {
     await page.clock.install();
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("data-demo", "move");
+    // the clock moves only as the test moves it, so a slow browser's press still comes before the pick
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 300);
     await page.locator("#hero-mac").click({ position: { x: 60, y: 420 } });
     await expect(page.locator("html")).not.toHaveAttribute("data-demo");
     // the rest of the demo's time, which would have reached its pick
