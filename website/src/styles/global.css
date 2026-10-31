@@ -402,6 +402,7 @@
   --inset-shadow-win-strong: inset 0 0 0 calc(1 * var(--u)) var(--color-win-strong);
 }
 @import "./adwaita.css";
+@import "./kde.css";
 
 @font-face {
   font-family: "Inter";

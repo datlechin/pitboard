@@ -7,12 +7,15 @@ const icons = new URL("../assets/icons/", import.meta.url);
 const themes = readdirSync(icons, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name);
+// the files GTK's figures draw; Plasma's Breeze icons sit by context and size under breeze/
 const files = Object.fromEntries(
   themes.flatMap((theme) =>
-    readdirSync(new URL(`${theme}/`, icons)).map((f) => [
-      `/assets/icons/${theme}/${f}`,
-      readFileSync(new URL(`${theme}/${f}`, icons), "utf8"),
-    ]),
+    readdirSync(new URL(`${theme}/`, icons), { withFileTypes: true })
+      .filter((f) => f.isFile())
+      .map((f) => [
+        `/assets/icons/${theme}/${f.name}`,
+        readFileSync(new URL(`${theme}/${f.name}`, icons), "utf8"),
+      ]),
   ),
 );
 const read = (path: string) => files[`/assets/icons/${path}`];

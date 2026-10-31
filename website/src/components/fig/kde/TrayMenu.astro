@@ -1,0 +1,136 @@
+---
+// The status item's menu as Plasma draws it. dbusmenuimporter.cpp makes it a QMenu, each radio
+// entry a checkable action in an exclusive group, so every account has a radio and the one in use
+// is filled; a tool's name is a disabled entry, given only while two tools have accounts. Breeze's
+// widget style draws it in the app's colours (breezestyle.cpp drawMenuItemControl and
+// menuItemSizeFromContents, breezehelper.cpp renderRadioButton, breezemetrics.h): 4 pixels round
+// the items, each 29 tall (the 20 pixel radio, one more, and 4 above and below), the radio's box
+// 4 in and the text 35 in for want of icons, separators 5 tall, the menu's corners 5; its width is
+// the widest text's (approx). It opens above the item, its left edge on the item's
+// (systemtray.cpp showSystemTrayMenuWayland). With `live`, the moment after the switch is the one
+// the live code keeps to the state, and a template draws an account a visitor adds.
+import { trayMenu, type TrayEntry } from "../../../data/linux.ts";
+import { account, moments, type Moment } from "../../../data/world.ts";
+
+interface Props {
+  prefix: string;
+  // the item that opens it, which names it
+  owner: string;
+  demo?: boolean;
+  live?: boolean;
+  class?: string;
+}
+const { prefix, owner, demo = false, live = false, class: extra } = Astro.props;
+const shown: Moment[] = demo ? ["before", "after"] : ["after"];
+const item = "relative flex h-29 items-center rounded-kde-item pr-27 pl-35";
+// an item under the pointer or with keyboard focus, and one pressed, which turns the text white;
+// a disabled one takes neither
+const works =
+  "outline-none focus-visible:bg-kde-menu-hl focus-visible:inset-ring-1 focus-visible:inset-ring-kde-menu-hl-edge live:hover:bg-kde-menu-hl live:hover:inset-ring-1 live:hover:inset-ring-kde-menu-hl-edge live:active:bg-kde-focus live:active:text-kde-menu-on-focus aria-disabled:text-kde-menu-off live:aria-disabled:hover:bg-transparent live:aria-disabled:hover:inset-ring-0";
+// the row the demo's pointer chooses
+const picked = (e: TrayEntry, moment: Moment) =>
+  demo && moment === "before" && "account" in e && e.label === "work";
+// the radio's well, ringed in the separator colour, or in the focus colour while it is chosen or
+// the item is under the pointer, the chosen one under the focus colour at 30% and its dot in text
+const well =
+  "absolute inset-2 rounded-circle bg-kde-radio inset-ring-1 inset-ring-kde-menu-edge group-aria-checked/item:bg-linear-to-b group-aria-checked/item:from-kde-menu-hl group-aria-checked/item:to-kde-menu-hl group-aria-checked/item:inset-ring-kde-focus live:group-hover/item:inset-ring-kde-focus";
+const dot =
+  "absolute top-7 left-7 hidden size-6 rounded-circle bg-kde-menu-text group-aria-checked/item:block";
+---
+
+<div
+  class:list={[
+    "w-max rounded-u-5 bg-kde-menu p-4 font-kde text-kde whitespace-nowrap text-kde-menu-text shadow-kde-menu inset-ring-1 inset-ring-kde-menu-edge transition-opacity duration-200",
+    { "demo-shut:opacity-0": demo },
+    { "outline-none live:cursor-default": live },
+    extra,
+  ]}
+  id={`${prefix}-menu`}
+  role="menu"
+  aria-labelledby={owner}
+  tabindex={live ? "-1" : undefined}
+>
+  {shown.map((moment) => <div
+    class:list={[
+      { "hidden demo-before:block": demo && moment === "before" },
+      { "demo-before:hidden": demo && moment === "after" },
+    ]}
+    data-moment={live ? moment : undefined}
+  >
+    {trayMenu(moments[moment]).map((group, i) => {
+      const own = live && moment === "after";
+      const heading = group.find((e) => "heading" in e);
+      const headed =
+        heading && "heading" in heading ? `${prefix}-${moment}-${heading.tool}` : undefined;
+      return (
+        <>
+          {i > 0 && <div class="mx-4 my-2 h-1 bg-kde-menu-edge" role="separator" />}
+          <div
+            role={headed ? "group" : "none"}
+            aria-labelledby={headed}
+            data-tool={own && heading && "tool" in heading ? heading.tool : undefined}
+          >
+            {group.map((e) =>
+              "heading" in e ? (
+                <div
+                  class:list={[item, "text-kde-menu-off"]}
+                  id={headed}
+                  role="menuitem"
+                  aria-disabled="true"
+                >
+                  {e.heading}
+                </div>
+              ) : "account" in e ? (
+                <div
+                  class:list={[
+                    item,
+                    "group/item",
+                    {
+                      "bg-kde-menu-hl inset-ring-1 inset-ring-kde-menu-hl-edge demo-moving:bg-transparent demo-moving:inset-ring-0 demo-pick:bg-kde-focus demo-pick:text-kde-menu-on-focus":
+                        picked(e, moment),
+                    },
+                    { [works]: own },
+                  ]}
+                  role="menuitemradio"
+                  aria-checked={e.checked ? "true" : "false"}
+                  tabindex={own ? "-1" : undefined}
+                  data-account={own ? account(e.label, e.tool).id : undefined}
+                >
+                  <span class="absolute top-1/2 left-4 -mt-10 size-20" aria-hidden="true">
+                    <span class={well}></span>
+                    <span class={dot}></span>
+                  </span>
+                  <span data-part="title">{e.account}</span>
+                </div>
+              ) : (
+                <div
+                  class:list={[item, { [works]: own }]}
+                  role="menuitem"
+                  tabindex={own ? "-1" : undefined}
+                  data-does={own ? e.does : undefined}
+                >
+                  {e.command}
+                </div>
+              ),
+            )}
+          </div>
+        </>
+      );
+    })}
+  </div>)}
+  {/* an account a visitor adds, in its tool's group */}
+  {live && <template data-part="account">
+    <div
+      class:list={[item, "group/item", works]}
+      role="menuitemradio"
+      aria-checked="false"
+      tabindex="-1"
+    >
+      <span class="absolute top-1/2 left-4 -mt-10 size-20" aria-hidden="true">
+        <span class={well}></span>
+        <span class={dot}></span>
+      </span>
+      <span data-part="title"></span>
+    </div>
+  </template>}
+</div>

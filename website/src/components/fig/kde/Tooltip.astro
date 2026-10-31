@@ -1,0 +1,22 @@
+---
+// Plasma's tooltip as DefaultToolTip.qml lays it out in the breeze-dark style: its main text a
+// Kirigami heading of level 3, its sub text under it at 75%, in the lines the item gives and
+// wrapped at 20 grid units, inside 8 pixels and the frame's 4 (approx), the frame as Plasma's
+// translucent tooltip.svg draws it. The status item gives no icon of its own, so none shows.
+import type { HTMLAttributes } from "astro/types";
+
+type Props = HTMLAttributes<"span"> & { mainText: string; subText: string };
+const { mainText, subText, class: extra, ...rest } = Astro.props;
+---
+
+<span
+  class:list={[
+    "flex w-max flex-col rounded-u-6 bg-kde-plasma backdrop-blur-kde backdrop-saturate-150 p-12 font-kde text-kde text-kde-plasma-text shadow-kde-plasma",
+    extra,
+  ]}
+  role="tooltip"
+  {...rest}
+>
+  <span class="text-kde-h3" data-part="title">{mainText}</span>
+  <span class="max-w-360 whitespace-pre-line opacity-75" data-part="text">{subText}</span>
+</span>
