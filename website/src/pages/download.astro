@@ -4,11 +4,12 @@ import CommandBlock from "../components/CommandBlock.astro";
 import CommandBox from "../components/CommandBox.astro";
 import Disclosure from "../components/Disclosure.astro";
 import DownloadButton from "../components/DownloadButton.astro";
+import PlatformTabs from "../components/PlatformTabs.astro";
 import { commands, linuxWays, windowsScoop } from "../data/commands.ts";
 import { DOCS, REPO } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
 import { appZip, linuxApp, windowsMsi, windowsZip, type Release } from "../lib/github.ts";
-import { onOf, platformNames, type Platform } from "../lib/platform.ts";
+import { onOf, platformNames } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 
 const { downloads, windowsSigned } = await siteData();
@@ -26,20 +27,13 @@ const distros = [
 const unsigned = windowsSigned ? "" : " Pitboard for Windows is not signed yet.";
 const notes = (r: Release) => `/changelog#v${r.version}`;
 const files = (r: Release) => `${REPO}/releases/tag/${r.tag}`;
-// the other systems, as links that show each
-const others = (p: Platform) =>
-  (["macos", "windows", "linux"] as const)
-    .filter((o) => o !== p)
-    .map((o) => `<a href="#${o}">${platformNames[o]}</a>`)
-    .join(" and ");
-const part = "mt-10 max-w-[40rem] no-js:mt-(--block-space)";
+const part = "mt-8 max-w-[40rem] no-js:mt-(--block-space)";
 const panelHead = "sr-only font-mono text-h2 text-strong no-js:not-sr-only max-sm:text-h2-sm";
 const first = "no-js:mt-6";
 const facts = "mt-3 flex flex-wrap gap-x-5 gap-y-1 text-ui text-muted";
 const after = "mt-4 max-w-measure text-pretty js:not-data-shown:hidden";
 const more = "mt-10 border-t";
 const lead = "text-note text-fg [&:not(:first-child)]:mt-6";
-const also = "mt-8 text-ui text-muted";
 const tab =
   "cursor-pointer rounded-xs px-2.5 py-0.75 font-mono text-label font-medium text-fg aria-selected:bg-ink aria-selected:text-on-ink focus-visible:outline-offset-0 max-2xs:px-1.5";
 const jsonLd = [application(Astro.site!, downloads)];
@@ -56,8 +50,20 @@ const jsonLd = [application(Astro.site!, downloads)];
   <main id="main">
     <div class="wrap pt-14 max-sm:pt-8">
       <h1 class="font-mono text-h1 text-strong max-sm:text-h1-sm">Download Pitboard</h1>
+      <PlatformTabs
+        class="mt-8"
+        label="Download Pitboard for"
+        tabId={(p) => `tab-${p}`}
+        panelId={(p) => p}
+      />
 
-      <section class={part} id="macos" data-on={onOf(["macos"])} aria-labelledby="macos-title">
+      <section
+        class={part}
+        id="macos"
+        data-on={onOf(["macos"])}
+        role="tabpanel"
+        aria-labelledby="tab-macos"
+      >
         <h2 class={panelHead} id="macos-title">{platformNames.macos}</h2>
         <DownloadButton class={first} platform="macos" href={zip.url} after />
         <div class={facts}>
@@ -78,14 +84,14 @@ const jsonLd = [application(Astro.site!, downloads)];
           <CommandBox command={commands.brewCli} />
           <p class={lead}><a href={files(mac)}>Checksums and all files</a></p>
         </Disclosure>
-        <p class={also} set:html={`Pitboard also runs on ${others("macos")}.`} />
       </section>
 
       <section
         class={part}
         id="windows"
         data-on={onOf(["windows"])}
-        aria-labelledby="windows-title"
+        role="tabpanel"
+        aria-labelledby="tab-windows"
       >
         <h2 class={panelHead} id="windows-title">{platformNames.windows}</h2>
         <DownloadButton
@@ -121,10 +127,15 @@ const jsonLd = [application(Astro.site!, downloads)];
           {scoop && <CommandBlock commands={scoop} shell="pwsh" />}
           <p class={lead}><a href={files(windows)}>Checksums and all files</a></p>
         </Disclosure>
-        <p class={also} set:html={`Pitboard also runs on ${others("windows")}.`} />
       </section>
 
-      <section class={part} id="linux" data-on={onOf(["linux"])} aria-labelledby="linux-title">
+      <section
+        class={part}
+        id="linux"
+        data-on={onOf(["linux"])}
+        role="tabpanel"
+        aria-labelledby="tab-linux"
+      >
         <h2 class={panelHead} id="linux-title">{platformNames.linux}</h2>
         <div
           class:list={[
@@ -190,7 +201,6 @@ const jsonLd = [application(Astro.site!, downloads)];
           <CommandBox command={commands.brewCli} />
           <p class={lead}><a href={files(linux)}>Checksums and all files</a></p>
         </Disclosure>
-        <p class={also} set:html={`Pitboard also runs on ${others("linux")}.`} />
       </section>
     </div>
   </main>

@@ -50,12 +50,15 @@ for (const platform of platforms) {
   });
 }
 
-test("the row under each system shows another, and a link to its options opens them", async ({
+test("the platform tabs show another system, and a link to its options opens them", async ({
   page,
 }) => {
   await choose(page.context(), { platform: "macos" });
   await page.goto("/download");
-  await page.locator("#macos").getByRole("link", { name: "Linux" }).click();
+  await page
+    .getByRole("tablist", { name: "Download Pitboard for" })
+    .getByRole("tab", { name: "Linux" })
+    .click();
   await expect(page.locator("#linux")).toBeVisible();
   await expect(page.locator("#macos")).toBeHidden();
   await page.goto("/download#windows-more");

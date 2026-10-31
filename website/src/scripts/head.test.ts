@@ -23,11 +23,13 @@ interface Visit {
   hint?: string;
   // null when the browser refuses storage
   stored?: Record<string, string> | null;
+  // this visit's, which keeps the platform chosen
+  session?: Record<string, string> | null;
   hash?: string;
 }
 
 // runs head.js against a stand-in page and returns the attributes it set on the root
-function visit({ ua, touch = 0, hint, stored = {}, hash = "" }: Visit) {
+function visit({ ua, touch = 0, hint, stored = {}, session = {}, hash = "" }: Visit) {
   const attrs: Record<string, string> = {};
   runInNewContext(script, {
     document: {
@@ -47,6 +49,12 @@ function visit({ ua, touch = 0, hint, stored = {}, hash = "" }: Visit) {
       getItem: (k: string) => {
         if (stored === null) throw new Error("storage is blocked");
         return stored[k] ?? null;
+      },
+    },
+    sessionStorage: {
+      getItem: (k: string) => {
+        if (session === null) throw new Error("storage is blocked");
+        return session[k] ?? null;
       },
     },
     matchMedia: () => ({ matches: true }),
@@ -73,22 +81,28 @@ test("shows a phone or a tablet macOS, and marks it as one", () => {
   assert.equal(visit({ ua: LINUX })["data-os"], undefined);
 });
 
-test("keeps the platform a reader chose, and detects one past a value it does not know", () => {
-  assert.equal(visit({ ua: MAC, stored: { platform: "windows" } })["data-platform"], "windows");
-  assert.equal(visit({ ua: WINDOWS, stored: { platform: "linux" } })["data-platform"], "linux");
-  assert.equal(visit({ ua: WINDOWS, stored: { platform: "beos" } })["data-platform"], "windows");
-  assert.equal(visit({ ua: LINUX, stored: null })["data-platform"], "linux");
+test("keeps the platform a reader chose for the visit, and detects one past a value it does not know", () => {
+  assert.equal(visit({ ua: MAC, session: { platform: "windows" } })["data-platform"], "windows");
+  assert.equal(visit({ ua: WINDOWS, session: { platform: "linux" } })["data-platform"], "linux");
+  assert.equal(visit({ ua: WINDOWS, session: { platform: "beos" } })["data-platform"], "windows");
+  assert.equal(visit({ ua: LINUX, session: null })["data-platform"], "linux");
+});
+
+// A Mac reader who once looked at the Linux tab still opens on macOS the next time they come.
+test("shows the reader's own platform on a new visit, whatever an earlier one chose", () => {
+  assert.equal(visit({ ua: MAC, stored: { platform: "linux" } })["data-platform"], "macos");
+  assert.equal(visit({ ua: WINDOWS, stored: { platform: "macos" } })["data-platform"], "windows");
 });
 
 test("opens the app on every system, and Linux's command line on ChromeOS until a surface is chosen", () => {
   assert.equal(visit({ ua: LINUX })["data-surface"], "app");
-  assert.equal(visit({ ua: MAC, stored: { platform: "linux" } })["data-surface"], "app");
+  assert.equal(visit({ ua: MAC, session: { platform: "linux" } })["data-surface"], "app");
   assert.equal(visit({ ua: WINDOWS })["data-surface"], "app");
   assert.equal(visit({ ua: MAC, stored: { tab: "cli" } })["data-surface"], "cli");
   assert.equal(visit({ ua: CHROMEOS })["data-surface"], "cli");
   assert.equal(visit({ ua: "Mozilla/5.0", hint: "Chrome OS" })["data-surface"], "cli");
   assert.equal(visit({ ua: CHROMEOS, stored: { tab: "app" } })["data-surface"], "app");
-  assert.equal(visit({ ua: CHROMEOS, stored: { platform: "macos" } })["data-surface"], "app");
+  assert.equal(visit({ ua: CHROMEOS, session: { platform: "macos" } })["data-surface"], "app");
 });
 
 test("shows GNOME until the reader chooses KDE Plasma, and where storage is blocked", () => {

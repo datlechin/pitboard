@@ -62,7 +62,7 @@ test.describe("the desktop control", () => {
 
   test("a store that refuses leaves GNOME, and the press still redraws", async ({ page }) => {
     await page.context().addInitScript(() => {
-      localStorage.setItem("platform", "linux");
+      sessionStorage.setItem("platform", "linux");
       const refuse = () => {
         throw new DOMException("refused", "SecurityError");
       };
