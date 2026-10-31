@@ -11,7 +11,7 @@ pitboard doctor
 
 Do not switch accounts while any check shows `✗`, broken. [`doctor`](/reference/maintenance-commands#doctor) lists every check and mark.
 
-`pitboard log` lists the last changes and how each ended. In the app, **Diagnostics** makes the same checks, and **Activity** shows the log. On macOS, both are in the **Window** menu. On Windows, they are in **Settings** > **Troubleshoot**.
+`pitboard log` lists the last changes and how each ended. In the app, **Diagnostics** makes the same checks, and **Activity** shows the log. On macOS, both are in the **Window** menu. On Windows, they are in **Settings** > **Troubleshoot**. On Linux, they are in the Pitboard window's main menu.
 
 [Error and warning codes](/reference/errors) gives the cause and fix of each code a message names. These pages cover the rest:
 
@@ -69,7 +69,7 @@ Open a [GitHub issue](https://github.com/datlechin/pitboard/issues/new/choose) w
 - What you ran, what it printed and what you expected.
 - The output of `pitboard doctor --json`, not plain `pitboard doctor`: it hides email addresses, account identifiers and your home.
 - `pitboard --version`, and `claude --version` or `codex --version`.
-- How you installed Pitboard, and your macOS or Linux version. On Windows, give the build and the system type, x64 or ARM64, which **Settings** > **System** > **About** shows.
+- How you installed Pitboard, and your macOS version. On Linux, give the distribution, its version and the desktop, such as Fedora 44 with GNOME. On Windows, give the build and the system type, x64 or ARM64, which **Settings** > **System** > **About** shows.
 - The last lines of `pitboard log`, if they help. A `reclaim` line can name an account identifier.
 
 For a security problem, follow [Report a vulnerability](https://github.com/datlechin/pitboard/blob/main/SECURITY.md#report-a-vulnerability).
