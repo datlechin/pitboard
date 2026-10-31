@@ -1,14 +1,20 @@
 ---
-// With `after`, a click shows the step its platform's [data-after] note gives next.
+// With `after`, a click shows the step its platform's [data-after] note gives next. With `arm`,
+// site.ts gives an Arm PC that file instead.
 interface Props {
-  platform: "macos" | "windows";
+  platform: "macos" | "windows" | "linux";
   href: string;
+  arm?: string;
   beta?: boolean;
   after?: boolean;
   class?: string;
 }
-const { platform, href, beta = false, after = false, class: extra } = Astro.props;
-const system = { macos: "Mac", windows: "Windows" }[platform];
+const { platform, href, arm, beta = false, after = false, class: extra } = Astro.props;
+const text = {
+  macos: "Download for Mac",
+  windows: "Download for Windows",
+  linux: "Install on Linux",
+}[platform];
 ---
 
 <a
@@ -18,5 +24,6 @@ const system = { macos: "Mac", windows: "Windows" }[platform];
   ]}
   href={href}
   data-download={after ? platform : undefined}
-  >{`Download for ${system}${beta ? " (beta)" : ""}`}</a
+  data-arm={arm}
+  >{`${text}${beta ? " (beta)" : ""}`}</a
 >

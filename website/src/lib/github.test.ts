@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  fileRows,
-  formatSize,
+  linuxApp,
   linuxRelease,
   parseSums,
   readPublished,
@@ -299,205 +298,6 @@ test("gives no star count rather than a guessed one", async () => {
   assert.equal(await readStars({ fetch: odd.f }), null);
 });
 
-test("sizes read as /download prints them", () => {
-  const cases: [number, string][] = [
-    [624, "624 B"],
-    [874, "874 B"],
-    [7818, "7.8 KB"],
-    [98355, "98 KB"],
-    [98541, "99 KB"],
-    [196025, "196 KB"],
-    [1741831, "1.7 MB"],
-    [2027528, "2.0 MB"],
-    [13801164, "13.8 MB"],
-  ];
-  for (const [bytes, text] of cases) assert.equal(formatSize(bytes), text);
-});
-
-test("lists the release's files in order and fails on one it does not know", async () => {
-  const r = await latest();
-  const rows = fileRows(r);
-  assert.deepEqual(
-    rows.map((row) => row.asset.name),
-    [
-      "Pitboard-v0.15.2-macos.zip",
-      "pitboard-v0.15.2-aarch64-apple-darwin.tar.gz",
-      "pitboard-v0.15.2-x86_64-apple-darwin.tar.gz",
-      "pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz",
-      "pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz",
-      "install.sh",
-      "SHA256SUMS",
-      "appcast.xml",
-    ],
-  );
-  assert.equal(rows[0].bom?.name, "Pitboard-v0.15.2-macos.zip.cdx.json");
-  assert.equal(rows[5].bom, null);
-  const more: Release = {
-    ...r,
-    assets: [
-      ...r.assets,
-      { name: "pitboard-v0.15.2-riscv64.tar.gz", size: 1, sha256: null, url: "" },
-    ],
-  };
-  assert.throws(() => fileRows(more), /does not describe/);
-});
-
-test("lists a beta's files in order, each with the platforms it serves", async () => {
-  const rows = fileRows(await beta());
-  assert.deepEqual(
-    rows.map((row) => [row.asset.name, row.platforms]),
-    [
-      ["Pitboard-v1.0.0-beta.1-macos.zip", ["macos"]],
-      ["Pitboard-v1.0.0-beta.1-windows-x64.msi", ["windows"]],
-      ["Pitboard-v1.0.0-beta.1-windows-arm64.msi", ["windows"]],
-      ["pitboard-v1.0.0-beta.1-aarch64-apple-darwin.tar.gz", ["macos"]],
-      ["pitboard-v1.0.0-beta.1-x86_64-apple-darwin.tar.gz", ["macos"]],
-      ["pitboard-v1.0.0-beta.1-x86_64-unknown-linux-musl.tar.gz", ["linux"]],
-      ["pitboard-v1.0.0-beta.1-aarch64-unknown-linux-musl.tar.gz", ["linux"]],
-      ["pitboard-v1.0.0-beta.1-x86_64-pc-windows-msvc.zip", ["windows"]],
-      ["pitboard-v1.0.0-beta.1-aarch64-pc-windows-msvc.zip", ["windows"]],
-      ["install.sh", ["macos", "linux"]],
-      ["SHA256SUMS", ["macos", "windows", "linux"]],
-    ],
-  );
-  assert.deepEqual(
-    rows
-      .filter((row) => row.platforms.includes("windows") && row.bom)
-      .map((row) => [row.forHtml, row.bom?.name]),
-    [
-      ["The app, Windows on x64", "Pitboard-v1.0.0-beta.1-windows-x64.msi.cdx.json"],
-      ["The app, Windows on ARM64", "Pitboard-v1.0.0-beta.1-windows-arm64.msi.cdx.json"],
-      [
-        "Command line, Windows on x64",
-        "pitboard-v1.0.0-beta.1-x86_64-pc-windows-msvc.zip.cdx.json",
-      ],
-      [
-        "Command line, Windows on ARM64",
-        "pitboard-v1.0.0-beta.1-aarch64-pc-windows-msvc.zip.cdx.json",
-      ],
-    ],
-  );
-});
-
-test("describes every Linux package and its bill of materials, and SHA256SUMS names them", async () => {
-  const v = "1.0.0-beta.8";
-  const packages = [
-    `pitboard-app-v${v}-amd64.deb`,
-    `pitboard-app-v${v}-arm64.deb`,
-    `pitboard-app-v${v}-x86_64.rpm`,
-    `pitboard-app-v${v}-aarch64.rpm`,
-    `pitboard-v${v}-amd64.deb`,
-    `pitboard-v${v}-arm64.deb`,
-    `pitboard-v${v}-x86_64.rpm`,
-    `pitboard-v${v}-aarch64.rpm`,
-  ];
-  const keyring = `pitboard-archive-keyring-v${v}-all.deb`;
-  const widget = [
-    `pitboard-plasma-widget-v${v}-all.deb`,
-    `pitboard-plasma-widget-v${v}-noarch.rpm`,
-  ];
-  const release = made(v, [
-    `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
-    ...packages,
-    ...packages.map((name) => `${name}.cdx.json`),
-    ...widget,
-    keyring,
-    "install.sh",
-    "SHA256SUMS",
-  ]);
-  const rows = fileRows(release);
-  assert.deepEqual(
-    rows.map((row) => [row.asset.name, row.forHtml, row.bom?.name ?? null, row.platforms]),
-    [
-      [
-        `pitboard-app-v${v}-amd64.deb`,
-        "The app, a Debian package for x86_64",
-        `pitboard-app-v${v}-amd64.deb.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-app-v${v}-arm64.deb`,
-        "The app, a Debian package for aarch64",
-        `pitboard-app-v${v}-arm64.deb.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-app-v${v}-x86_64.rpm`,
-        "The app, an RPM package for x86_64",
-        `pitboard-app-v${v}-x86_64.rpm.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-app-v${v}-aarch64.rpm`,
-        "The app, an RPM package for aarch64",
-        `pitboard-app-v${v}-aarch64.rpm.cdx.json`,
-        ["linux"],
-      ],
-      [widget[0], "The Plasma widget, a Debian package", null, ["linux"]],
-      [widget[1], "The Plasma widget, an RPM package", null, ["linux"]],
-      [
-        `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
-        "Command line, Linux on x86_64",
-        null,
-        ["linux"],
-      ],
-      [
-        `pitboard-v${v}-amd64.deb`,
-        "Command line, a Debian package for x86_64",
-        `pitboard-v${v}-amd64.deb.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-v${v}-arm64.deb`,
-        "Command line, a Debian package for aarch64",
-        `pitboard-v${v}-arm64.deb.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-v${v}-x86_64.rpm`,
-        "Command line, an RPM package for x86_64",
-        `pitboard-v${v}-x86_64.rpm.cdx.json`,
-        ["linux"],
-      ],
-      [
-        `pitboard-v${v}-aarch64.rpm`,
-        "Command line, an RPM package for aarch64",
-        `pitboard-v${v}-aarch64.rpm.cdx.json`,
-        ["linux"],
-      ],
-      [keyring, "The repository's key, a Debian package", null, ["linux"]],
-      ["install.sh", "The install script", null, ["macos", "linux"]],
-      [
-        "SHA256SUMS",
-        "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>",
-        null,
-        ["macos", "windows", "linux"],
-      ],
-    ],
-  );
-  const without = fileRows(made(v, ["install.sh", "SHA256SUMS"]));
-  assert.equal(
-    without.at(-1)?.forHtml,
-    "Checksums of the apps, the command line archives and <code>install.sh</code>",
-  );
-  for (const name of [`pitboard-v${v}-riscv64.deb`, `pitboard-plasma-widget-v${v}-amd64.deb`]) {
-    assert.throws(() => fileRows(made(v, [name, "SHA256SUMS"])), /does not describe/);
-  }
-});
-
-test("gives each update feed to its own platform", async () => {
-  const r = await latest();
-  const feed = { name: "appcast-windows.xml", size: 1, sha256: null, url: "" };
-  const rows = fileRows({ ...r, assets: [...r.assets, feed] });
-  assert.deepEqual(
-    rows.slice(-2).map((row) => [row.asset.name, row.forHtml, row.platforms, row.bom]),
-    [
-      ["appcast.xml", "The feed the app updates from", ["macos"], null],
-      ["appcast-windows.xml", "The feed the Windows app updates from", ["windows"], null],
-    ],
-  );
-});
-
 test("takes Windows files from the latest release once it has both installers, and until then from the newest published beta", async () => {
   const r = await latest();
   const b = await beta();
@@ -529,7 +329,7 @@ test("takes Linux files from the latest release once it has the app's packages f
     );
 });
 
-test("reads every recorded beta, and from 1.0.0-beta.8 takes the Windows and Linux files and describes each", async () => {
+test("reads every recorded beta, and from 1.0.0-beta.8 takes the Windows and Linux files and finds the app's packages", async () => {
   const recorded = new Map(
     readdirSync(new URL("../data/fixtures/", import.meta.url))
       .map((name) => /^release-v(.+)\.json$/.exec(name)?.[1])
@@ -551,13 +351,15 @@ test("reads every recorded beta, and from 1.0.0-beta.8 takes the Windows and Lin
     assert.equal(choose(await latest(), betas).version, "1.0.0-beta.8");
   const newest = published.get("1.0.0-beta.8")!;
   assert.deepEqual(
-    fileRows(newest)
-      .map((row) => row.asset.name)
-      .sort(),
-    newest.assets
-      .map((a) => a.name)
-      .filter((name) => !name.endsWith(".cdx.json"))
-      .sort(),
+    (["amd64.deb", "arm64.deb", "x86_64.rpm", "aarch64.rpm"] as const).map(
+      (ending) => linuxApp(newest, ending).name,
+    ),
+    [
+      "pitboard-app-v1.0.0-beta.8-amd64.deb",
+      "pitboard-app-v1.0.0-beta.8-arm64.deb",
+      "pitboard-app-v1.0.0-beta.8-x86_64.rpm",
+      "pitboard-app-v1.0.0-beta.8-aarch64.rpm",
+    ],
   );
 });
 

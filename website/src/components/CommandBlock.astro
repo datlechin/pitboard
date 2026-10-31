@@ -1,0 +1,42 @@
+---
+// Commands run one after another, each line shown as it is copied, and one Copy for them all.
+import type { Command } from "../data/commands.ts";
+import { plainText } from "../lib/changelog.ts";
+
+interface Props {
+  commands: Command[];
+  shell?: "sh" | "pwsh";
+  class?: string;
+}
+const { commands, shell = "sh", class: extra } = Astro.props;
+for (const command of commands) {
+  if (plainText(command.html) !== command.copy) {
+    throw new Error(`the command shown is not the one copied: ${command.copy}`);
+  }
+}
+const text = "font-mono text-control font-medium max-sm:text-ui/5.5 max-xs:text-label/5.5";
+---
+
+<div class:list={["flex min-h-12 max-w-[40em] items-stretch rounded-sm bg-sunken", extra]}>
+  <code
+    class:list={[
+      "grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2.25 gap-y-1.5 py-3 pr-2.5 pl-3.5 whitespace-normal text-strong [font-variant-ligatures:normal] wrap-anywhere",
+      text,
+    ]}
+    >{commands.map((command) => (
+      <>
+        <span class="text-muted select-none" aria-hidden="true">
+          {shell === "pwsh" ? "PS>" : "$"}
+        </span>
+        <span set:html={command.html} />
+      </>
+    ))}</code
+  ><button
+    class="min-w-16.5 flex-none cursor-pointer rounded-r-sm border-l border-grid px-3.5 font-mono text-label font-medium text-strong hover:bg-ink/7 focus-visible:-outline-offset-2 no-js:hidden max-sm:min-w-17 max-sm:px-3 max-xs:min-w-14.5 max-xs:px-2.5"
+    type="button"
+    data-copy={commands.map((c) => c.copy).join("\n")}
+    aria-label="Copy the commands"
+  >
+    Copy
+  </button>
+</div>

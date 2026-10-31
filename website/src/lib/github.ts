@@ -1,6 +1,5 @@
 import { REPO, SLUG } from "../data/site.ts";
 import { compareVersions } from "./changelog.ts";
-import type { Platform } from "./platform.ts";
 
 const API = `https://api.github.com/repos/${SLUG}`;
 
@@ -254,90 +253,9 @@ export async function readStars(o: Access & { offline?: boolean }) {
   }
 }
 
-// 1 MB is 1,000,000 bytes, as GitHub and Finder count.
-export function formatSize(bytes: number): string {
-  if (bytes < 1000) return `${bytes} B`;
-  if (bytes < 10_000) return `${(bytes / 1000).toFixed(1)} KB`;
-  if (bytes < 1_000_000) return `${Math.round(bytes / 1000)} KB`;
-  return `${(bytes / 1_000_000).toFixed(1)} MB`;
-}
-
-export interface FileRow {
-  asset: Asset;
-  forHtml: string;
-  bom: Asset | null;
-  platforms: Platform[];
-}
-
-// Each Linux package's file name ends in its machine and format.
-const LINUX_PACKAGES = [
-  ["amd64.deb", "a Debian package for x86_64"],
-  ["arm64.deb", "a Debian package for aarch64"],
-  ["x86_64.rpm", "an RPM package for x86_64"],
-  ["aarch64.rpm", "an RPM package for aarch64"],
-] as const;
-
-// A file the release gains fails the build until it is described here.
-export function fileRows(release: Release): FileRow[] {
-  const v = release.version;
-  const packaged = release.assets.some((a) => /\.(deb|rpm)$/.test(a.name));
-  const known: [string, string, Platform[]][] = [
-    [`Pitboard-v${v}-macos.zip`, "The app, for Apple silicon and Intel", ["macos"]],
-    [`Pitboard-v${v}-windows-x64.msi`, "The app, Windows on x64", ["windows"]],
-    [`Pitboard-v${v}-windows-arm64.msi`, "The app, Windows on ARM64", ["windows"]],
-    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
-      `pitboard-app-v${v}-${file}`,
-      `The app, ${what}`,
-      ["linux"],
-    ]),
-    [`pitboard-plasma-widget-v${v}-all.deb`, "The Plasma widget, a Debian package", ["linux"]],
-    [`pitboard-plasma-widget-v${v}-noarch.rpm`, "The Plasma widget, an RPM package", ["linux"]],
-    [
-      `pitboard-v${v}-aarch64-apple-darwin.tar.gz`,
-      "Command line, macOS on Apple silicon",
-      ["macos"],
-    ],
-    [`pitboard-v${v}-x86_64-apple-darwin.tar.gz`, "Command line, macOS on Intel", ["macos"]],
-    [`pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`, "Command line, Linux on x86_64", ["linux"]],
-    [
-      `pitboard-v${v}-aarch64-unknown-linux-musl.tar.gz`,
-      "Command line, Linux on aarch64",
-      ["linux"],
-    ],
-    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
-      `pitboard-v${v}-${file}`,
-      `Command line, ${what}`,
-      ["linux"],
-    ]),
-    [`pitboard-archive-keyring-v${v}-all.deb`, "The repository's key, a Debian package", ["linux"]],
-    [`pitboard-v${v}-x86_64-pc-windows-msvc.zip`, "Command line, Windows on x64", ["windows"]],
-    [`pitboard-v${v}-aarch64-pc-windows-msvc.zip`, "Command line, Windows on ARM64", ["windows"]],
-    ["install.sh", "The install script", ["macos", "linux"]],
-    [
-      "SHA256SUMS",
-      packaged
-        ? "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>"
-        : "Checksums of the apps, the command line archives and <code>install.sh</code>",
-      ["macos", "windows", "linux"],
-    ],
-    ["appcast.xml", "The feed the app updates from", ["macos"]],
-    ["appcast-windows.xml", "The feed the Windows app updates from", ["windows"]],
-  ];
-  const byName = new Map(release.assets.map((a) => [a.name, a]));
-  for (const a of release.assets) {
-    const main = a.name.endsWith(".cdx.json") ? a.name.slice(0, -".cdx.json".length) : a.name;
-    if (!known.some(([n]) => n === main))
-      throw new Error(`the release has ${a.name}, which /download does not describe`);
-  }
-  return known
-    .filter(([name]) => byName.has(name))
-    .map(([name, forHtml, platforms]) => ({
-      asset: byName.get(name)!,
-      forHtml,
-      bom: byName.get(`${name}.cdx.json`) ?? null,
-      platforms,
-    }));
-}
+// The app's package for each machine, in both formats: each file name ends in its machine and format.
+const LINUX_PACKAGES = ["amd64.deb", "arm64.deb", "x86_64.rpm", "aarch64.rpm"] as const;
+export type LinuxPackage = (typeof LINUX_PACKAGES)[number];
 
 export type Arch = "x64" | "arm64";
 
@@ -367,6 +285,10 @@ export function windowsZip(release: Release, arch: Arch): Asset {
   return file(release, `pitboard-v${release.version}-${TRIPLES[arch]}.zip`);
 }
 
+export function linuxApp(release: Release, ending: LinuxPackage): Asset {
+  return file(release, `pitboard-app-v${release.version}-${ending}`);
+}
+
 const hasInstallers = (release: Release) =>
   (["x64", "arm64"] as const).every((arch) =>
     release.assets.some((a) => a.name === msiName(release, arch)),
@@ -383,10 +305,9 @@ export function windowsRelease(latest: Release, betas: Iterable<Release>): Relea
   return newest;
 }
 
-// The app's package for each machine, in both formats.
 const hasLinuxApp = (release: Release) =>
-  LINUX_PACKAGES.every(([file]) =>
-    release.assets.some((a) => a.name === `pitboard-app-v${release.version}-${file}`),
+  LINUX_PACKAGES.every((ending) =>
+    release.assets.some((a) => a.name === `pitboard-app-v${release.version}-${ending}`),
   );
 
 // Linux files come from the latest release once it carries the app's packages, and from the newest
