@@ -71,6 +71,7 @@ The app starts with the system's environment, not a terminal's. Turning **Keep S
 | --- | --- |
 | macOS | Only those `launchctl setenv` set |
 | Windows | Those of your Windows account and of the machine |
+| Linux | Those in the environment your desktop starts it with |
 
 ## Pitboard does not start when you sign in
 
@@ -82,5 +83,10 @@ The app starts with the system's environment, not a terminal's. Turning **Keep S
     Turn on **Start when you sign in to Windows** in Pitboard's **Settings**, under **General**. Started this way, Pitboard opens no window, and its icon appears in the notification area.
 
     If the setting is dimmed and reads **Turned off in Settings > Apps > Startup, where you can turn it on again.**, Windows' own settings turned it off. Turn Pitboard on in **Settings** > **Apps** > **Startup**.
+  </Tab>
+  <Tab title="Linux">
+    Turn on **Start Pitboard at Login** in **Preferences** > **General**, or in the welcome. Started this way, Pitboard opens no window, and keeps running only where the desktop shows its tray icon.
+
+    Where no tray icon shows within 10 seconds, as on GNOME without an extension, Pitboard quits. To go on warming up and switching then, turn on **Watch in the Background** in **Preferences** > **Advanced**, as [Start at login](/reference/linux-app#start-at-login) says.
   </Tab>
 </Tabs>
