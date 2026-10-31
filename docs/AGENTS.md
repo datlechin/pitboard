@@ -155,12 +155,12 @@ and its pages keep the words in this table.
 | share (the automatic switch's threshold) | threshold, trigger, cutoff |
 | period (a limit's five-hour or weekly span) | window (a window is an account window or the Pitboard window) |
 | usage, limit, five-hour limit, weekly limit, resets | quota, cap, 5h limit, session limit, refills |
-| keychain; Credential Manager | Keychain, keyring; Windows Credential Manager, credential vault |
-| the app (on either system); the menu bar app (on macOS only); the command line | Pitboard.app, Pitboard.exe, the GUI, the tray app; the CLI, the binary |
-| Pitboard's item in the menu bar; Pitboard's icon in the notification area; **Accounts** (the macOS window, or the Windows page); the Pitboard window (on Windows); the inspector (the selected account's details on macOS); pane (of Settings on macOS) | status item, tray icon, system tray, panel, dashboard, tab, sidebar, Accounts pane |
+| keychain; Credential Manager; the login keyring, and KWallet on KDE Plasma (Linux's Secret Service) | Keychain, keyring alone; Windows Credential Manager, credential vault |
+| the app (on any system); the menu bar app (on macOS only); the command line | Pitboard.app, Pitboard.exe, pitboard-app, the GUI, the tray app; the CLI, the binary |
+| Pitboard's item in the menu bar; Pitboard's icon in the notification area; Pitboard's tray icon and its tray menu (on Linux); **Accounts** (the macOS window, or the page of the Windows and Linux windows); the Pitboard window (on Windows and Linux); the inspector (the selected account's details on macOS); pane (of Settings on macOS) | status item, tray icon (on macOS or Windows), system tray, panel, dashboard, tab, sidebar, Accounts pane |
 | **Diagnostics** (the app's checks), **Activity** (the app's list of changes) | This Mac, This PC, the doctor pane |
-| **Quit Pitboard** on macOS, **Exit** on Windows (the menu item that stops the app) | close, kill, quit (for the Windows app) |
-| shortcut menu; dialog; Settings | context menu; sheet, modal; Preferences |
+| **Quit Pitboard** on macOS, **Exit** on Windows, **Quit** on Linux (the menu item that stops the app) | close, kill, quit (for the Windows app) |
+| shortcut menu; dialog; Settings, and **Preferences** on Linux | context menu; sheet, modal; Preferences (on macOS or Windows) |
 | Claude Code; Codex ("OpenAI's Codex CLI" on first mention); Claude Desktop | Claude (for Claude Code, or for Claude Desktop as a tool), Codex CLI |
 | Claude (Claude Desktop's app, as a person opens and quits it: "quit Claude") | the Claude app, Claude.app, the desktop app |
 | data folder (Claude's `~/Library/Application Support/Claude`) | profile, user data, support folder |
