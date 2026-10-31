@@ -110,6 +110,7 @@ class LinuxWindow extends AccountsFigure {
   }
 
   // the window's own keys (window/keys.rs), where focus is in it and not in one of its dialogs
+  // departs from the apps: The Linux window's Ctrl+N, Ctrl+W and Ctrl+Q stay with the browser where it reserves them
   #key(e: KeyboardEvent) {
     const at = e.target as Element;
     if (e.defaultPrevented || at.closest('dialog, [role="dialog"], [role="menu"]')) return;
@@ -167,7 +168,7 @@ class LinuxWindow extends AccountsFigure {
         closeAppWindow();
         return true;
       case "maximize":
-        // the figure keeps its window the size its desk draws
+        // departs from the apps: Maximize keeps the Linux window at the size its desk draws
         return true;
     }
     return false;
@@ -185,6 +186,7 @@ class LinuxWindow extends AccountsFigure {
 
   // Close and Ctrl+W: where no status item keeps Pitboard running, closing its window quits it
   // (application.rs, Host::keeps_running)
+  // departs from the apps: Closing the Pitboard window on GNOME, or Ctrl+W there, quits Pitboard until Reset
   #close() {
     if (surfaces(this.system).statusItem) closeAppWindow();
     else quit();

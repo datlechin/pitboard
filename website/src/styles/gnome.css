@@ -1,6 +1,6 @@
 /* GNOME Shell 50.6 as Fedora 44 draws it, dark in both of the site's schemes: the session mode
    prefers dark, and GNOME Settings' Light writes `default`, never `prefer-light`
-   (research/linux-visuals.md, "GNOME Shell"). Colours are data/theme/gnome-shell-sass's dark
+   (js/ui/sessionMode.js, js/ui/main.js, and gnome-control-center's cc-background-panel.c). Colours are data/theme/gnome-shell-sass's dark
    variant; one Sass derives is computed as dart-sass does it, lighten and darken in HSL. St rounds
    every length to a whole pixel, so a desk unit is one. */
 

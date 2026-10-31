@@ -1,4 +1,4 @@
-/* KDE Plasma 6.7.5 as Fedora 44 sets it up (research/kde-portal.md). Its global theme gives Plasma
+/* KDE Plasma 6.7.5 as Fedora 44 sets it up (docs/facts/site.md, "The KDE Plasma window"). Its global theme gives Plasma
    the breeze-dark style, so the panel, its tooltips and popups are dark in both of the site's
    schemes, while apps and their menus take BreezeLight, or BreezeDark under Fedora's Dark theme,
    the site's dark. Colours are libplasma's breeze-dark `colors`, the colour schemes of breeze's

@@ -1,6 +1,6 @@
 // A sheet, an alert, a ContentDialog or an AdwDialog as HTML's modal dialog (answer 15), placed and
 // dimmed as docs/facts/site.md reads each system's.
-// departs from the apps: A sheet, an alert or a ContentDialog blocks the whole page
+// departs from the apps: A sheet, an alert, a ContentDialog or an AdwDialog blocks the whole page
 import type { System } from "../../lib/platform.ts";
 
 export type Cancelled = "key" | "button";

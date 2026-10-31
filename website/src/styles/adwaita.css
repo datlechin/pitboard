@@ -3,7 +3,7 @@
    colours (src/stylesheet/_colors.scss), shadows and type. A standalone colour is its
    `oklab(from <bg> min(l, 0.5) a b)` in light and `max(l, 0.85)` in dark, computed; the accent
    is blue on both desktops, as the KDE portal hands libadwaita Breeze's #3daee9 and libadwaita
-   takes its nearest, blue (research/kde-portal.md). */
+   takes its nearest, blue (docs/facts/site.md, "The KDE Plasma window"). */
 
 /* KDE Plasma, where the window takes Plasma's font and Breeze's icons through the portal */
 @custom-variant kde (&:where(:root[data-desktop="kde"] *));

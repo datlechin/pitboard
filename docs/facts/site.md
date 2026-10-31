@@ -1,14 +1,15 @@
 # The site's figures
 
 What the figures on usepitboard.com draw for each system: the terminals, the keys a browser
-keeps from a page, a box's edges in Firefox, and [the apps' own controls](#the-apps-controls).
-The terminals and the keys were read and measured on 25 October 2026, unless a line names
-another date:
+keeps from a page, a box's edges in Firefox, [the apps' own controls](#the-apps-controls) and
+[the Linux app on GNOME and KDE Plasma](#the-linux-app-on-gnome-and-kde-plasma). The terminals
+and the keys were read and measured on 25 October 2026, unless a line names another date:
 
 - zsh 5.9 and bash 3.2.57 on macOS 27.0.1, in a scratch home, driven through a pseudo-terminal
   80 columns wide.
 - bash 5.3.0 in the `fedora:43` container and bash 5.2.37 in `ubuntu:25.10`, both arm64, the
-  first driven the same way through `docker run -it`.
+  first driven the same way through `docker run -it`. bash 5.3.9 and setup 2.15.0-28 in
+  `fedora:44` at `43b29f65`, arm64, read on 31 October 2026.
 - Windows PowerShell 5.1.26100.33648 on windows-2025 and 5.1.26100.9711 on windows-11-arm, with
   PSReadLine 2.0.0 in its Windows mode, culture en-US, by `windows-facts.yml` run 40190429034
   (RF-S1) as the job's user. The two images read alike.
@@ -30,9 +31,10 @@ RF-S1 puts the zip `package-windows.ps1` makes on `powershell.exe`'s `PATH` and 
   reads `me@<host> ~ %`, keeps 2000 lines of history and saves 1000, and sets `BEEP`. It runs no
   `compinit`, so zsh completes nothing of Pitboard's until `~/.zshrc` does, as
   [Integration commands](../reference/integration-commands.mdx) says.
-- Linux: Ptyxis runs bash. Fedora 43's `/etc/bashrc` sets `[\u@\h \W]\$ `, which reads
-  `[me@fedora ~]$`. Ubuntu 25.10's `/etc/skel/.bashrc` sets `\u@\h:\w\$ `, in colour where the
-  terminal has it, which reads `me@ubuntu:~$`.
+- Linux: Ptyxis on GNOME and Konsole on KDE Plasma run bash. Fedora 43's and Fedora 44's
+  `/etc/bashrc` set `[\u@\h \W]\$ `, which reads `[me@fedora ~]$`. Ubuntu 25.10's
+  `/etc/skel/.bashrc` sets `\u@\h:\w\$ `, in colour where the terminal has it, which reads
+  `me@ubuntu:~$`.
 - Windows: Windows Terminal's "Windows PowerShell" profile runs Windows PowerShell 5.1, whose
   own prompt function writes `PS C:\Users\me>`
   ([about_Prompts](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_prompts?view=powershell-5.1)).
@@ -380,6 +382,112 @@ cannot tell apart:
 - What eyes or a phone judge: the blink's timing, tooltip delays, VoiceOver and NVDA, how long a
   banner stays on macOS 27, and a long press.
 
+## The Linux app on GNOME and KDE Plasma
+
+The Linux figures draw one Fedora 44 computer, with stock GNOME 50 or with KDE Plasma 6.7. No
+runner reads them as `SiteFiguresTests` reads the other apps. They are drawn from the app's
+source and checked against CI's pictures of it ([The pictures](linux-app.md#the-pictures)), with
+what the Linux sessions of 30 October 2026 saw
+([The Linux session machines](linux-session.md)), `linux-facts.yml` run 41107324579, and the
+toolkits' and desktops' source at the versions named. `e2e/linux-pictures.spec.ts` has not been
+run against the final drawings yet.
+
+### Read in the Linux sessions
+
+- The status item's menu, drawn by Plasma and by the AppIndicator extension alike: Open
+  Pitboard; each tool's name as a disabled header where there are two; its accounts as radio
+  entries named with the share used, "work (42%)", the one in use checked; Add Account…,
+  Refresh, Preferences, Help and Quit, with separators between. A click on an account switched
+  in 1.06 s through Plasma, with no notification, and the tooltip followed.
+- Plasma's tooltip for the item: "Pitboard" over a line an account in use,
+  "<name> (Claude Code): 5-hour 0% used, weekly (Fable) 0%".
+- A left click on the item in Plasma's panel, Firefox in front, brought the window in front.
+- The limit's notification: "5-Hour Limit Almost Reached", "Claude Code" and "<name> has used
+  93%. <other> has used 0%.", from GLib through `org.freedesktop.Notifications` on Plasma, which
+  drew it as a "Pitboard" popup with a "Switch to <other>" button, and through
+  `org.gtk.Notifications` on GNOME, which drew a banner, then a message under "Pitboard" in the
+  date menu. A click on either, Firefox in front, brought the window in front.
+- The window after a switch: the notice "Switched Claude Code to <name>" over "Claude Code
+  sessions already open follow in 0:31", counting down.
+- GNOME Shell's search gives "Switch to <name> (Claude Code)" with the account's limits, or "In
+  Use", and switches with no window, and KRunner's match switches since #362, which the
+  questions' row on search rests on.
+- Closing the window where nothing shows the status item ends the app. Uninstall names
+  `sudo dnf remove pitboard-app pitboard` on Fedora.
+- No desktop set `clock-format`, so GNOME's clock follows `LC_TIME`: 12-hour under en_US, 24-hour
+  under en_GB. The page's computer runs under en_GB, so the window, the top bar, the date menu
+  and Plasma's clock say 24-hour times and en_GB's dates.
+
+### The KDE Plasma window
+
+`linux-facts.yml` run 41107324579, on 31 October 2026, installed Fedora 44's
+`@kde-desktop-environment` (Plasma and KWin 6.7.5, xdg-desktop-portal 1.22.1,
+xdg-desktop-portal-kde 6.7.5 and -gtk 1.15.3, GTK 4.22.5, libadwaita 1.9.4), applied Fedora's
+global theme as `startplasma` does, loaded kded6's gtkconfig, and read the Settings portal and a
+stand-in window built as the app's on a private bus. Fedora's xdg-desktop-portal-kde requires
+the gtk backend, and Plasma's `kde-portals.conf` asks both for Settings, so GTK takes what
+gtkconfig writes to dconf over any `settings.ini`:
+
+| | KDE Plasma on Fedora 44 | Stock GNOME |
+| --- | --- | --- |
+| Decoration layout | `icon:minimize,maximize,close` | `appmenu:close` |
+| Header bar | the app's icon at 16 in a 34 box before Add; Refresh, the main menu, Minimize, Maximize and Close | Add; Refresh, the main menu and Close |
+| Font | Noto Sans 10, 13.33 pixels | Adwaita Sans 11, 14.67 pixels |
+| Icons | Breeze's `actions/16`, GTK's own dialog icons, libadwaita's `adw-` icons | Adwaita's |
+| Accent and colours | blue, `#3584e4`, libadwaita's own light and dark | the same |
+
+Breeze's `#3daee9` reaches libadwaita as an accent and snaps to its blue. Breeze Dark turned
+`color-scheme` dark and changed nothing else. Breeze has no `battery-level-50-symbolic`,
+`package-x-generic-symbolic` or `web-browser-symbolic`, which the app carries in its own
+resources ([The icons](linux-app.md#the-icons)), so the page draws Adwaita's for them.
+
+Fedora's global theme gives Plasma itself the breeze-dark style with the BreezeLight colour
+scheme, read from the theme files. So the panel, its tooltip and its popups stay dark in both of
+the page's schemes, while the app, Konsole and the tray menu follow the page's. The tray menu is
+a QMenu plasmashell makes of the app's DBusMenu (`dbusmenuimporter.cpp`), in Breeze's widget
+style and the colour scheme's colours, read from source.
+
+### Read from source
+
+- GTK 4.22.0's popover menus choose on the primary button's release, move focus with the
+  pointer, cycle with the arrows and Tab, and bind no Home or End (`gtkmodelbutton.c`,
+  `gtkpopovermenu.c`).
+- Its spin buttons step with the arrows and a page with Page Up and Page Down, go to their ends
+  with Ctrl+Home and Ctrl+End, wrap to the far end only from an end, and repeat a held button
+  after 500 ms every 50 ms (`gtkspinbutton.c`).
+- Qt 6.10.0's QMenu chooses on any button's release off Windows, moves to the first and last
+  item with Home and End in Breeze's scrollable menus, takes Tab for Down, and leaves Space
+  alone (`qmenu.cpp`).
+- libadwaita's alert focuses its default response, so Remove is focused
+  (`adw-alert-dialog.c`), and a preferences group has the group role, so an account's group is
+  no landmark.
+- The window's keys: Ctrl+N, Ctrl+R, Ctrl+Comma, Ctrl+?, F10, Alt+Left, Ctrl+W and Ctrl+Q
+  (`apps/linux/src/window/keys.rs`).
+- GNOME Shell keeps a banner 4 s (`NOTIFICATION_TIMEOUT`, `js/ui/messageTray.js`), Plasma a popup
+  5 s (`PopupTimeout`, `notificationsettings.kcfg`), and Plasma's tooltip waits 700 ms
+  (`ToolTipArea`'s `Delay`).
+- At 95% the tray icon asks no attention: the model's advice, which puts a switch in the menu,
+  comes only once an account has run out (`crates/pitboard-model/src/model/advice.rs`).
+
+### Not pictured
+
+- The tray menu, the tooltip, the panel and the popup as Plasma draws them: the session kept no
+  picture, and CI's pictures have no tray.
+- GNOME Shell's top bar, banner and date menu, drawn from gnome-shell 50's source.
+- The KDE window's pixels: the portal read gave its settings and the files they resolve, not a
+  rendering.
+
+### Not measured on Linux
+
+Each is drawn from the app's source:
+
+- A click on the notification's Switch button: the popup had gone first.
+- An automatic switch, by the app or by the watch service.
+- A warm-up that started an account's 5-hour limit.
+- A renewal that refreshed a login: each run found none due.
+- How long a switch takes on GNOME. The page takes Plasma's 1.06 s for both.
+- How long Refresh reads. The page takes Windows' 24 ms.
+
 ## Where the site departs from the apps
 
 Each is the price of a web page or a WCAG rule, or something the page cannot do. Code that departs
@@ -396,12 +504,13 @@ says so in a comment naming its line here, which `website/src/scripts/departures
   once the pointer leaves its owner (WCAG 1.4.13).
 - The macOS window's menu bar is a Tab stop, which macOS's never is: without it Rename, Sign In
   Again, Open claude.ai and Warm Up Now would need a pointer (WCAG 2.1.1).
-- A sheet, an alert or a ContentDialog blocks the whole page, where the app blocks only its
-  window: HTML's modal dialog does.
+- A sheet, an alert, a ContentDialog or an AdwDialog blocks the whole page, where the app blocks
+  only its window: HTML's modal dialog does.
 - A simulated sign-in keeps Copy Link and Open dimmed, shows no Code field, and draws no Claude
   window while Claude Desktop's waits: the page loads no sign-in page.
-- Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure
-  into view, where the app brings a window forward.
+- Open Pitboard, Settings on Windows, Preferences on Linux, Warm-Up Settings, Warm-Up
+  Preferences, a click on a notification and the tray icon bring the page's figure into view,
+  where the app brings a window forward.
 - Check Now and Uninstall Pitboard do nothing: the page updates and removes no app.
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
@@ -411,11 +520,27 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
 - Uninstall Pitboard on Windows quits Pitboard until Reset, after its question: the page removes
   nothing and starts no installer.
-- Diagnostics stays on its spinner, and Check again and Copy report are held back: the page draws
-  no PC's checks yet.
+- Uninstall Pitboard on Linux quits Pitboard until Reset, after Remove the App: the page removes
+  no package.
+- Closing the Pitboard window on GNOME, or Ctrl+W there, quits Pitboard until Reset, as the app
+  quits where nothing shows its status item: the page has no overview to start it from again.
+- Maximize keeps the Linux window at the size its desk draws, and Minimize hides it until the
+  tray's Open Pitboard or a click on the tray icon: the page's desk has no screen to fill and no
+  task manager.
+- The Linux window's Ctrl+N, Ctrl+W and Ctrl+Q stay with the browser where it reserves them, as
+  [above](#keys-a-browser-keeps-from-a-page): the page is not given them. The main menu and the
+  buttons do the same.
+- Paste Link in Open Link reads nothing, where the app reads a link from the clipboard: the page
+  reads no clipboard it was not given.
+- KDE Plasma's notification history is not drawn: the tray's bell shows while the notification
+  is unread and opens nothing, since Plasma's history was not read.
+- Diagnostics stays on its spinner, and its buttons to check again and copy the report are held
+  back: the page draws no computer's checks yet.
   The macOS figures draw no Diagnostics window, which the page has no figure for.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
   from the page's state yet.
 - On a phone each figure fits the page's width, so a macOS menu row on a 390 pixel phone is 13
   pixels tall (WCAG 2.5.8). A terminal's field takes no tap there, since iOS zooms into a field
-  under 16 pixels: a phone runs a terminal's commands from the buttons under it.
+  under 16 pixels: a phone runs a terminal's commands from the buttons under it. The Linux window
+  is drawn 600 wide and shrunk there, so its dialogs float where libadwaita draws a bottom sheet
+  in a window under 450 pixels.

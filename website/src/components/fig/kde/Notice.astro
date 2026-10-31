@@ -1,6 +1,6 @@
 ---
 // The notification once a limit reaches the share, as plasmashell draws what GLib's
-// org.freedesktop.Notifications backend posts (session:102-106): a popup 18 grid units wide,
+// org.freedesktop.Notifications backend posts (docs/facts/linux-session.md, "Notifications"): a popup 18 grid units wide,
 // 36 pixels in from the screen's corner over the panel (notifications' Globals.qml), a group its
 // summary names. DelegatePopup.qml lays it out: a heading band that meets the popup's top and
 // right edges, holding the app's icon at 16, its name, and Configure, which a sender with a shown
@@ -10,6 +10,7 @@
 // popup under a minute old shows no age. Its frame, band and button are approx. The bell is in
 // the tray while the notification is unread, Pitboard's icon at the share's level beside it; the
 // window's advice, which puts a switch in the menu and so wants attention, comes only at 100%.
+// departs from the apps: KDE Plasma's notification history is not drawn
 import Icon from "./Icon.astro";
 import Panel from "./Panel.astro";
 import StatusItem from "./StatusItem.astro";

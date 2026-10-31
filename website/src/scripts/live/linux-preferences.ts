@@ -230,6 +230,7 @@ class LinuxPreferences extends LiveFigure {
   // Uninstall Pitboard… asks first, Cancel the default; once Pitboard's data is gone Remove the
   // App names the package manager's command, and any answer to it quits (preferences/advanced.rs
   // `take_back`), which the page does until Reset
+  // departs from the apps: Uninstall Pitboard on Linux quits Pitboard until Reset
   #uninstall() {
     const question = this.#byId<HTMLDialogElement>("uninstall-question");
     const removal = this.#byId<HTMLDialogElement>("remove-the-app");

@@ -97,8 +97,8 @@ class LinuxSheets implements Sheets {
     this.#signing = null;
   }
 
-  // the main menu's dialogs, which say what they say and close; Open Link's Paste Link reads
-  // nothing, as the page reads no clipboard it was not given
+  // the main menu's dialogs, which say what they say and close
+  // departs from the apps: Paste Link in Open Link reads nothing
   show(from: SheetOwner, what: Shown) {
     this.#over(from, this.get(what), { answer: () => {}, cancel: () => true });
   }

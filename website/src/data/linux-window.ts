@@ -72,10 +72,10 @@ export const date = (epoch: number) => {
 };
 
 // The icon each desktop's theme gives a name the window asks for, as the KDE portal read found
-// (research/kde-portal.md): GNOME's Adwaita, and on KDE Plasma Breeze's actions/16, GTK's own
-// for the dialog icons and libadwaita's for its own. For battery-level-50 and web-browser, which
-// Breeze lacks, the page draws Adwaita's, the copies the app is to carry in its resources, and
-// not the image-missing Plasma draws in their place without them.
+// (docs/facts/site.md, "The KDE Plasma window"): GNOME's Adwaita, and on KDE Plasma Breeze's
+// actions/16, GTK's own for the dialog icons and libadwaita's for its own. For battery-level-50
+// and web-browser, which Breeze lacks, the page draws Adwaita's, the copies the app carries in its
+// resources.
 export type Icon =
   | "list-add"
   | "view-refresh"
