@@ -1,13 +1,17 @@
 ---
 // The accounts page (data/ui/accounts-page.ui, window/accounts.rs): an AdwPreferencesPage whose
-// first group holds the notices, a boxed list shown while one is, then a group an account, each
-// tool's in the model's order. Templates make what a visitor adds.
+// first group holds the notices, a boxed list shown while one is, then the setup step's tip while
+// the model gives one, then a group an account, each tool's in the model's order. Templates make
+// what a visitor adds. The hero's window, one tool's alone, leaves out the tip, as macOS's does.
 import AccountGroup from "./AccountGroup.astro";
+import Button from "./Button.astro";
 import LimitRow from "./LimitRow.astro";
 import List from "./List.astro";
 import NoticeRow from "./NoticeRow.astro";
+import Row from "./Row.astro";
+import Symbolic from "./Symbolic.astro";
 import { accountsPage, switchNotice } from "../../../data/linux-window.ts";
-import { sessionsFollowIn, switchedTo } from "../../../data/window.ts";
+import { addAccountAsks, notNow, sessionsFollowIn, switchedTo } from "../../../data/window.ts";
 import { moments, type Moment } from "../../../data/world.ts";
 import { toolsOn } from "../../../lib/words.ts";
 
@@ -36,6 +40,17 @@ const tools = toolsOn("linux");
       />
     ))}
   </List>
+  {/* a notice row with no Dismiss, its first choice suggested (window/notices.rs `show_tip`) */}
+  {!only && <List data-part="setup" hidden>
+    <Row title="">
+      <span slot="prefix" class="flex"><Symbolic name="dialog-information" /></span>
+      <span slot="subtitle" data-part="detail"></span>
+      <span slot="suffix" class="flex items-center gap-6">
+        <Button look="suggested" data-does="add">{addAccountAsks("gnome")}</Button>
+        <Button data-does="not-now">{notNow("gnome")}</Button>
+      </span>
+    </Row>
+  </List>}
   <div class="flex flex-col gap-24" data-part="list">
     {groups.map((g) => (
       <AccountGroup prefix={prefix} group={g} demo={g.label === demo} />

@@ -346,6 +346,7 @@ class LinuxWindow extends AccountsFigure {
     if (this.#page !== "accounts") return;
     this.notices(s);
     shown(part(this, "notices"), !!this.querySelector("[data-notice]:not([hidden])"));
+    this.setup(s);
     this.#groups(s);
   }
 
