@@ -17,9 +17,14 @@ Warm-up is off for every account until you turn it on for one. Pitboard warms up
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, expand **Warm-up**, turn on each account to warm up, and set the hours with **From** and **To**.
   </Tab>
+  <Tab title="Linux">
+    In **Preferences** > **Limits**, under **Warm-Up**, turn on each account to warm up, and set the hours with **From** and **To**.
+  </Tab>
 </Tabs>
 
 The app warms up accounts only while it is open. Each account's switch in Settings says when it warms up next, as does **Warm-Up** in its details in **Accounts**.
+
+On Linux, where the desktop shows no tray icon, closing the window quits Pitboard. Turn on **Watch in the Background** in **Preferences** > **Advanced** to go on warming up, as [Watch in the background](/reference/linux-app#watch-in-the-background) says.
 
 On the command line, turn it on for an account and set the hours:
 
@@ -36,8 +41,6 @@ Pitboard warms up these accounts from 07:00 to 23:00, while the app or `pitboard
   personal  off
 ```
 
-On Linux, which has no app, the first line names only `pitboard watch`.
-
 The app, `pitboard watch` and `pitboard warm` share one setting. [`warm`](/reference/account-commands#warm) lists every form of the command.
 
 Anthropic's terms may cover warm-ups: see [Is this allowed](/concepts/limits#is-this-allowed).
@@ -50,6 +53,9 @@ Anthropic's terms may cover warm-ups: see [Is this allowed](/concepts/limits#is-
   </Tab>
   <Tab title="Windows">
     In **Accounts**, right-click the account and select **Warm up now**.
+  </Tab>
+  <Tab title="Linux">
+    In **Accounts**, open the account's menu and choose **Warm Up Now**.
   </Tab>
 </Tabs>
 
