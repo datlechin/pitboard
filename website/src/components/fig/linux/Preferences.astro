@@ -138,7 +138,7 @@ const caption = "mt-12 adw-caption opacity-55";
                 <Row
                   title={limits.heading}
                   subtitle={chosen === "switch" ? limits.standing : null}
-                  titleId={id("at-limit-title")}
+                  titleId={id("at-limit-heading")}
                   data-part="at-limit-row"
                 >
                   <button
@@ -146,7 +146,7 @@ const caption = "mt-12 adw-caption opacity-55";
                     class="flex items-center gap-6 outline-none focus-adw live:cursor-default"
                     type="button"
                     role="combobox"
-                    aria-labelledby={id("at-limit-title")}
+                    aria-labelledby={id("at-limit-heading")}
                     aria-haspopup="listbox"
                     aria-expanded="false"
                     aria-controls={id("at-limit-choices")}
@@ -276,7 +276,7 @@ const caption = "mt-12 adw-caption opacity-55";
           class="absolute top-(--y) right-24 z-3 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 shadow-adw-popover"
           id={id("at-limit-choices")}
           role="listbox"
-          aria-labelledby={id("at-limit-title")}
+          aria-labelledby={id("at-limit-heading")}
           hidden
         >
           {limits.choices.map(([value, title]) => <div
