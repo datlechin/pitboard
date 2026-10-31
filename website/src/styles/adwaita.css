@@ -83,21 +83,29 @@
   }
 }
 
-/* _labels.scss: .title-1, .title-2, .heading, .caption, and a row's subtitle, `smaller` */
+/* _labels.scss: .title-1, .title-2, .heading, .caption, and a row's subtitle, `smaller`. Pango
+   lays a line on whole pixels, rounding up: Adwaita Sans's own line, 1.21 of its size, gives the
+   titles a pixel more than the browser's normal line does, 33 and 25 in CI's pictures, and 140% of
+   11 points is 21 a line */
 @utility adw-title-1 {
   font-weight: 800;
   font-size: 181%;
+  line-height: round(up, 1.21em, var(--u));
 }
 @utility adw-title-2 {
   font-weight: 800;
   font-size: 136%;
+  line-height: round(up, 1.21em, var(--u));
 }
 @utility adw-heading {
   font-weight: 700;
 }
 @utility adw-caption {
   font-size: 82%;
-  line-height: 140%;
+  line-height: round(up, 140%, var(--u));
+}
+@utility adw-lines {
+  line-height: round(up, 140%, var(--u));
 }
 @utility adw-smaller {
   font-size: smaller;

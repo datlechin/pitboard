@@ -51,9 +51,11 @@ const toggle =
   >
   <div class:list={[content, "mx-8"]}>
     <p data-part="message">{signInMessage(tools[0][1], null)}</p>
-    {/* AdwToggleGroup (_toggle-group.scss): 3 of padding on the current colour at 10%, at radius 9 */}
+    {/* AdwToggleGroup (_toggle-group.scss): 3 of padding on the current colour at 10%, at radius 9,
+       which GTK draws as an alpha of 26 in 255: under the active toggle's white at 20%, the
+       browser's 10% is 2 a channel darker than CI's dark picture */}
     <div
-      class="flex gap-3 rounded-u-9 bg-current/10 p-3"
+      class="flex gap-3 rounded-u-9 bg-current/[10.2%] p-3"
       role="group"
       aria-label={TOOL}
       data-part="tool"
@@ -128,7 +130,7 @@ const toggle =
         /></span>
       </span>
       <span class="adw-title-2" data-part="title">{openLink.none.title}</span>
-      <span class="[line-height:140%]" data-part="detail">{openLink.none.detail}</span>
+      <span class="adw-lines" data-part="detail">{openLink.none.detail}</span>
       <span class="adw-monospace" data-part="link" hidden></span>
     </span>
     <span class="flex justify-center gap-12">

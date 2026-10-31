@@ -21,11 +21,7 @@ const { id, title, message } = Astro.props;
   <form class="flex flex-col adw-type" method="dialog">
     <div class="flex flex-col gap-10 pt-32 pb-9 text-center">
       <h2 class="px-24 adw-title-2" id={`${id}-title`} data-part="title">{title}</h2>
-      <p
-        class="px-24 whitespace-pre-line [line-height:140%]"
-        id={`${id}-message`}
-        data-part="message"
-      >
+      <p class="px-24 whitespace-pre-line adw-lines" id={`${id}-message`} data-part="message">
         {message}
       </p>
       {Astro.slots.has("default") && <div class="mt-8 px-24 text-left">
