@@ -70,6 +70,8 @@ class Notice extends LiveFigure {
     this.#center = this.querySelector<HTMLDialogElement>('[data-part="center"]');
     const clock = this.querySelector<HTMLElement>('[data-does="center"]');
     if (this.#center && clock) this.#listenCenter(this.#center, clock);
+    // nothing is kept, and Plasma's bell is off, until the notification comes
+    this.#drawCenter();
     this.#seen = new IntersectionObserver(
       ([e]) => {
         this.#inView = e.isIntersecting && e.intersectionRatio >= IN_VIEW;
