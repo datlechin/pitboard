@@ -133,6 +133,7 @@ class LinuxPreferences extends LiveFigure {
       this.#close();
     });
     super.connectedCallback();
+    this.#modal(!this.hidden);
     // drawn at Warm-Up, the page as far down as it goes
     this.#scrolled = this.#part("undershoot").hidden ? 0 : scroller.scrollHeight;
     scroller.scrollTop = this.#scrolled;
@@ -192,7 +193,17 @@ class LinuxPreferences extends LiveFigure {
   #open(on: boolean) {
     this.hidden = !on;
     shown(this.#window.querySelector('[data-part="dimming"]'), on);
+    this.#modal(on);
     if (on) this.render(model.get());
+  }
+
+  // the window it floats over and that window's popovers, out of reach while it is open, as an
+  // AdwDialog keeps its window; its own question and Remove the App are modal of themselves
+  #modal(on: boolean) {
+    for (const el of this.#window.querySelectorAll<HTMLElement>(
+      ':scope > div:not([data-part="dimming"])',
+    ))
+      el.inert = on;
   }
 
   // Close and Escape put Preferences away, and focus goes back to the window

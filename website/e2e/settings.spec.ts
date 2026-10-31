@@ -390,15 +390,23 @@ for (const system of ["gnome", "kde"] as const)
       await expect(page.locator("#auto-linux")).toBeHidden();
       await page.locator("figure:has(#auto-linux) [data-reset]").click();
       await expect(page.locator("#auto-linux")).toBeVisible();
+      // focus goes past the window Preferences keeps out of reach, to its first control
+      await expect(fig.getByRole("tab", { name: "Limits" })).toBeFocused();
     });
 
     test("Close and Escape put Preferences away, and focus goes back to the window", async ({
       page,
     }) => {
       const fig = await preferences(page, system);
+      // a modal dialog: the window and its menus behind it are out of reach
+      await expect(fig).toHaveAttribute("aria-modal", "true");
+      const behind = page.locator("#auto-linux > div:not([data-part])");
+      await expect(behind.first()).toHaveAttribute("inert", "");
+      await expect(page.locator("#auto-linux-main-menu")).toHaveAttribute("inert", "");
       await fig.getByRole("spinbutton", { name: "At" }).focus();
       await page.keyboard.press("Escape");
       await expect(fig).toBeHidden();
+      await expect(behind.first()).not.toHaveAttribute("inert");
       await expect(
         page.locator("#auto-linux").getByRole("button", { name: "Main Menu" }),
       ).toBeFocused();

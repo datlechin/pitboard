@@ -48,12 +48,15 @@ export abstract class LiveFigure extends HTMLElement {
       again.onclick = () => {
         reset();
         document.dispatchEvent(new Event(RESET));
-        // the button goes with the change it undid, so focus moves to the first control of the
-        // drawing shown, where a figure draws one for each system
+        // the button goes with the change it undid, so focus moves to the first control in the
+        // Tab order of the drawing shown, where a figure draws one for each system, past what a
+        // dialog over it puts out of reach
         const shown = [...figure!.querySelectorAll<HTMLElement>("[data-output]")].find(
           (root) => root.offsetParent !== null && customElements.get(root.localName),
         );
-        shown?.querySelector<HTMLElement>('[tabindex="0"], button:not(:disabled)')?.focus();
+        [...(shown?.querySelectorAll<HTMLElement>('[tabindex="0"], button:not(:disabled)') ?? [])]
+          .find((el) => el.tabIndex >= 0 && !el.closest("[inert]"))
+          ?.focus();
       };
     this.#stop = model.subscribe((state) => {
       if (again) again.hidden = !state.changed;
