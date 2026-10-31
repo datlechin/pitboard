@@ -27,6 +27,8 @@ Do not switch accounts while any check shows `✗`, broken. [`doctor`](/referenc
 
 A Claude Code session started over SSH can stay on another account than Pitboard shows, through every switch, and Pitboard warns with `fallback_login`.
 
+On Linux, Claude Code keeps its login only in `~/.claude/.credentials.json`, which every session reads, so a session over SSH follows a switch too.
+
 <Tabs>
   <Tab title="macOS">
     A `/login` while the keychain is locked, as over SSH, writes the login to `~/.claude/.credentials.json`, which such a session signs in with. [A login file behind the keychain or Credential Manager](/concepts/open-sessions#a-login-file-behind-the-keychain-or-credential-manager) says what else it does.
