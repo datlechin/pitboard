@@ -7,10 +7,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0-beta.8] - 2026-10-31
+
+_On macOS, an update may take away a widget or control you placed, which then needs adding
+again._
+
 ### Added
 
-- A native Linux app, built for GNOME and KDE Plasma and so far tested headless, shows your
-  accounts and their limits, switches, signs in, warms up and posts notifications.
+- A native Linux app for GNOME and KDE Plasma shows your accounts and their limits, switches,
+  signs in, warms up and posts notifications.
 - On Linux, GNOME's search and KRunner switch to an account by its name while Pitboard runs, and
   the app's launcher offers Add Account and Refresh.
 - Where the desktop shows a tray, the Linux app keeps an icon there with its menu, and elsewhere
@@ -33,9 +38,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the login keyring locked catches up once you sign in.
 - On Linux, each release comes as `.deb` and `.rpm` packages of the app and the command line,
   for x86_64 and aarch64.
-- A signed apt and dnf [repository](https://docs.usepitboard.com/install/linux-repository) at
-  `packages.usepitboard.com` brings Pitboard's updates on Linux, with a beta channel you can
-  choose instead.
+- A signed apt, dnf and zypper [repository](https://docs.usepitboard.com/install/linux-repository)
+  at `packages.usepitboard.com` brings Pitboard's updates on Linux.
 
 ### Changed
 
@@ -1509,7 +1513,8 @@ again._
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.7...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.8...HEAD
+[1.0.0-beta.8]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.7...v1.0.0-beta.8
 [1.0.0-beta.7]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.6...v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.4...v1.0.0-beta.5
