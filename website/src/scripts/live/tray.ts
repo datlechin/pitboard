@@ -104,6 +104,10 @@ class TrayDesk extends LiveFigure {
     });
     icon.addEventListener("pointerleave", () => this.#shellTip(false));
     icon.addEventListener("pointerdown", () => this.#shellTip(false));
+    // Escape puts the Shell's tooltip away wherever focus is (WCAG 1.4.13)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this.#shellTip(false);
+    });
     // light dismiss: a press anywhere but the menu closes it, while its desk is shown
     document.addEventListener(
       "pointerdown",

@@ -73,7 +73,10 @@ class KdeDesk extends LiveFigure {
         e.preventDefault();
         this.#openMenu("keyboard");
       }
-      if (e.key === "Escape") this.#showTip(false);
+    });
+    // Escape puts the tooltip away wherever focus is (WCAG 1.4.13)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.#tip.dataset.state) this.#showTip(false);
     });
     icon.addEventListener("pointerenter", (e) => {
       if (e.pointerType === "touch") return;
