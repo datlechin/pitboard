@@ -1,110 +1,47 @@
 ---
 import Base from "../layouts/Base.astro";
-import Block from "../components/Block.astro";
+import CommandBlock from "../components/CommandBlock.astro";
 import CommandBox from "../components/CommandBox.astro";
-import CommandRows from "../components/CommandRows.astro";
 import Disclosure from "../components/Disclosure.astro";
 import DownloadButton from "../components/DownloadButton.astro";
-import Part from "../components/Part.astro";
-import PlatformTabs from "../components/PlatformTabs.astro";
-import {
-  attestCommand,
-  commands,
-  LINUX_KEY,
-  linuxWays,
-  windowsWays,
-  type Command,
-} from "../data/commands.ts";
-import { DOCS } from "../data/site.ts";
-import { escapeHtml, longDate } from "../lib/changelog.ts";
+import { commands, linuxWays, windowsScoop } from "../data/commands.ts";
+import { DOCS, REPO } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
-import {
-  appZip,
-  fileRows,
-  formatSize,
-  windowsMsi,
-  windowsZip,
-  type Asset,
-  type FileRow,
-} from "../lib/github.ts";
-import { onOf, platformNames, platforms, type Platform } from "../lib/platform.ts";
+import { appZip, linuxApp, windowsMsi, windowsZip, type Release } from "../lib/github.ts";
+import { onOf, platformNames, type Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 
 const { downloads, windowsSigned } = await siteData();
+const mac = downloads.macos.release;
 const windows = downloads.windows.release;
-const zip = appZip(downloads.macos.release);
-const msi = windowsMsi(windows, "x64");
-const armMsi = windowsMsi(windows, "arm64");
-const winZips = [
-  ["x64", windowsZip(windows, "x64")],
-  ["ARM64", windowsZip(windows, "arm64")],
-] as const;
-// each platform's files, the first of them the one Verify checks
-const files = Object.fromEntries(
-  platforms.map((p) => [p, fileRows(downloads[p].release).filter((r) => r.platforms.includes(p))]),
-) as Record<Platform, FileRow[]>;
-const win = windowsWays(windows);
-const ways: { on: Platform[]; shell: "sh" | "pwsh"; rows: [string, Command[]][] }[] = [
-  {
-    on: ["macos", "linux"],
-    shell: "sh",
-    rows: [
-      ["With cargo-binstall", [commands.binstall]],
-      ["From source, with Rust 1.91 or later and a C compiler", [commands.cargoInstall]],
-      ["Without curl", [commands.wget]],
-      ["Into another folder", [commands.installDir]],
-    ],
-  },
-  {
-    on: ["windows"],
-    shell: "pwsh",
-    rows: [
-      ["With cargo-binstall", [win.binstall]],
-      [
-        "From source, with Rust 1.91 or later and its MSVC toolchain, and clang on ARM64",
-        [win.cargoInstall],
-      ],
-      ...(win.scoop ? [["With Scoop", win.scoop] as [string, Command[]]] : []),
-    ],
-  },
-];
-const released = (p: Platform) =>
-  `Pitboard ${downloads[p].release.version} was released on ${longDate(downloads[p].notes.date)}.`;
-const windowsStatus = windowsSigned ? "" : " Pitboard for Windows is not signed yet.";
 const linux = downloads.linux.release;
-const repository = linuxWays(linux);
-// what gpg must show before apt is given the repository
-const keyShown = {
-  note: `Go on only if it shows <code>${LINUX_KEY}</code> under <code>pub</code>.`,
-};
-// Cells written as one string: on a phone their text follows a label drawn by CSS, so a space
-// from the template's line breaks would show.
-const none = '<span class="text-muted" data-none>None</span>';
-const shaCell = (a: Asset) =>
-  a.sha256
-    ? `<code class="text-[0.875rem] text-fg data-full:inline-block data-full:w-[12ch] data-full:align-top data-full:break-all data-full:whitespace-normal">${a.sha256.slice(0, 12)}<span class="sr-only">${a.sha256.slice(12)}</span></code><button class="ml-2 h-7 min-w-17.5 cursor-pointer rounded-sm px-1.5 text-left align-baseline font-mono text-label font-medium text-strong hover:bg-sunken hover:underline hover:underline-offset-4 focus-visible:outline-offset-0 no-js:hidden" type="button" data-copy="${a.sha256}" aria-label="Copy the SHA-256 of ${escapeHtml(a.name)}">Copy</button>`
-    : none;
-const bomCell = (b: Asset | null) =>
-  b
-    ? `<a href="${escapeHtml(b.url)}"><code class="text-[0.875rem]">.cdx.json</code></a>, ${formatSize(b.size)}`
-    : none;
-const fileLine = (a: Asset, after?: Platform) =>
-  `<a href="${escapeHtml(a.url)}"${after ? ` data-download="${after}"` : ""}><code class="whitespace-normal">${a.name}</code></a>, <span class="whitespace-nowrap">${formatSize(a.size)}</span>`;
-const cell =
-  "border-b border-grid text-left align-baseline max-files:m-0 max-files:border-0 max-files:p-0";
-const label =
-  "max-files:before:mr-2 max-files:before:font-mono max-files:before:text-label max-files:before:font-medium max-files:before:text-muted";
-const panelHead =
-  "sr-only font-mono text-h2 text-strong no-js:not-sr-only no-js:pt-(--block-space) max-sm:text-h2-sm";
-const versionLine = "mt-7 flex flex-wrap gap-x-6 gap-y-1 no-js:mt-4";
-const columns =
-  "mt-12 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-12 gap-y-(--block-space) max-lg:grid-cols-[minmax(0,1fr)]";
-const column = "min-w-0 border-t border-rule pt-(--block-in)";
-const head = "font-mono text-h2 text-balance text-strong max-sm:text-h2-sm";
-const lead = "mt-8 text-note text-fg";
-const body = "max-w-[28em] text-pretty";
-const note = "max-w-[28em] text-note text-pretty text-muted [&_code]:text-inherit";
-const after = "js:not-data-shown:hidden";
+const zip = appZip(mac);
+const scoop = windowsScoop(windows);
+const ways = linuxWays(linux);
+const distros = [
+  ["apt", "Debian and Ubuntu"],
+  ["dnf", "Fedora"],
+  ["zypper", "openSUSE"],
+] as const;
+const unsigned = windowsSigned ? "" : " Pitboard for Windows is not signed yet.";
+const notes = (r: Release) => `/changelog#v${r.version}`;
+const files = (r: Release) => `${REPO}/releases/tag/${r.tag}`;
+// the other systems, as links that show each
+const others = (p: Platform) =>
+  (["macos", "windows", "linux"] as const)
+    .filter((o) => o !== p)
+    .map((o) => `<a href="#${o}">${platformNames[o]}</a>`)
+    .join(" and ");
+const part = "mt-10 max-w-[40rem] no-js:mt-(--block-space)";
+const panelHead = "sr-only font-mono text-h2 text-strong no-js:not-sr-only max-sm:text-h2-sm";
+const first = "no-js:mt-6";
+const facts = "mt-3 flex flex-wrap gap-x-5 gap-y-1 text-ui text-muted";
+const after = "mt-4 max-w-measure text-pretty js:not-data-shown:hidden";
+const more = "mt-10 border-t";
+const lead = "text-note text-fg [&:not(:first-child)]:mt-6";
+const also = "mt-8 text-ui text-muted";
+const tab =
+  "cursor-pointer rounded-xs px-2.5 py-0.75 font-mono text-label font-medium text-fg aria-selected:bg-ink aria-selected:text-on-ink focus-visible:outline-offset-0 max-2xs:px-1.5";
 const jsonLd = [application(Astro.site!, downloads)];
 ---
 
@@ -119,376 +56,142 @@ const jsonLd = [application(Astro.site!, downloads)];
   <main id="main">
     <div class="wrap pt-14 max-sm:pt-8">
       <h1 class="font-mono text-h1 text-strong max-sm:text-h1-sm">Download Pitboard</h1>
-      <PlatformTabs
-        class="mt-8"
-        label="Download Pitboard for"
-        tabId={(p) => `tab-${p}`}
-        panelId={(p) => p}
-      />
 
-      <section id="macos" data-on={onOf(["macos"])} role="tabpanel" aria-labelledby="tab-macos">
-        <h2 class={panelHead}>{platformNames.macos}</h2>
-        <div class={versionLine}>
-          <p>{released("macos")}</p>
-          <p><a href={`/changelog#v${downloads.macos.release.version}`}>Release notes</a></p>
+      <section class={part} id="macos" data-on={onOf(["macos"])} aria-labelledby="macos-title">
+        <h2 class={panelHead} id="macos-title">{platformNames.macos}</h2>
+        <DownloadButton class={first} platform="macos" href={zip.url} after />
+        <div class={facts}>
+          <p>{`Pitboard ${mac.version} for macOS 14 or later.`}</p>
+          <p><a href={notes(mac)}>Release notes</a></p>
         </div>
-        <div class={columns}>
-          <section class={column} aria-labelledby="macos-app-title">
-            <h3 class={head} id="macos-app-title">App</h3>
-            <div class="mt-7">
-              <p class={body}>
-                The app needs macOS 14 or later, on Apple silicon or Intel, and includes the command
-                line.
-              </p>
-              <DownloadButton class="mt-5" platform="macos" href={zip.url} after />
-              <p class:list={[note, "mt-3"]}>
-                <code class="whitespace-normal">{zip.name}</code>,
-                <span class="whitespace-nowrap">{formatSize(zip.size)}</span>
-              </p>
-              <p class:list={[body, "mt-4", after]} data-after="macos">
-                Move Pitboard to your Applications folder before you open it.
-              </p>
-              <p class:list={[body, lead]}>Or install it with Homebrew:</p>
-              <CommandBox class="mt-2" command={commands.brewApp} />
-            </div>
-          </section>
-          <section class={column} aria-labelledby="macos-cli-title">
-            <h3 class={head} id="macos-cli-title">Command line</h3>
-            <div class="mt-7">
-              <CommandBox command={commands.installScript} />
-              <p class:list={[body, "mt-5"]}>
-                The script puts the command line of the most recent full release in
-                <code>~/.local/bin</code>, and you can
-                <a href={`${DOCS}/install/verify#check-the-install-script`}>check it first</a>.
-              </p>
-              <p class:list={[body, lead]}>Or install it with Homebrew:</p>
-              <CommandBox class="mt-2" command={commands.brewCli} />
-            </div>
-          </section>
-        </div>
+        <p class={after} data-after="macos">
+          Move Pitboard to your Applications folder before you open it.
+        </p>
+        <Disclosure class={more} id="macos-more" summary="More options" flush>
+          <p class={lead}>Install the app with Homebrew:</p>
+          <CommandBox command={commands.brewApp} />
+          <p class={lead}>
+            For the command line alone, run <a href={`${DOCS}/install/script`}>the install script</a
+            >, or install it with Homebrew:
+          </p>
+          <CommandBox command={commands.installScript} />
+          <CommandBox command={commands.brewCli} />
+          <p class={lead}><a href={files(mac)}>Checksums and all files</a></p>
+        </Disclosure>
+        <p class={also} set:html={`Pitboard also runs on ${others("macos")}.`} />
       </section>
 
       <section
+        class={part}
         id="windows"
         data-on={onOf(["windows"])}
-        role="tabpanel"
-        aria-labelledby="tab-windows"
+        aria-labelledby="windows-title"
       >
-        <h2 class={panelHead}>{platformNames.windows}</h2>
-        <div class={versionLine}>
-          <p class="max-w-[40em] text-pretty">{released("windows")}{windowsStatus}</p>
-          <p><a href={`/changelog#v${windows.version}`}>Release notes</a></p>
+        <h2 class={panelHead} id="windows-title">{platformNames.windows}</h2>
+        <DownloadButton
+          class={first}
+          platform="windows"
+          href={windowsMsi(windows, "x64").url}
+          arm={windowsMsi(windows, "arm64").url}
+          beta={windows.prerelease}
+          after
+        />
+        <div class={facts}>
+          <p>{`Pitboard ${windows.version} for Windows 11 24H2 or later.${unsigned}`}</p>
+          <p><a href={notes(windows)}>Release notes</a></p>
         </div>
-        <div class={columns}>
-          <section class={column} aria-labelledby="windows-app-title">
-            <h3 class={head} id="windows-app-title">App</h3>
-            <div class="mt-7">
-              <p class={body}>
-                The app needs Windows 11 24H2 or later, or Windows Server 2025, and installs for
-                your account with the command line on your <code>PATH</code>.
-              </p>
-              <DownloadButton
-                class="mt-5"
-                platform="windows"
-                href={msi.url}
-                beta={windows.prerelease}
-                after
-              />
-              <p class:list={[note, "mt-3"]}>
-                <code class="whitespace-normal">{msi.name}</code>,
-                <span class="whitespace-nowrap">{formatSize(msi.size)}</span>
-              </p>
-              <p
-                class:list={[note, "mt-1"]}
-                set:html={`For an Arm PC: ${fileLine(armMsi, "windows")}`}
-              />
-              <p class:list={[body, "mt-4", after]} data-after="windows">
-                If Windows says it protected your PC, select <b>More info</b>, then <b>Run anyway</b
-                >.
-              </p>
-            </div>
-          </section>
-          <section class={column} aria-labelledby="windows-cli-title">
-            <h3 class={head} id="windows-cli-title">Command line</h3>
-            <div class="mt-7">
-              <p class={body}>
-                For the command line alone, download its zip and
-                <a href={`${DOCS}/install#install-the-command-line-on-windows`}
-                  >put <code>pitboard.exe</code> on your <code>PATH</code></a
-                >.
-              </p>
-              {winZips.map(([arch, z], i) => (
-                <p
-                  class:list={[note, i === 0 ? "mt-4" : "mt-1"]}
-                  set:html={`${arch}: ${fileLine(z)}`}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
+        <p class={after} data-after="windows">
+          If Windows says it protected your PC, select <b>More info</b>, then <b>Run anyway</b>.
+        </p>
+        <Disclosure class={more} id="windows-more" summary="More options" flush>
+          <p class={lead}>
+            Download the installer for an
+            <a href={windowsMsi(windows, "x64").url} data-download="windows">x64 PC</a> or an
+            <a href={windowsMsi(windows, "arm64").url} data-download="windows">Arm PC</a>.
+          </p>
+          <p class={lead}>
+            For the command line alone, download its zip for an
+            <a href={windowsZip(windows, "x64").url}>x64 PC</a> or an
+            <a href={windowsZip(windows, "arm64").url}>Arm PC</a>, then
+            <a href={`${DOCS}/install#install-the-command-line-on-windows`}
+              >put <code>pitboard.exe</code> on your <code>PATH</code></a
+            >.
+          </p>
+          {scoop && <p class={lead}>Or install the command line with Scoop:</p>}
+          {scoop && <CommandBlock commands={scoop} shell="pwsh" />}
+          <p class={lead}><a href={files(windows)}>Checksums and all files</a></p>
+        </Disclosure>
+        <p class={also} set:html={`Pitboard also runs on ${others("windows")}.`} />
       </section>
 
-      <section id="linux" data-on={onOf(["linux"])} role="tabpanel" aria-labelledby="tab-linux">
-        <h2 class={panelHead}>{platformNames.linux}</h2>
-        <div class={versionLine}>
-          <p>{released("linux")}</p>
-          <p><a href={`/changelog#v${linux.version}`}>Release notes</a></p>
+      <section class={part} id="linux" data-on={onOf(["linux"])} aria-labelledby="linux-title">
+        <h2 class={panelHead} id="linux-title">{platformNames.linux}</h2>
+        <div
+          class:list={[
+            "flex w-fit max-w-full flex-wrap gap-0.5 rounded-sm border border-edge p-0.5 no-js:hidden",
+            first,
+          ]}
+          role="tablist"
+          aria-label="Linux distribution"
+          data-tabs
+        >
+          {distros.map(([way, name], i) => <button
+            class={tab}
+            role="tab"
+            type="button"
+            id={`linux-${way}-tab`}
+            aria-controls={`linux-${way}`}
+            aria-selected={i === 0 ? "true" : "false"}
+            tabindex={i === 0 ? undefined : "-1"}
+          >
+            {name}
+          </button>)}
         </div>
-        <div class={columns}>
-          <section class={column} aria-labelledby="linux-app-title">
-            <h3 class={head} id="linux-app-title">App</h3>
-            <div class="mt-7">
-              <p class={body}>
-                The app needs Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed,
-                with GNOME or KDE Plasma, and installs with its command line from Pitboard's
-                repository, which your package manager then updates.
-              </p>
-              <p class:list={[body, "mt-4"]}>
-                Set up the repository and
-                <a href={`${DOCS}/install/linux-repository`}>check its key</a> before you install:
-              </p>
-              <CommandRows
-                class="mt-5"
-                heading="System"
-                rows={[
-                  [
-                    "On Debian and Ubuntu",
-                    [...repository.setup.apt, repository.keyCheck, keyShown, ...repository.app.apt],
-                  ],
-                  ["On Fedora", [...repository.setup.dnf, ...repository.app.dnf]],
-                  ["On openSUSE", [...repository.setup.zypper, ...repository.app.zypper]],
-                ]}
-              />
-              <p class:list={[body, "mt-5"]}>
-                On KDE Plasma 6.4 or later, <code>pitboard-plasma-widget</code> adds the Pitboard
-                widget.
-              </p>
-            </div>
-          </section>
-          <section class={column} aria-labelledby="linux-cli-title">
-            <h3 class={head} id="linux-cli-title">Command line</h3>
-            <div class="mt-7">
-              <p class={body}>
-                On Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, set up
-                Pitboard's repository as for the app, then install <code>pitboard</code>:
-              </p>
-              <CommandRows
-                class="mt-5"
-                heading="System"
-                rows={[
-                  ["On Debian and Ubuntu", repository.cli.apt],
-                  ["On Fedora", repository.cli.dnf],
-                  ["On openSUSE", repository.cli.zypper],
-                ]}
-              />
-              <p class:list={[body, lead]}>On another distribution, run the install script:</p>
-              <CommandBox class="mt-2" command={commands.installScript} />
-              <p class:list={[body, "mt-5"]}>
-                The script puts the command line of the most recent full release in
-                <code>~/.local/bin</code>, and you can
-                <a href={`${DOCS}/install/verify#check-the-install-script`}>check it first</a>.
-              </p>
-              <p class:list={[body, lead]}>Or install it with Homebrew:</p>
-              <CommandBox class="mt-2" command={commands.brewCli} />
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <Disclosure
-        class="mt-(--block-space) border-t"
-        id="other-ways"
-        summary="Other ways to install"
-        flush
-      >
-        {ways.map(({ on, shell, rows }) => <Part on={on}>
-          <CommandRows heading="Way" rows={rows} shell={shell} />
-        </Part>)}
-      </Disclosure>
-    </div>
-
-    <Block id="release-files" titleId="files-title" title="Release files" one>
-      <div>
-        {platforms.map((p) => <Part class="no-js:mt-10 no-js:first:mt-0" on={[p]} label={false}>
-          <table class="w-full border-collapse text-note/[1.5] max-files:block" role="table">
-            <caption class="mb-4 text-left font-mono text-ui text-muted max-files:block">
-              {`Pitboard ${downloads[p].release.version} for ${platformNames[p]}`}
-            </caption>
-            <thead class="max-files:sr-only" role="rowgroup">
-              <tr class="max-files:block" role="row">
-                {["File", "For", "Size", "SHA-256", "Bill of materials"].map((h) => <th
-                  class:list={[
-                    cell,
-                    "pr-6 pb-3.5 font-mono text-ui font-semibold whitespace-nowrap text-strong max-files:block",
-                  ]}
-                  scope="col"
-                  role="columnheader"
-                >
-                  {h}
-                </th>)}
-              </tr>
-            </thead>
-            <tbody class="max-files:block" role="rowgroup">
-              {files[p].map(({ asset, forHtml, bom }, i) => <tr
-                class="max-files:flex max-files:flex-wrap max-files:items-baseline max-files:gap-x-5 max-files:gap-y-1.5 max-files:border-b max-files:border-grid max-files:pt-4 max-files:pb-4.5 max-files:first:border-t"
-                role="row"
-              >
-                <th
-                  class:list={[
-                    cell,
-                    "py-3.5 pr-6 font-mono text-ui/5.5 font-medium 2xl:whitespace-nowrap max-files:flex-[1_1_100%] max-files:text-control/5.5",
-                  ]}
-                  scope="row"
-                  role="rowheader"
-                >
-                  <a href={asset.url}
-                    ><code class="text-[1em] whitespace-normal 2xl:whitespace-nowrap"
-                      >{asset.name}</code
-                    ></a
-                  >
-                </th>
-                <td
-                  class:list={[cell, "py-3.5 pr-6 max-files:flex-[1_1_100%]"]}
-                  role="cell"
-                  set:html={forHtml}
-                />
-                <td
-                  class:list={[
-                    cell,
-                    "py-3.5 pr-6 whitespace-nowrap tabular-nums max-files:text-muted",
-                  ]}
-                  role="cell"
-                >
-                  {formatSize(asset.size)}
-                </td>
-                <td
-                  class:list={[
-                    cell,
-                    label,
-                    "py-3.5 pr-6 whitespace-nowrap max-files:before:content-['SHA-256'_/_'']",
-                  ]}
-                  role="cell"
-                  set:html={shaCell(asset)}
-                />
-                <td
-                  class:list={[
-                    cell,
-                    label,
-                    "py-3.5 whitespace-nowrap max-files:before:content-['Bill_of_materials'_/_''] max-files:has-[[data-none]]:hidden max-sm:whitespace-normal",
-                    { "max-sm:mt-1": i > 0 },
-                  ]}
-                  role="cell"
-                  set:html={bomCell(bom)}
-                />
-              </tr>)}
-            </tbody>
-          </table>
-        </Part>)}
-        <Part class="mt-5" on={["macos", "linux"]} label={false}>
-          <p class="max-w-measure text-note text-pretty text-muted">
-            Each tarball unpacks into a folder named like the tarball.
-          </p>
-        </Part>
-        <Part class="mt-5" on={["windows"]} label={false}>
-          <p class="max-w-measure text-note text-pretty text-muted">
-            Each zip of the command line unpacks into a folder named like the zip.
-          </p>
-        </Part>
-      </div>
-    </Block>
-
-    <Block id="verify" titleId="verify-title" title="Verify a download">
-      <div class="prose">
-        <p>
-          Every release file has a GitHub attestation. To check one, run this in its folder, signed
-          in to <code>gh</code>:
-        </p>
-        {platforms.map((p) => <Part class="mt-3" on={[p]}>
-          <CommandBox
-            class="xl:max-w-none"
-            command={attestCommand(files[p][0].asset.name)}
-            shell={p === "windows" ? "pwsh" : "sh"}
-          />
-        </Part>)}
-        <p class="mt-7">
-          To compare checksums, verify <code>SHA256SUMS</code> with <code>gh</code> first, then run
-          this in the same folder:
-        </p>
-        <Part class="mt-3" on={["macos"]}>
-          <CommandBox class="xl:max-w-none" command={commands.shasum} />
-        </Part>
-        <Part class="mt-3" on={["windows"]}>
-          <CommandBox class="xl:max-w-none" command={commands.selectString} shell="pwsh" />
-        </Part>
-        <Part class="mt-3" on={["linux"]}>
-          <CommandBox class="xl:max-w-none" command={commands.sha256sum} />
-        </Part>
-        <Part class="mt-7 max-w-measure text-pretty" on={["macos"]}>
-          <p>The app and command line are signed by team <code>D7HJ5TFYCU</code> and notarised.</p>
-        </Part>
-        <Part class="mt-7 max-w-measure text-pretty" on={["windows"]}>
-          {windowsSigned ? (
-            <p>
-              Windows files are signed through SignPath, with a certificate issued to SignPath
-              Foundation, as the
-              <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says.
-            </p>
-          ) : (
-            <p>
-              Windows files are not signed yet, and the
-              <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says which
-              will be, and from when.
-            </p>
-          )}
-        </Part>
-        <Part class="mt-7 max-w-measure text-pretty" on={["linux"]}>
+        {distros.map(([way, name], i) => <div
+          class="mt-3 js:not-data-chosen:hidden no-js:mt-6"
+          role="tabpanel"
+          id={`linux-${way}`}
+          aria-labelledby={`linux-${way}-tab`}
+          data-chosen={i === 0 ? "" : undefined}
+        >
+          <p class="mb-2 hidden font-mono text-ui text-muted no-js:block">{`On ${name}:`}</p>
+          <CommandBlock commands={ways[way]} />
+        </div>)}
+        <div class={facts}>
           <p>
-            Each RPM package is signed with Pitboard's repository key, as the
-            <a href={`${DOCS}/install/code-signing-policy`}>code signing policy</a> says, and other
-            Linux files are not signed.
+            {`Pitboard ${linux.version} for Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma.`}
           </p>
-        </Part>
-        <p>The docs <a href={`${DOCS}/install/verify`}>explain each check</a>.</p>
-      </div>
-    </Block>
-
-    <Block id="remove" titleId="remove-title" title="Remove Pitboard">
-      <div class="prose">
-        <div class="max-w-measure text-pretty no-js:space-y-5">
-          <Part on={["macos"]}>
-            <p>
-              Quit the app and run <code>pitboard uninstall</code> before you
-              <a href={`${DOCS}/install/remove`}>delete Pitboard</a>, or its parked logins stay on
-              your Mac.
-            </p>
-          </Part>
-          <Part on={["windows"]}>
-            <p>
-              Select <b>Exit</b> in the menu of Pitboard's icon and run
-              <code>pitboard uninstall</code> before you
-              <a href={`${DOCS}/install/remove`}>uninstall Pitboard</a>, or its parked logins stay
-              on your PC.
-            </p>
-          </Part>
-          <Part on={["linux"]}>
-            <p>
-              Quit the app with Ctrl+Q and run <code>pitboard uninstall</code> before you
-              <a href={`${DOCS}/install/remove`}>remove its packages</a>, or its parked logins stay
-              on your computer.
-            </p>
-          </Part>
+          <p><a href={notes(linux)}>Release notes</a></p>
+          <p><a href={`${DOCS}/install/linux-repository`}>Check the repository's key</a></p>
         </div>
-        <p>
-          <code>pitboard uninstall</code> deletes them, so every account not in use needs a sign-in
-          again.
+        <p class="mt-5 max-w-measure text-note text-pretty text-fg">
+          On KDE Plasma 6.4 or later, <code>pitboard-plasma-widget</code> adds the Pitboard widget.
         </p>
-        <Part class="mt-8" on={["macos"]} label={false}>
-          <p class="text-note text-muted">
-            If Homebrew installed Pitboard 0.3.0 or earlier, follow
-            <a href={`${DOCS}/install/upgrade-from-0-3-0`}>Upgrade from 0.3.0 or earlier</a>.
+        <p class="mt-3 max-w-measure text-note text-pretty text-fg">
+          To install from a file, download the app's <code>.deb</code> for
+          <a href={linuxApp(linux, "amd64.deb").url}>amd64</a> or
+          <a href={linuxApp(linux, "arm64.deb").url}>arm64</a>, or its <code>.rpm</code> for
+          <a href={linuxApp(linux, "x86_64.rpm").url}>x86_64</a> or
+          <a href={linuxApp(linux, "aarch64.rpm").url}>aarch64</a>, and
+          <a href={`${DOCS}/install/other-ways#a-linux-package`}
+            >install it with the command line's package</a
+          >.
+        </p>
+        <Disclosure class={more} id="linux-more" summary="More options" flush>
+          <p class={lead}>
+            For the command line alone, install <code>pitboard</code> in place of
+            <code>pitboard-app</code>.
           </p>
-        </Part>
-      </div>
-    </Block>
+          <p class={lead}>
+            On another distribution, run <a href={`${DOCS}/install/script`}>the install script</a>,
+            or install the command line with Homebrew:
+          </p>
+          <CommandBox command={commands.installScript} />
+          <CommandBox command={commands.brewCli} />
+          <p class={lead}><a href={files(linux)}>Checksums and all files</a></p>
+        </Disclosure>
+        <p class={also} set:html={`Pitboard also runs on ${others("linux")}.`} />
+      </section>
+    </div>
   </main>
 </Base>

@@ -250,6 +250,39 @@ function afterDownload() {
   }
 }
 
+// Tabs marked data-tabs, each showing its own part of the page: a click or the arrows, Home and End
+// choose one.
+function tabs() {
+  for (const list of all("[role=tablist][data-tabs]")) {
+    const own = all<HTMLButtonElement>("[role=tab]", list);
+    const select = (tab: HTMLButtonElement) => {
+      for (const t of own) {
+        const on = t === tab;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        document
+          .getElementById(t.getAttribute("aria-controls")!)
+          ?.toggleAttribute("data-chosen", on);
+      }
+    };
+    own.forEach((t, i) => {
+      t.addEventListener("click", () => select(t));
+      t.addEventListener("keydown", (e) => {
+        let n: HTMLButtonElement | null = null;
+        if (e.key === "ArrowRight") n = own[(i + 1) % own.length];
+        else if (e.key === "ArrowLeft") n = own[(i - 1 + own.length) % own.length];
+        else if (e.key === "Home") n = own[0];
+        else if (e.key === "End") n = own[own.length - 1];
+        if (n) {
+          e.preventDefault();
+          select(n);
+          n.focus();
+        }
+      });
+    });
+  }
+}
+
 // A browser that names its machine gives an Arm PC the file its download link keeps for one.
 interface Hints {
   platform?: string;
@@ -281,6 +314,7 @@ const showPlatform = choice("platform");
 const showDesktop = choice("desktop");
 openTarget(showPlatform, showDesktop);
 addEventListener("hashchange", () => openTarget(showPlatform, showDesktop));
+tabs();
 copying();
 afterDownload();
 armDownloads();
