@@ -21,7 +21,7 @@ import Symbolic from "./Symbolic.astro";
 import Window from "./Window.astro";
 import { accountsPage, atLimitNote, prefs, warmAccounts } from "../../../data/linux-window.ts";
 import { moments } from "../../../data/world.ts";
-import { start } from "../../../lib/model.ts";
+import { start, type AtLimit } from "../../../lib/model.ts";
 
 interface Props {
   prefix: string;
@@ -32,9 +32,11 @@ const { prefix, show, version } = Astro.props;
 const id = (part: string) => `${prefix}-${part}`;
 const { general, limits, advanced } = prefs;
 const world = moments.after;
-// the choice the page starts at, which live code keeps to the state, and where no status item
-// keeps Pitboard running what follows the note
-const { atLimit: chosen, share } = start().preferences;
+// the choice drawn, which live code keeps to the state: Switch Automatically in Automatic switch's
+// figure, as macOS's and Windows' draw it, and in Warm-Up's the one the page starts at; then, where
+// no status item keeps Pitboard running, what follows the note
+const { atLimit: starts, share } = start().preferences;
+const chosen: AtLimit = show === "switch" ? "switch" : starts;
 const note = atLimitNote({ atLimit: chosen, share }, true);
 const whole = atLimitNote({ atLimit: chosen, share }, false);
 const closed = whole && note ? whole.slice(note.length).trim() : (whole ?? "");
