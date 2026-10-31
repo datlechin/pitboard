@@ -1,1 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3300" height="2200" version="1.1"><g id="Guides"><line id="Baseline-S" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="696" y2="696"/><line id="Capline-S" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="625.541" y2="625.541"/><line id="Baseline-M" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="1126" y2="1126"/><line id="Capline-M" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="1055.541" y2="1055.541"/><line id="Baseline-L" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="1556" y2="1556"/><line id="Capline-L" style="fill:none;stroke:#27aae1;opacity:1;stroke-width:.5" x1="263" x2="3036" y1="1485.541" y2="1485.541"/><line id="left-margin-Regular-M" style="fill:none;stroke:#00aeef;stroke-width:.5;opacity:1" x1="1391" x2="1391" y1="1026" y2="1156"/><line id="right-margin-Regular-M" style="fill:none;stroke:#00aeef;stroke-width:.5;opacity:1" x1="1516.26" x2="1516.26" y1="1026" y2="1156"/></g><g id="Symbols"><g id="Regular-M"><path d="M15.658 -86.117 L109.603 -86.117 L109.603 -78.288 L117.432 -78.288 L117.432 -23.486 L109.603 -23.486 L109.603 -15.658 L70.459 -15.658 L70.459 15.658 L54.801 15.658 L54.801 -15.658 L15.658 -15.658 L15.658 -23.486 L7.829 -23.486 L7.829 -78.288 L15.658 -78.288 Z M23.486 -70.459 L23.486 -54.801 L101.774 -54.801 L101.774 -70.459 Z M23.486 -46.973 L23.486 -39.144 L78.288 -39.144 L78.288 -46.973 Z" class="monochrome-0 hierarchical-0:primary" transform="matrix(1 0 0 1 1391.0 1126)"/><path d="M23.486 -46.973 L78.288 -46.973 L78.288 -39.144 L23.486 -39.144 Z" class="monochrome-1 hierarchical-1:secondary" transform="matrix(1 0 0 1 1391.0 1126)"/></g></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3300" height="2200">
+ <g id="Guides">
+  <line id="Baseline-S" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="696" y2="696"/>
+  <line id="Capline-S" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="625.541" y2="625.541"/>
+  <line id="Baseline-M" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1126" y2="1126"/>
+  <line id="Capline-M" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1055.541" y2="1055.541"/>
+  <line id="Baseline-L" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1556" y2="1556"/>
+  <line id="Capline-L" style="fill:none;stroke:#27AAE1;opacity:1;stroke-width:0.5;" x1="263" x2="3036" y1="1485.541" y2="1485.541"/>
+  <line id="left-margin-Regular-M" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="1391.0" x2="1391.0" y1="1026" y2="1156"/>
+  <line id="right-margin-Regular-M" style="fill:none;stroke:#00AEEF;stroke-width:0.5;opacity:1.0;" x1="1516.260" x2="1516.260" y1="1026" y2="1156"/>
+ </g>
+ <g id="Symbols">
+  <g id="Regular-M" transform="matrix(1 0 0 1 1391.0 1126)">
+   <path class="monochrome-0 hierarchical-0:primary" d="M15.658 -86.117 L109.603 -86.117 L109.603 -78.288 L117.432 -78.288 L117.432 -23.486 L109.603 -23.486 L109.603 -15.658 L70.459 -15.658 L70.459 15.658 L54.801 15.658 L54.801 -15.658 L15.658 -15.658 L15.658 -23.486 L7.829 -23.486 L7.829 -78.288 L15.658 -78.288 Z M23.486 -70.459 L23.486 -54.801 L101.774 -54.801 L101.774 -70.459 Z M23.486 -46.973 L23.486 -39.144 L78.288 -39.144 L78.288 -46.973 Z"/>
+   <path class="monochrome-1 hierarchical-1:secondary" d="M23.486 -46.973 L78.288 -46.973 L78.288 -39.144 L23.486 -39.144 Z"/>
+  </g>
+ </g>
+</svg>
+
