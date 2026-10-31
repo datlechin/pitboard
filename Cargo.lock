@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2321,7 +2321,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-conformance"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "clap 4.6.7",
  "pitboard-core",
@@ -2359,14 +2359,14 @@ dependencies = [
 
 [[package]]
 name = "pitboard-ffi"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "pitboard-model",
 ]
 
 [[package]]
 name = "pitboard-linux"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "async-channel",
  "atspi",
@@ -2385,7 +2385,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-model"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "jiff",
  "pitboard-core",
@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-probe"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "clap 4.6.7",
  "hex",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-share-ffi"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "pitboard-sites",
  "uniffi",
@@ -2424,7 +2424,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-sites"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "url",
 ]
@@ -3440,14 +3440,14 @@ dependencies = [
 
 [[package]]
 name = "uniffi-bindgen-csharp"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "uniffi-bindgen-cs",
 ]
 
 [[package]]
 name = "uniffi-bindgen-swift"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "uniffi",
 ]

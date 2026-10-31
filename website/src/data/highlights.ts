@@ -1,6 +1,7 @@
 // One line per release, betas included, for the home page's Recent releases, 60 characters at
 // most. The build fails when the newest version in CHANGELOG.md, or one the table shows, has none.
 export const highlights: Record<string, string> = {
+  "1.0.0-beta.8": "Pitboard has a Linux app for GNOME and KDE Plasma.",
   "1.0.0-beta.7": "The macOS app keeps working through a switch.",
   "1.0.0-beta.6": "Both apps are redone, and the macOS app has widgets.",
   "1.0.0-beta.5": "Claude Desktop accounts switch again with Claude 3.",
