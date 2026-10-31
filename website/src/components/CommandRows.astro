@@ -1,12 +1,13 @@
 ---
-// Commands under the name of what each set is for, one set to a row.
+// Commands under the name of what each set is for, one set to a row, with a note in HTML where a
+// step is no command, such as what one must show before you go on.
 import type { Command } from "../data/commands.ts";
 import CommandBox from "./CommandBox.astro";
 
 interface Props {
   // what the first column names, for a screen reader
   heading: string;
-  rows: [string, Command[]][];
+  rows: [string, (Command | { note: string })[]][];
   shell?: "sh" | "pwsh";
   class?: string;
 }
@@ -30,9 +31,16 @@ const { heading, rows, shell = "sh", class: extra } = Astro.props;
         {name}
       </th>
       <td class="block space-y-2 p-0" role="cell">
-        {lines.map((command) => (
-          <CommandBox command={command} shell={shell} />
-        ))}
+        {lines.map((line) =>
+          "note" in line ? (
+            <p
+              class="max-w-[40em] text-note text-pretty text-muted [&_code]:text-inherit [&_code]:wrap-anywhere"
+              set:html={line.note}
+            />
+          ) : (
+            <CommandBox command={line} shell={shell} />
+          ),
+        )}
       </td>
     </tr>)}
   </tbody>

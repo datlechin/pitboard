@@ -2,7 +2,7 @@
 import { commands } from "../data/commands.ts";
 import { DOCS } from "../data/site.ts";
 import { siteData } from "../lib/data.ts";
-import { appZip, linuxApp, windowsMsi } from "../lib/github.ts";
+import { appZip, windowsMsi } from "../lib/github.ts";
 import { onOf, type Platform } from "../lib/platform.ts";
 import CommandBox from "./CommandBox.astro";
 import DownloadButton from "./DownloadButton.astro";
@@ -18,7 +18,6 @@ const { n, desktop, class: extra } = Astro.props;
 const { downloads } = await siteData();
 const zip = appZip(downloads.macos.release);
 const windows = downloads.windows.release;
-const linuxHasApp = linuxApp(downloads.linux.release);
 const tabId = (p: Platform) => `tab-${p}-${n}`;
 const panelId = (p: Platform) => `tp-${p}-${n}`;
 const note = "mt-4 max-w-measure text-note text-pretty text-muted";
@@ -82,26 +81,16 @@ const after = "js:not-data-shown:hidden";
       id={panelId("linux")}
       aria-labelledby={tabId("linux")}
     >
-      {linuxHasApp ? (
-        <>
-          <p class={note}>
-            The app needs Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed, and
-            <a href="/download#linux">installs from Pitboard's repository</a> with the command line.
-          </p>
-          <p class={lead}>For the command line alone, run the install script:</p>
-          <CommandBox class="mt-2" command={commands.installScript} />
-        </>
-      ) : (
-        <>
-          <p class={note}>
-            The app runs on macOS and Windows, so on Linux, install the command line:
-          </p>
-          <CommandBox class="mt-4" command={commands.installScript} />
-        </>
-      )}
       <p class={note}>
-        Then <a href={`${DOCS}/quickstart#on-the-command-line`}>add your accounts</a>.
+        The app needs Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with
+        GNOME or KDE Plasma, and <a href="/download#linux">installs from Pitboard's repository</a>.
       </p>
+      <p class={lead}>
+        For the command line alone, install <code>pitboard</code> from it, or on another
+        distribution run the install script:
+      </p>
+      <CommandBox class="mt-2" command={commands.installScript} />
+      <p class={note}>Then <a href={`${DOCS}/quickstart`}>add your accounts</a>.</p>
     </div>
   </div>
 </div>

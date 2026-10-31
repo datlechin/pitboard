@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  ahead,
   fileRows,
   formatSize,
-  linuxApp,
   linuxRelease,
   parseSums,
   readPublished,
@@ -27,7 +25,7 @@ const betaSums = fixture("SHA256SUMS-v1.0.0-beta.1");
 
 const API = "https://api.github.com/repos/datlechin/pitboard";
 const WEB = "https://github.com/datlechin/pitboard";
-const SUMS_URL = `${WEB}/releases/download/v0.15.1/SHA256SUMS`;
+const SUMS_URL = `${WEB}/releases/download/v0.15.2/SHA256SUMS`;
 const BETA_SUMS_URL = `${WEB}/releases/download/v1.0.0-beta.1/SHA256SUMS`;
 
 type Route = (init: RequestInit) => Response | Promise<Response>;
@@ -94,15 +92,15 @@ test("reads the latest release from the API, with digests from SHA256SUMS", asyn
   });
   const lines: string[] = [];
   const r = await readRelease({ fetch: f, token: "t0ken", log: (l) => lines.push(l) });
-  assert.equal(r.version, "0.15.1");
+  assert.equal(r.version, "0.15.2");
   assert.equal(r.source, "api");
   assert.equal(r.assets.length, 13);
-  const zip = r.assets.find((a) => a.name === "Pitboard-v0.15.1-macos.zip");
+  const zip = r.assets.find((a) => a.name === "Pitboard-v0.15.2-macos.zip");
   assert.deepEqual(zip, {
-    name: "Pitboard-v0.15.1-macos.zip",
-    size: 18760928,
-    sha256: "e3e3a396598200b57d56d5489ef33b390fcb490a330be290a26eedcf614c5a09",
-    url: "https://github.com/datlechin/pitboard/releases/download/v0.15.1/Pitboard-v0.15.1-macos.zip",
+    name: "Pitboard-v0.15.2-macos.zip",
+    size: 18756951,
+    sha256: "264b0148291f300973b2489fc0b97780e88b81b57673ae0dd96a5784f5428f09",
+    url: "https://github.com/datlechin/pitboard/releases/download/v0.15.2/Pitboard-v0.15.2-macos.zip",
   });
   assert.equal(asked[0].auth, "Bearer t0ken");
   // the token goes to the API only, never to a download
@@ -112,12 +110,12 @@ test("reads the latest release from the API, with digests from SHA256SUMS", asyn
 });
 
 test("stops when SHA256SUMS and GitHub's digest disagree", async () => {
-  const tampered = sums.replace(/^e3e3a3965982/m, "ffffffffffff");
+  const tampered = sums.replace(/^264b0148291f/m, "ffffffffffff");
   const { f } = server({
     [`GET ${API}/releases/latest`]: () => json(recorded),
     [`GET ${SUMS_URL}`]: () => new Response(tampered),
   });
-  await assert.rejects(readRelease({ fetch: f }), /disagree on Pitboard-v0\.15\.1-macos\.zip/);
+  await assert.rejects(readRelease({ fetch: f }), /disagree on Pitboard-v0\.15\.2-macos\.zip/);
 });
 
 test("stops on a 401 when a token is set, rather than build without it", async () => {
@@ -133,12 +131,12 @@ test("falls back to the release pages on a rate limit, and keeps no signed URL",
   const routes: Record<string, Route> = {
     [`GET ${API}/releases/latest`]: () => json({ message: "API rate limit exceeded" }, 403),
     [`HEAD ${WEB}/releases/latest`]: () =>
-      new Response(null, { status: 302, headers: { location: `${WEB}/releases/tag/v0.15.1` } }),
+      new Response(null, { status: 302, headers: { location: `${WEB}/releases/tag/v0.15.2` } }),
     [`GET ${SUMS_URL}`]: () => new Response(sums),
   };
   for (const a of recorded.assets as { name: string; size: number }[]) {
     // fetch follows the redirect to the signed URL, so the answer is the file's own
-    routes[`HEAD ${WEB}/releases/download/v0.15.1/${a.name}`] = () =>
+    routes[`HEAD ${WEB}/releases/download/v0.15.2/${a.name}`] = () =>
       new Response(null, {
         status: 200,
         headers: { "content-length": String(a.size), "x-final": signed },
@@ -148,13 +146,13 @@ test("falls back to the release pages on a rate limit, and keeps no signed URL",
   const lines: string[] = [];
   const r = await readRelease({ fetch: f, log: (l) => lines.push(l) });
   assert.equal(r.source, "fallback");
-  assert.equal(r.version, "0.15.1");
+  assert.equal(r.version, "0.15.2");
   assert.deepEqual(
     r.assets.map((a) => a.name).sort(),
     [...parseSums(sums).keys(), "SHA256SUMS"].sort(),
   );
   assert.equal(r.assets.find((a) => a.name === "install.sh")?.size, 7818);
-  assert.ok(r.assets.every((a) => a.url.startsWith(`${WEB}/releases/download/v0.15.1/`)));
+  assert.ok(r.assets.every((a) => a.url.startsWith(`${WEB}/releases/download/v0.15.2/`)));
   assert.ok(!JSON.stringify(r).includes("sig="));
   assert.ok(!lines.some((l) => l.includes("sig=")));
 });
@@ -170,8 +168,8 @@ test("fails when neither the API nor the release pages answer", async () => {
 
 test("refuses a draft, an rc, and a pre-release that is not a beta", async () => {
   const cases: [Record<string, unknown>, RegExp][] = [
-    [{ draft: true }, /v0\.15\.1 is a draft/],
-    [{ prerelease: true }, /v0\.15\.1 is a pre-release, which only a beta is/],
+    [{ draft: true }, /v0\.15\.2 is a draft/],
+    [{ prerelease: true }, /v0\.15\.2 is a pre-release, which only a beta is/],
     [{ tag_name: "v1.0.0-rc1", prerelease: true }, /v1\.0\.0-rc1 is not the tag of a release/],
     [{ tag_name: "nightly" }, /nightly is not the tag of a release/],
   ];
@@ -188,7 +186,7 @@ test("reads the recorded fixture offline without the network", async () => {
   const { f, asked } = server({});
   const r = await readRelease({ fetch: f, fixture: { release: recorded, sums } });
   assert.equal(r.source, "fixture");
-  assert.equal(r.version, "0.15.1");
+  assert.equal(r.version, "0.15.2");
   assert.equal(r.prerelease, false);
   assert.equal(asked.length, 0);
 });
@@ -322,23 +320,23 @@ test("lists the release's files in order and fails on one it does not know", asy
   assert.deepEqual(
     rows.map((row) => row.asset.name),
     [
-      "Pitboard-v0.15.1-macos.zip",
-      "pitboard-v0.15.1-aarch64-apple-darwin.tar.gz",
-      "pitboard-v0.15.1-x86_64-apple-darwin.tar.gz",
-      "pitboard-v0.15.1-x86_64-unknown-linux-musl.tar.gz",
-      "pitboard-v0.15.1-aarch64-unknown-linux-musl.tar.gz",
+      "Pitboard-v0.15.2-macos.zip",
+      "pitboard-v0.15.2-aarch64-apple-darwin.tar.gz",
+      "pitboard-v0.15.2-x86_64-apple-darwin.tar.gz",
+      "pitboard-v0.15.2-x86_64-unknown-linux-musl.tar.gz",
+      "pitboard-v0.15.2-aarch64-unknown-linux-musl.tar.gz",
       "install.sh",
       "SHA256SUMS",
       "appcast.xml",
     ],
   );
-  assert.equal(rows[0].bom?.name, "Pitboard-v0.15.1-macos.zip.cdx.json");
+  assert.equal(rows[0].bom?.name, "Pitboard-v0.15.2-macos.zip.cdx.json");
   assert.equal(rows[5].bom, null);
   const more: Release = {
     ...r,
     assets: [
       ...r.assets,
-      { name: "pitboard-v0.15.1-riscv64.tar.gz", size: 1, sha256: null, url: "" },
+      { name: "pitboard-v0.15.2-riscv64.tar.gz", size: 1, sha256: null, url: "" },
     ],
   };
   assert.throws(() => fileRows(more), /does not describe/);
@@ -514,10 +512,8 @@ test("takes Windows files from the latest release once it has both installers, a
   assert.throws(() => windowsRelease(r, []), /no published release has the Windows installers/);
 });
 
-test("takes Linux files from the latest release once it has the app's packages, and until then from the newest published beta that has them", async () => {
+test("takes Linux files from the latest release once it has the app's packages for both machines, and until then from the newest published beta that has them", async () => {
   const r = await latest();
-  assert.equal(linuxRelease(r, [await beta()]), r);
-  assert.equal(linuxRelease(r, []), r);
   const packaged = linuxPackages("1.0.0-beta.8");
   const later = linuxPackages("1.0.0-beta.9");
   assert.equal(linuxRelease(r, [await beta(), packaged]), packaged);
@@ -526,28 +522,43 @@ test("takes Linux files from the latest release once it has the app's packages, 
   assert.equal(linuxRelease(r, [packaged, half]), packaged);
   const full = linuxPackages("1.0.0");
   assert.equal(linuxRelease(full, [linuxPackages("1.1.0-beta.1")]), full);
+  for (const betas of [[], [await beta()], [half]])
+    assert.throws(
+      () => linuxRelease(r, betas),
+      /no published release has the Linux app's packages/,
+    );
 });
 
-test("offers the Linux app only from a release with its packages for both machines", async () => {
-  assert.equal(linuxApp(await latest()), false);
-  assert.equal(linuxApp(linuxPackages("1.0.0-beta.8")), true);
-  assert.equal(linuxApp(linuxPackages("1.0.0-beta.8", ["amd64.deb", "x86_64.rpm"])), false);
-});
-
-test("says which systems take betas while macOS stays behind, and nothing once none does", async () => {
-  const r = await latest();
-  const b = await beta();
-  assert.equal(
-    ahead(r, { macos: r, windows: b, linux: r }),
-    "Until 1.0.0, Windows gets betas, and macOS and Linux get 0.15.1.",
+test("reads every recorded beta, and from 1.0.0-beta.8 takes the Windows and Linux files and describes each", async () => {
+  const recorded = new Map(
+    readdirSync(new URL("../data/fixtures/", import.meta.url))
+      .map((name) => /^release-v(.+)\.json$/.exec(name)?.[1])
+      .filter((version) => version !== undefined)
+      .map((version) => [
+        version,
+        {
+          release: JSON.parse(fixture(`release-v${version}.json`)),
+          sums: fixture(`SHA256SUMS-v${version}`),
+        },
+      ]),
   );
-  const packaged = linuxPackages("1.0.0-beta.8");
-  assert.equal(
-    ahead(r, { macos: r, windows: b, linux: packaged }),
-    "Until 1.0.0, Windows and Linux get betas, and macOS gets 0.15.1.",
+  const published = await readPublished({ fetch: server({}).f, fixture: recorded }, [
+    ...recorded.keys(),
+  ]);
+  assert.equal(published.size, recorded.size);
+  const betas = [...published.values()];
+  for (const choose of [windowsRelease, linuxRelease])
+    assert.equal(choose(await latest(), betas).version, "1.0.0-beta.8");
+  const newest = published.get("1.0.0-beta.8")!;
+  assert.deepEqual(
+    fileRows(newest)
+      .map((row) => row.asset.name)
+      .sort(),
+    newest.assets
+      .map((a) => a.name)
+      .filter((name) => !name.endsWith(".cdx.json"))
+      .sort(),
   );
-  const full = installers("1.0.0");
-  assert.equal(ahead(full, { macos: full, windows: full, linux: full }), null);
 });
 
 test("finds the Windows installer and zip of each architecture", async () => {
@@ -572,10 +583,10 @@ test("finds the Windows installer and zip of each architecture", async () => {
     ],
   );
   const r = await latest();
-  assert.throws(() => windowsMsi(r, "x64"), /v0\.15\.1 has no Pitboard-v0\.15\.1-windows-x64\.msi/);
+  assert.throws(() => windowsMsi(r, "x64"), /v0\.15\.2 has no Pitboard-v0\.15\.2-windows-x64\.msi/);
   assert.throws(
     () => windowsZip(r, "arm64"),
-    /v0\.15\.1 has no pitboard-v0\.15\.1-aarch64-pc-windows-msvc\.zip/,
+    /v0\.15\.2 has no pitboard-v0\.15\.2-aarch64-pc-windows-msvc\.zip/,
   );
 });
 

@@ -1,0 +1,283 @@
+{
+  "tag_name": "v1.0.0-beta.8",
+  "name": "v1.0.0-beta.8",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-10-31T12:00:00Z",
+  "html_url": "https://github.com/datlechin/pitboard/releases/tag/v1.0.0-beta.8",
+  "assets": [
+    {
+      "name": "install.sh",
+      "size": 9205,
+      "digest": "sha256:043df5bdbf6639d7a77e1d44c5226fd7371e5259a1e4df3a0dd5d64c30dca44f",
+      "content_type": "application/x-sh",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/install.sh"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-aarch64.rpm",
+      "size": 2481910,
+      "digest": "sha256:c7875e8cfcf85a9cf9a8ff3c91b3140f8335fe63fca264cad8ef17d2caa5fa5c",
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-aarch64.rpm"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-aarch64.rpm.cdx.json",
+      "size": 104540,
+      "digest": "sha256:862c521ed50a05a13883485e29b0ab6992735db072dcb2c36eae58e8339401e2",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-aarch64.rpm.cdx.json"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-amd64.deb",
+      "size": 2145756,
+      "digest": "sha256:bc685c7591ede76ac0b901c0ab58613532efddc9b52e8055b2682f2339e750c0",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-amd64.deb"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-amd64.deb.cdx.json",
+      "size": 104354,
+      "digest": "sha256:844f75a64594c7bc032642ac4e7efa398adef7daef5407d092ba6b58a2c04e6c",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-amd64.deb.cdx.json"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-arm64.deb",
+      "size": 2145756,
+      "digest": "sha256:6ec34d5870a25bf0a9b87338e86f920236fcee0e12ab208e44bb6594cb40d160",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-arm64.deb"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-arm64.deb.cdx.json",
+      "size": 104540,
+      "digest": "sha256:c5ce004757b84aeda7214c81256efa403287f0ea60bba3d4051121bfec1904ef",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-arm64.deb.cdx.json"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-x86_64.rpm",
+      "size": 2481910,
+      "digest": "sha256:f8b229848c1fc57f1ef5d6a947c2e8655d094d46c64c6daec9a5b5ff6fc094a5",
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-x86_64.rpm"
+    },
+    {
+      "name": "pitboard-app-v1.0.0-beta.8-x86_64.rpm.cdx.json",
+      "size": 104354,
+      "digest": "sha256:067d22e9944f943ac0b4d1a2fd573dc6618f2f12f90a479f41de4d3be9e4c996",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-app-v1.0.0-beta.8-x86_64.rpm.cdx.json"
+    },
+    {
+      "name": "pitboard-archive-keyring-v1.0.0-beta.8-all.deb",
+      "size": 4984,
+      "digest": "sha256:6ec3071a1a506d29054b4338089dcdb01b90a02aa0ed3f4d2a29d20feb69e89c",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-archive-keyring-v1.0.0-beta.8-all.deb"
+    },
+    {
+      "name": "pitboard-plasma-widget-v1.0.0-beta.8-all.deb",
+      "size": 5896,
+      "digest": "sha256:7c87cebab979ab76ceee770b9a0cd48b1b6e477b0d1800e4ed91c0aefc472d9e",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-plasma-widget-v1.0.0-beta.8-all.deb"
+    },
+    {
+      "name": "pitboard-plasma-widget-v1.0.0-beta.8-noarch.rpm",
+      "size": 16276,
+      "digest": "sha256:5edaf3e7ef7dae7ed826996abe4e2bc66035025a64fc65c4b371bc06e6dc7b5d",
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-plasma-widget-v1.0.0-beta.8-noarch.rpm"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-apple-darwin.tar.gz",
+      "size": 2138942,
+      "digest": "sha256:fd867784bb35e763f03c0017e671026f27baeafa84f290c31659047518b87874",
+      "content_type": "application/gzip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-apple-darwin.tar.gz"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-apple-darwin.tar.gz.cdx.json",
+      "size": 114091,
+      "digest": "sha256:cf4b94df5874e2d2922699aa61beeec69a8595183fac1146dce3a3ab4b03099b",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-apple-darwin.tar.gz.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-pc-windows-msvc.zip",
+      "size": 2463270,
+      "digest": "sha256:5daa9c6417287a4f31f6c7ffff2cee47161233cd7702ddedf2048df0796d896a",
+      "content_type": "application/zip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-pc-windows-msvc.zip"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-pc-windows-msvc.zip.cdx.json",
+      "size": 117968,
+      "digest": "sha256:5b478b8ef2129c4b57fb820e3cdb61a25dcfe914e43b3e41f03365c54b6a9e50",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-pc-windows-msvc.zip.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-unknown-linux-musl.tar.gz",
+      "size": 2354441,
+      "digest": "sha256:6d12d500b80ba982499c6939b8fb4790688f659ae42e262e3b4d8d4776e1969d",
+      "content_type": "application/gzip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-unknown-linux-musl.tar.gz"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64-unknown-linux-musl.tar.gz.cdx.json",
+      "size": 104540,
+      "digest": "sha256:c5985bbfb547cfbc1a5b078808c8ca01aa16c8a95b7a7d71f254532f0caa7a0d",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64-unknown-linux-musl.tar.gz.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64.rpm",
+      "size": 2130065,
+      "digest": "sha256:d966ab825e79b2a0fe5bfa67fa74355bd5b50515e92c7b46f7a08d43f9f42098",
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64.rpm"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-aarch64.rpm.cdx.json",
+      "size": 104540,
+      "digest": "sha256:b1e95ce876457291a7d34d6d31dc0fff9b4babb0348cc673954c4d19784caf9b",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-aarch64.rpm.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-amd64.deb",
+      "size": 1848312,
+      "digest": "sha256:f9a32fbbb64209e803fcd6438eec9c50f7b81d190c01d8c036b8aa83332ffb75",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-amd64.deb"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-amd64.deb.cdx.json",
+      "size": 104354,
+      "digest": "sha256:86fe4f45db39c6f4de4841a98a9f17132ddcef809009fc861b79367929538584",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-amd64.deb.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-arm64.deb",
+      "size": 1848312,
+      "digest": "sha256:b58d5a5b187551510804247bc102c9fa76d56c7c84b6c42d0d55f2dcf4dc0013",
+      "content_type": "application/vnd.debian.binary-package",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-arm64.deb"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-arm64.deb.cdx.json",
+      "size": 104540,
+      "digest": "sha256:25f55f25b118a458ea5c906e58cde37a9cd19b9d3b2cef529dc298be3ec5a46b",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-arm64.deb.cdx.json"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-macos.zip",
+      "size": 20571587,
+      "digest": "sha256:a4c3b2356c20a370bbee3bb6d4175e20e2de237ed3d9b9078c3a55760fd4f357",
+      "content_type": "application/zip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-macos.zip"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-macos.zip.cdx.json",
+      "size": 208583,
+      "digest": "sha256:c089c7571b5af68d25d5afff365400db272ae2a6785aec71c3efec8d27bfd530",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-macos.zip.cdx.json"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-windows-arm64.msi",
+      "size": 79815424,
+      "digest": "sha256:2aa1d144717513ee4df17b71a5231c8421d140fa927b4e1c4a822f3d03fe3978",
+      "content_type": "application/x-msdownload",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-windows-arm64.msi"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-windows-arm64.msi.cdx.json",
+      "size": 244575,
+      "digest": "sha256:9747af5b9e97d8f1060a65120a07b1b8ab6ec7ba7bc41f89faebc1994e76b00b",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-windows-arm64.msi.cdx.json"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-windows-x64.msi",
+      "size": 83911472,
+      "digest": "sha256:f477bc5556c5ddeddb71168e824effa18bea38ce9680f53f64d28cb67bca5de8",
+      "content_type": "application/x-msdownload",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-windows-x64.msi"
+    },
+    {
+      "name": "Pitboard-v1.0.0-beta.8-windows-x64.msi.cdx.json",
+      "size": 241676,
+      "digest": "sha256:ce53f53b9fc381edd657502ca4ad14bdf4e081ca2625c7add91a6f879950381e",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/Pitboard-v1.0.0-beta.8-windows-x64.msi.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-apple-darwin.tar.gz",
+      "size": 2284939,
+      "digest": "sha256:0b7732e86d938133a43e8fcd2bc26c3da16d938d81259e87a0440ac9f22b87e2",
+      "content_type": "application/gzip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-apple-darwin.tar.gz"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-apple-darwin.tar.gz.cdx.json",
+      "size": 113905,
+      "digest": "sha256:edf1a1de38afdb689035d6a12824bcccd15a414f68c148a075840a1938405f15",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-apple-darwin.tar.gz.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-pc-windows-msvc.zip",
+      "size": 2547022,
+      "digest": "sha256:643a6f3f1494db7defc11d01afb3c0836f02a69bb6ac6c7409f2e3b6063c1ee2",
+      "content_type": "application/zip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-pc-windows-msvc.zip"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-pc-windows-msvc.zip.cdx.json",
+      "size": 115092,
+      "digest": "sha256:216341847c15fa51503b67c4e157c0647c004ee7e11958cd128d1c1a3a1dbddf",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-pc-windows-msvc.zip.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-unknown-linux-musl.tar.gz",
+      "size": 2451241,
+      "digest": "sha256:9bf814b1a8b14cfe6d99218e755657ac9211f1ae3ad14572fab61d69075a3c93",
+      "content_type": "application/gzip",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-unknown-linux-musl.tar.gz"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64-unknown-linux-musl.tar.gz.cdx.json",
+      "size": 104354,
+      "digest": "sha256:6510ec57efa580a6b153151f04a0cfd01fda2c09b4346238eb927a83bbfa9ab3",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64-unknown-linux-musl.tar.gz.cdx.json"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64.rpm",
+      "size": 2130065,
+      "digest": "sha256:ca47473ceae176697283941fc9f16c45dc740a688a9974faff2d3adaac9ee03b",
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64.rpm"
+    },
+    {
+      "name": "pitboard-v1.0.0-beta.8-x86_64.rpm.cdx.json",
+      "size": 104354,
+      "digest": "sha256:1458f9b11821ccf1510bb038e54a77edafba9f210212e6580baeebf5ba4a8196",
+      "content_type": "application/json",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/pitboard-v1.0.0-beta.8-x86_64.rpm.cdx.json"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 2251,
+      "digest": "sha256:165703f62d1ba1861b116235a9b372b6197e98529638e5641828f7f41e9c6250",
+      "content_type": "application/octet-stream",
+      "browser_download_url": "https://github.com/datlechin/pitboard/releases/download/v1.0.0-beta.8/SHA256SUMS"
+    }
+  ]
+}
