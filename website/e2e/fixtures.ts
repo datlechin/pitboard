@@ -94,8 +94,13 @@ export async function choose(
     : rest;
   await context.addInitScript((c) => {
     const keys = { platform: "platform", desktop: "desktop", surface: "tab", theme: "theme" };
+    // the platform holds for a visit, as site.ts keeps it
     for (const [name, value] of Object.entries(c))
-      if (value) localStorage.setItem(keys[name as keyof typeof keys], value);
+      if (value)
+        (name === "platform" ? sessionStorage : localStorage).setItem(
+          keys[name as keyof typeof keys],
+          value,
+        );
   }, stored);
 }
 

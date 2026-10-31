@@ -9,6 +9,14 @@
       return null;
     }
   }
+  // the platform chosen in this visit; a new visit shows the reader's own
+  function visited(k) {
+    try {
+      return sessionStorage.getItem(k);
+    } catch (e) {
+      return null;
+    }
+  }
   var theme = get("theme");
   if (theme === "dark" || theme === "light") {
     d.setAttribute("data-theme", theme);
@@ -30,7 +38,7 @@
   var chromeos = /CrOS|Chrome OS/i.test(system);
   // a link to a platform's part of a page shows that platform for this visit alone
   var linked = /^#(macos|windows|linux)$/.exec(location.hash);
-  var platform = linked ? linked[1] : get("platform");
+  var platform = linked ? linked[1] : visited("platform");
   if (!/^(macos|windows|linux)$/.test(platform)) {
     if (/Windows/i.test(system)) platform = "windows";
     else if (/Linux|X11/i.test(system) || chromeos) platform = "linux";

@@ -3,9 +3,9 @@ import { platformOf, type System } from "../lib/platform.ts";
 
 const d = document.documentElement;
 
-function put(k: string, v: string) {
+function put(k: string, v: string, store: () => Storage = () => localStorage) {
   try {
-    localStorage.setItem(k, v);
+    store().setItem(k, v);
   } catch {}
 }
 
@@ -142,7 +142,8 @@ function choice(name: Choice): (value: string) => void {
   const select = (value: string, focus: HTMLElement | null) => {
     show(value);
     focus?.focus();
-    put(keys[name], value);
+    // a platform holds for this visit alone, so the next one shows the reader's own
+    put(keys[name], value, name === "platform" ? () => sessionStorage : undefined);
   };
   for (const b of picks) b.addEventListener("click", () => select(b.dataset[name]!, null));
   for (const tl of all("[role=tablist]")) {
