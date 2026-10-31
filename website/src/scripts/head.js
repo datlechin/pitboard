@@ -41,7 +41,7 @@
   d.setAttribute("data-desktop", desktop);
   // a link to a section that some systems do not show, as index.astro marks each, shows macOS for
   // this visit to a reader of another
-  var only = { "#desktop": "macos", "#account-windows": "macos windows" };
+  var only = { "#account-windows": "macos windows", "#desktop": "macos" };
   var reader = platform === "linux" ? desktop : platform;
   if (only.hasOwnProperty(location.hash) && only[location.hash].split(" ").indexOf(reader) < 0)
     platform = "macos";

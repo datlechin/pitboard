@@ -9,6 +9,12 @@ import Accounts from "../components/fig/mac/Accounts.astro";
 import Activity from "../components/fig/mac/Activity.astro";
 import Desk from "../components/fig/mac/Desk.astro";
 import Figure from "../components/fig/Figure.astro";
+import GnomeDesk from "../components/fig/gnome/Desk.astro";
+import GnomeNotice from "../components/fig/gnome/Notice.astro";
+import KdeDesk from "../components/fig/kde/Desk.astro";
+import KdeNotice from "../components/fig/kde/Notice.astro";
+import LinuxAccounts from "../components/fig/linux/Accounts.astro";
+import LinuxPreferences from "../components/fig/linux/Preferences.astro";
 import Notice from "../components/fig/mac/Notice.astro";
 import OpenLink from "../components/fig/mac/OpenLink.astro";
 import Settings from "../components/fig/mac/Settings.astro";
@@ -24,7 +30,7 @@ import { sessions } from "../data/sessions.ts";
 import { DOCS, REPO, TAGLINE } from "../data/site.ts";
 import { longDate } from "../lib/changelog.ts";
 import { highlight, siteData } from "../lib/data.ts";
-import type { Platform, System } from "../lib/platform.ts";
+import type { Desktop, Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 import { recentReleases } from "../lib/shown.ts";
 import { tools, type Tool } from "../data/world.ts";
@@ -39,9 +45,8 @@ const updates = !downloads.windows.release.prerelease;
 const version = {
   macos: downloads.macos.release.version,
   windows: downloads.windows.release.version,
+  linux: downloads.linux.release.version,
 };
-// the systems each figure draws the app for, until Linux's are drawn
-const drawn: System[] = ["macos", "windows"];
 const recent = recentReleases(versions).map((v) => ({ ...v, highlight: highlight(v.version) }));
 // a row is one string: on a phone its cells run inline, where whitespace between them would show
 const cell = "border-b border-grid py-3.5 text-left align-baseline max-sm:border-0 max-sm:p-0";
@@ -61,7 +66,7 @@ const marks: Record<Tool, { src: string; class: string }[]> = {
   desktop: [sparkMark],
 };
 
-const faq: { q: string; a: string | { on: Platform[]; a: string }[] }[] = [
+const faq: { q: string; a: string | { on: (Platform | Desktop)[]; a: string }[] }[] = [
   {
     q: "Does it work with API keys?",
     a: `No. Pitboard switches only logins to a Claude or ChatGPT account, not API keys or <a href="${DOCS}/concepts/limits#tools-and-sign-ins-pitboard-does-not-support">other providers</a>.`,
@@ -92,15 +97,36 @@ const faq: { q: string; a: string | { on: Platform[]; a: string }[] }[] = [
   },
   {
     q: "Does it have keyboard shortcuts?",
-    // each system's own answer, both shown where no JavaScript chooses one
+    // each system's own answer, all shown where no JavaScript chooses one
     a: [
       {
-        on: ["macos", "linux"],
+        on: ["macos"],
         a: `Yes. On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Remove Account</b> on <a href="${DOCS}/reference/mac-app#keyboard-shortcuts">Command-Delete</a>.`,
       },
       {
         on: ["windows"],
         a: `Yes. On Windows, <a href="${DOCS}/reference/windows-app#keyboard-shortcuts">Pitboard's keyboard shortcuts</a> include F2 to rename the account selected, Delete to remove it and Ctrl+C to copy its email address.`,
+      },
+      {
+        on: ["linux"],
+        a: `Yes. On Linux, <a href="${DOCS}/reference/linux-app#keyboard-shortcuts"><b>Keyboard Shortcuts</b></a> in the main menu lists them, such as Ctrl+N to add an account and Ctrl+R to refresh.`,
+      },
+    ],
+  },
+  {
+    q: "Can I switch from search or the taskbar?",
+    a: [
+      {
+        on: ["macos"],
+        a: `Yes. On macOS 26 and later, Spotlight runs Pitboard's <a href="${DOCS}/reference/mac-app#shortcuts-and-spotlight"><b>Switch Account</b></a> action, as Shortcuts does.`,
+      },
+      {
+        on: ["windows"],
+        a: `Yes. On Windows, the <a href="${DOCS}/reference/windows-app#jump-list">Jump List</a> of Pitboard pinned to the taskbar or Start switches to an account.`,
+      },
+      {
+        on: ["linux"],
+        a: `Yes. On Linux, while Pitboard runs, GNOME's search and KRunner find <a href="${DOCS}/reference/linux-app#search"><b>Switch to work</b></a> for each account.`,
       },
     ],
   },
@@ -159,7 +185,6 @@ const jsonLd = [
         </div>
         <Figure
           class="mt-8.75 max-xl:mt-8"
-          on={drawn}
           app={{
             macos: {
               caption: "Switching accounts in Pitboard's menu on macOS.",
@@ -170,6 +195,16 @@ const jsonLd = [
               caption: "Switching accounts from Pitboard's icon on Windows.",
               describe:
                 "Pitboard's menu open from its icon in the notification area. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each with the most it has used of a limit. The pointer rests on work, whose tooltip reads 5-hour 12% used, weekly 40%, then chooses it, and the menu closes. The icon's row grows from a short one to a long one, and its tooltip reads Pitboard, then work (Claude Code): 5-hour 12% used, weekly 40%, then main (Codex): weekly 7% used. The menu opens again with work first and in use. Then the status line of the Claude Code session in Windows Terminal puts work first.",
+            },
+            gnome: {
+              caption: "Switching accounts in the Pitboard window on GNOME.",
+              describe:
+                "The Pitboard window on GNOME, over a terminal. Claude Code has personal, in use, and work. The pointer clicks Switch beside work, which shows a spinner. Then work is in use, and a notice says Switched Claude Code to work. Then the status line of the Claude Code session in the terminal behind puts work first.",
+            },
+            kde: {
+              caption: "Switching from Pitboard's tray icon on KDE Plasma.",
+              describe:
+                "Pitboard's menu open from its icon in the system tray on KDE Plasma's panel. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each a radio with the most it has used of a limit. The pointer chooses work, and the menu closes. The pointer rests on the icon, whose tooltip reads Pitboard, then work (Claude Code): 5-hour 12% used, weekly 40%, then main (Codex): weekly 7% used. Then the status line of the Claude Code session in Konsole puts work first.",
             },
           }}
           cli={{
@@ -192,6 +227,8 @@ const jsonLd = [
         >
           <Desk prefix="hero-mac" demo />
           <WinDesk slot="windows" prefix="hero-win" demo updates={updates} />
+          <GnomeDesk slot="gnome" prefix="hero-gnome" demo />
+          <KdeDesk slot="kde" prefix="hero-kde" demo />
           <Term slot="cli" prefix="hero-cli" session={sessions.status} />
         </Figure>
       </div>
@@ -204,7 +241,6 @@ const jsonLd = [
         >. Daily renewal keeps your other Claude Code logins from expiring.
       </p>
       <Figure
-        on={drawn}
         slot="fig"
         app={{
           macos: {
@@ -216,6 +252,11 @@ const jsonLd = [
             caption: "The Pitboard window on Windows after the switch.",
             describe:
               "The top of the Accounts page after a switch. A notice, Switched Claude Code to work, counts down: Claude Code sessions already open follow in 0:21. Under it, work is in use.",
+          },
+          linux: {
+            caption: "The Pitboard window on Linux after the switch.",
+            describe:
+              "The top of the Pitboard window after a switch. A notice, Switched Claude Code to work, counts down: Claude Code sessions already open follow in 0:21. Under it, work is in use.",
           },
         }}
         cli={{
@@ -234,14 +275,249 @@ const jsonLd = [
           crop
           version={version.windows}
         />
+        <LinuxAccounts
+          slot="linux"
+          prefix="switch-linux"
+          moment="after"
+          crop
+          version={version.linux}
+        />
         <Term slot="cli" prefix="switch-cli" session={sessions.use} />
       </Figure>
     </Feature>
+
+    <Feature id="usage" title="What each account has left">
+      <p>
+        Pitboard shows how much of each limit every Claude Code and Codex account has used. Claude
+        Code's <a href={`${DOCS}/reference/integration-commands#statusline`}>status line</a> can
+        list its accounts too.
+      </p>
+      <Figure
+        slot="fig"
+        app={{
+          macos: {
+            caption: "The Accounts window on macOS.",
+            describe:
+              "Pitboard's Accounts window. personal is in use and selected, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50, and the inspector beside the list shows its limits, email, sign-in and warm-up. work has a Switch button. Codex's main and spare follow, then Claude Desktop's home and office.",
+          },
+          windows: {
+            caption: "The Pitboard window on Windows.",
+            describe:
+              "The Accounts page of the Pitboard window. personal is in use, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50. work has a Switch button. Codex's main and spare follow.",
+          },
+          linux: {
+            caption: "The Pitboard window on Linux.",
+            describe:
+              "The Pitboard window. personal is in use, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50, then its email, sign-in and warm-up. work has a Switch button. Codex's main and spare follow.",
+          },
+        }}
+        cli={{
+          macos: {
+            caption: "The same accounts in a terminal.",
+            describe:
+              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare, and the Claude Desktop accounts home and office.",
+          },
+          linux: {
+            caption: "The same accounts in a terminal.",
+            describe:
+              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare.",
+          },
+          windows: {
+            caption: "The same accounts in a terminal.",
+            describe:
+              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare.",
+          },
+        }}
+      >
+        <Accounts prefix="usage-mac" moment="before" />
+        <WinAccounts slot="windows" prefix="usage-win" moment="before" />
+        <LinuxAccounts slot="linux" prefix="usage-linux" moment="before" />
+        <Term slot="cli" prefix="usage-cli" session={sessions.statusBefore} />
+      </Figure>
+    </Feature>
+
+    <section class="pt-(--block-space)" aria-labelledby="runs-out-title" id="runs-out">
+      <div class="wrap">
+        <h2
+          class="border-t border-rule pt-(--block-in) font-mono text-h2 text-balance text-strong max-sm:text-h2-sm"
+          id="runs-out-title"
+        >
+          Before an account runs out
+        </h2>
+        <Row id="offer-title" title="A warning first">
+          <p>
+            While the app is open, its
+            <a href={`${DOCS}/guides/switch#get-a-notification-before-a-limit-runs-out`}
+              >notification</a
+            >
+            offers another account with room left once the account in use reaches 95% of a limit.
+          </p>
+          <Figure
+            slot="fig"
+            app={{
+              macos: {
+                caption: "The notification on macOS at 95%.",
+                describe:
+                  "A notification from Pitboard: Weekly Limit Almost Reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch button. The menu bar shows personal 95%.",
+              },
+              windows: {
+                caption: "The notification on Windows at 95%.",
+                describe:
+                  "A notification from Pitboard in the corner of the screen: Weekly limit almost reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch to work button.",
+              },
+              gnome: {
+                caption: "The notification on GNOME at 95%.",
+                describe:
+                  "A notification from Pitboard under GNOME's top bar: Weekly Limit Almost Reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch to work button.",
+              },
+              kde: {
+                caption: "The notification on KDE Plasma at 95%.",
+                describe:
+                  "A notification from Pitboard over KDE Plasma's panel: Weekly Limit Almost Reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch to work button.",
+              },
+            }}
+          >
+            <Notice prefix="offer-mac" />
+            <WinNotice slot="windows" prefix="offer-win" />
+            <GnomeNotice slot="gnome" prefix="offer-gnome" />
+            <KdeNotice slot="kde" prefix="offer-kde" />
+          </Figure>
+        </Row>
+        <Row id="auto-title" title="Automatic switch" flip>
+          <p>
+            Pitboard can also
+            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a>, from
+            the app or from a background service that <code>pitboard watch install</code> sets up.
+          </p>
+          <Figure
+            slot="fig"
+            app={{
+              macos: {
+                caption: "Settings on macOS, in the Limits pane.",
+                describe:
+                  "The Limits pane of Pitboard's Settings: When a limit reaches, Switch Automatically, and At, 95%. Under them: Watching work: 40% of its weekly limit, as of 20:50, and the link Is this allowed?",
+              },
+              windows: {
+                caption: "Settings on Windows, under Limits.",
+                describe:
+                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, and the line: Watching work: 40% of its weekly limit, as of 20:50. Under it, At, 95.",
+              },
+              linux: {
+                caption: "Preferences on Linux, in Limits.",
+                describe:
+                  "Pitboard's Preferences in Limits, over the window. Before an account runs out: Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open. Under it, When a limit reaches, Notify Me, and At, 95%, from 50% to 99%, then the link Is this allowed?",
+              },
+            }}
+            cli={{
+              macos: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the file of its LaunchAgent, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              linux: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints that your user's systemd runs it while you are signed in, then the file of its systemd user service, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              windows: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the path of its task in Task Scheduler, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+            }}
+          >
+            <Settings prefix="auto-mac" show="switch" version={version.macos} />
+            <WinSettings slot="windows" prefix="auto-win" show="switch" />
+            <LinuxPreferences
+              slot="linux"
+              prefix="auto-linux"
+              show="switch"
+              version={version.linux}
+            />
+            <Term slot="cli" prefix="auto-cli" session={sessions.watchInstall} />
+          </Figure>
+        </Row>
+        <Row id="warm-title" title="Warm-up">
+          <p>
+            A <a href={`${DOCS}/guides/warm-up`}>warm-up</a> starts Claude Code's next five-hour
+            period when the last one ends, with one short message.
+          </p>
+          <Figure
+            slot="fig"
+            app={{
+              macos: {
+                caption: "Warm-up in the Limits pane on macOS.",
+                describe:
+                  "Warm-Up, from 07:00 to 23:00. personal is turned on and warms up again at 22:00; work is off. Next warm-up: personal at 22:00.",
+              },
+              windows: {
+                caption: "Warm-up in Settings on Windows, under Limits.",
+                describe:
+                  "Pitboard's Settings under Limits, with Warm-up open: 07:00 to 23:00, and the line: Next warm-up: personal at 22:00. Under it, From 07:00 and To 23:00, personal turned on and warming up again at 22:00, and work off.",
+              },
+              linux: {
+                caption: "Warm-up in Preferences on Linux.",
+                describe:
+                  "Pitboard's Preferences in Limits, at Warm-Up: From 07:00 and To 23:00, personal turned on and warming up again at 22:00, and work off. Next warm-up: personal at 22:00.",
+              },
+            }}
+            cli={{
+              macos: {
+                caption: "The same from a terminal.",
+                describe:
+                  "<code>pitboard warm</code> says Pitboard warms up these accounts from 07:00 to 23:00: personal on, warms up again at 22:00; work off.",
+              },
+            }}
+          >
+            <Settings prefix="warm-mac" show="warm" />
+            <WinSettings slot="windows" prefix="warm-win" show="warm" />
+            <LinuxPreferences
+              slot="linux"
+              prefix="warm-linux"
+              show="warm"
+              version={version.linux}
+            />
+            <Term slot="cli" prefix="warm-cli" session={sessions.warm} />
+          </Figure>
+        </Row>
+      </div>
+    </section>
+
+    <Feature
+      id="account-windows"
+      title="claude.ai and chatgpt.com for each account"
+      on={["macos", "windows"]}
+    >
+      <p>
+        The app opens claude.ai and chatgpt.com
+        <a href={`${DOCS}/guides/account-windows`}>in a window for each account</a>. On macOS, a
+        link shared from your browser opens as the account you choose.
+      </p>
+      <Figure
+        on={["macos", "windows"]}
+        slot="fig"
+        app={{
+          macos: {
+            caption: "Opening a shared link on macOS.",
+            describe:
+              "The Open Link window: Open this claude.ai link as: work, whose window is open, or personal. work is chosen, with Cancel and Open buttons.",
+          },
+          windows: {
+            caption: "Opening claude.ai as an account on Windows.",
+            describe:
+              "Pitboard's menu open from its icon in the notification area, with Open claude.ai showing work, in use, then personal.",
+          },
+        }}
+      >
+        <OpenLink prefix="windows-mac" />
+        <WinDesk slot="windows" prefix="windows-win" submenu="claude.ai" updates={updates} />
+      </Figure>
+    </Feature>
+
     <Feature id="desktop" title="Claude Desktop" on={["macos"]}>
       <p>
-        On macOS, Pitboard switches <a href={`${DOCS}/guides/claude-desktop`}>Claude Desktop</a>
-        too, and the app offers to quit Claude and open it again. On Windows and Linux, it leaves
-        Claude Desktop alone.
+        Pitboard switches <a href={`${DOCS}/guides/claude-desktop`}>Claude Desktop</a> too, and the
+        app offers to quit Claude and open it again.
       </p>
       <Figure
         on={["macos"]}
@@ -266,199 +542,6 @@ const jsonLd = [
       </Figure>
     </Feature>
 
-    <Feature id="usage" title="What each account has left">
-      <p>
-        Pitboard shows how much of each limit every Claude Code and Codex account has used, and when
-        it resets; <code>pitboard</code> shows its <a href={`${DOCS}/concepts/usage#pace`}>pace</a>
-        too. <code>pitboard statusline</code> lists every Claude Code account in each session's
-        status line.
-      </p>
-      <Figure
-        on={drawn}
-        slot="fig"
-        app={{
-          macos: {
-            caption: "The Accounts window on macOS.",
-            describe:
-              "Pitboard's Accounts window. personal is in use and selected, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50, and the inspector beside the list shows its limits, email, sign-in and warm-up. work has a Switch button. Codex's main and spare follow, then Claude Desktop's home and office.",
-          },
-          windows: {
-            caption: "The Pitboard window on Windows.",
-            describe:
-              "The Accounts page of the Pitboard window. personal is in use, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50. work has a Switch button. Codex's main and spare follow.",
-          },
-        }}
-        cli={{
-          macos: {
-            caption: "The same accounts in a terminal.",
-            describe:
-              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare, and the Claude Desktop accounts home and office.",
-          },
-          linux: {
-            caption: "The same accounts in a terminal.",
-            describe:
-              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare.",
-          },
-          windows: {
-            caption: "The same accounts in a terminal.",
-            describe:
-              "<code>pitboard</code> lists the Claude Code accounts personal, in use, with its weekly limit running out in 11 hours 5 minutes at this pace, and work, ready, its parked login good for 26 days 4 hours. Then the Codex accounts main, in use, and spare.",
-          },
-        }}
-      >
-        <Accounts prefix="usage-mac" moment="before" />
-        <WinAccounts slot="windows" prefix="usage-win" moment="before" />
-        <Term slot="cli" prefix="usage-cli" session={sessions.statusBefore} />
-      </Figure>
-    </Feature>
-
-    <section class="pt-(--block-space)" aria-labelledby="runs-out-title" id="runs-out">
-      <div class="wrap">
-        <h2
-          class="border-t border-rule pt-(--block-in) font-mono text-h2 text-balance text-strong max-sm:text-h2-sm"
-          id="runs-out-title"
-        >
-          Before an account runs out
-        </h2>
-        <Row id="offer-title" title="A warning first">
-          <p>
-            While the app is open, its
-            <a href={`${DOCS}/guides/switch#get-a-notification-before-a-limit-runs-out`}
-              >notification</a
-            >
-            offers another account with room left once the account in use reaches 95% of a limit.
-          </p>
-          <Figure
-            on={drawn}
-            slot="fig"
-            app={{
-              macos: {
-                caption: "The notification on macOS at 95%.",
-                describe:
-                  "A notification from Pitboard: Weekly Limit Almost Reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch button. The menu bar shows personal 95%.",
-              },
-              windows: {
-                caption: "The notification on Windows at 95%.",
-                describe:
-                  "A notification from Pitboard in the corner of the screen: Weekly limit almost reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch to work button.",
-              },
-            }}
-          >
-            <Notice prefix="offer-mac" />
-            <WinNotice slot="windows" prefix="offer-win" />
-          </Figure>
-        </Row>
-        <Row id="auto-title" title="Automatic switch" flip>
-          <p>
-            Pitboard can also
-            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a>, from
-            the app or from a background service that <code>pitboard watch install</code> sets up.
-          </p>
-          <Figure
-            on={drawn}
-            slot="fig"
-            app={{
-              macos: {
-                caption: "Settings on macOS, in the Limits pane.",
-                describe:
-                  "The Limits pane of Pitboard's Settings: When a limit reaches, Switch Automatically, and At, 95%. Under them: Watching work: 40% of its weekly limit, as of 20:50, and the link Is this allowed?",
-              },
-              windows: {
-                caption: "Settings on Windows, under Limits.",
-                describe:
-                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, and the line: Watching work: 40% of its weekly limit, as of 20:50. Under it, At, 95.",
-              },
-            }}
-            cli={{
-              macos: {
-                caption: "The same in the background, from a terminal.",
-                describe:
-                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the file of its LaunchAgent, then that Anthropic's terms may cover automatic switching and warm-ups.",
-              },
-              linux: {
-                caption: "The same in the background, from a terminal.",
-                describe:
-                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints that your user's systemd runs it while you are signed in, then the file of its systemd user service, then that Anthropic's terms may cover automatic switching and warm-ups.",
-              },
-              windows: {
-                caption: "The same in the background, from a terminal.",
-                describe:
-                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the path of its task in Task Scheduler, then that Anthropic's terms may cover automatic switching and warm-ups.",
-              },
-            }}
-          >
-            <Settings prefix="auto-mac" show="switch" version={version.macos} />
-            <WinSettings slot="windows" prefix="auto-win" show="switch" />
-            <Term slot="cli" prefix="auto-cli" session={sessions.watchInstall} />
-          </Figure>
-        </Row>
-        <Row id="warm-title" title="Warm-up">
-          <p>
-            A <a href={`${DOCS}/guides/warm-up`}>warm-up</a> starts Claude Code's next five-hour
-            period when the last one ends, with one short message.
-          </p>
-          <Figure
-            on={drawn}
-            slot="fig"
-            app={{
-              macos: {
-                caption: "Warm-up in the Limits pane on macOS.",
-                describe:
-                  "Warm-Up, from 07:00 to 23:00. personal is turned on and warms up again at 22:00; work is off. Next warm-up: personal at 22:00.",
-              },
-              windows: {
-                caption: "Warm-up in Settings on Windows, under Limits.",
-                describe:
-                  "Pitboard's Settings under Limits, with Warm-up open: 07:00 to 23:00, and the line: Next warm-up: personal at 22:00. Under it, From 07:00 and To 23:00, personal turned on and warming up again at 22:00, and work off.",
-              },
-            }}
-            cli={{
-              macos: {
-                caption: "The same from a terminal.",
-                describe:
-                  "<code>pitboard warm</code> says Pitboard warms up these accounts from 07:00 to 23:00: personal on, warms up again at 22:00; work off.",
-              },
-            }}
-          >
-            <Settings prefix="warm-mac" show="warm" />
-            <WinSettings slot="windows" prefix="warm-win" show="warm" />
-            <Term slot="cli" prefix="warm-cli" session={sessions.warm} />
-          </Figure>
-        </Row>
-      </div>
-    </section>
-
-    <Feature
-      id="account-windows"
-      title="claude.ai and chatgpt.com for each account"
-      on={["macos", "windows"]}
-    >
-      <p>
-        The app opens claude.ai and chatgpt.com
-        <a href={`${DOCS}/guides/account-windows`}>in a window for each account</a>. On macOS, a
-        link shared from your browser opens as the account you choose.
-      </p>
-      <Figure
-        on={["macos", "windows"]}
-        slot="fig"
-        app={{
-          macos: {
-            caption: "Opening a shared link as an account on macOS.",
-            describe:
-              "The Open Link window: Open this claude.ai link as: work, whose window is open, or personal. work is chosen, with Cancel and Open buttons.",
-          },
-          windows: {
-            caption: "Opening claude.ai as an account from Pitboard's icon on Windows.",
-            describe:
-              "Pitboard's menu open from its icon in the notification area, with Open claude.ai showing work, in use, then personal.",
-          },
-        }}
-      >
-        <OpenLink prefix="windows-mac" />
-        <WinDesk slot="windows" prefix="windows-win" submenu="claude.ai" updates={updates} />
-      </Figure>
-    </Feature>
-
     <Feature id="security" title="Security and privacy">
       <p>
         Pitboard has no server and no telemetry, and
@@ -467,7 +550,6 @@ const jsonLd = [
         >. <b>Activity</b> and <code>pitboard log</code> list every change it makes.
       </p>
       <Figure
-        on={drawn}
         slot="fig"
         app={{
           macos: {
@@ -479,6 +561,11 @@ const jsonLd = [
             caption: "The Activity page on Windows.",
             describe:
               "The Activity page of the Pitboard window lists the switch to work and a warm-up of personal, both asked by the Pitboard app, and work added from the command line, each Done.",
+          },
+          linux: {
+            caption: "The Activity page on Linux.",
+            describe:
+              "The Activity page of the Pitboard window lists the switch to work and a warm-up of personal, both by the Pitboard app, and work added by the command line, each Done.",
           },
         }}
         cli={{
@@ -501,6 +588,7 @@ const jsonLd = [
       >
         <Activity prefix="security-mac" />
         <WinActivity slot="windows" prefix="security-win" />
+        <LinuxAccounts slot="linux" prefix="security-linux" moment="after" pane="activity" />
         <Term slot="cli" prefix="security-cli" session={sessions.log} />
       </Figure>
     </Feature>
