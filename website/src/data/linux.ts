@@ -2,7 +2,7 @@
 // which it says on both desktops, and its own. linux.test.ts finds each in the file that says it.
 import { listed, isInUse, menuTitle, settings, toolsOn, barTip } from "../lib/words.ts";
 import { ADD_HELP, REFRESH_HELP, addAccountAsks } from "./window.ts";
-import type { World } from "./world.ts";
+import type { Tool, World } from "./world.ts";
 
 export const app = "Pitboard";
 
@@ -53,28 +53,41 @@ export const DROP_LINK = "Drop Link to Open";
 export const WATCH_IN_THE_BACKGROUND = "Watch in the Background";
 export const COPY_COMMAND = "Copy";
 
-// An entry of the tray's menu: a command, a tool's name over its accounts, or an account as a
-// radio entry, the one in use chosen.
+// An entry of the tray's menu: a command under the id presence.rs gives its item, a tool's name
+// over its accounts, or an account as a radio entry, the one in use chosen.
+export type TrayCommand = "open" | "add-account" | "refresh" | "preferences" | "help" | "quit";
 export type TrayEntry =
-  { command: string } | { heading: string } | { account: string; label: string; checked: boolean };
+  | { command: string; does: TrayCommand }
+  | { heading: string; tool: Tool }
+  | { account: string; label: string; tool: Tool; checked: boolean };
 
 // The tray's menu, groups between separators (presence.rs `tray`): Open Pitboard, each tool's
-// accounts under its name, Add Account… and Refresh, Preferences and Help, then Quit.
+// accounts, under its name while two tools have accounts (accounts.rs `sections`), Add Account…
+// and Refresh, Preferences and Help, then Quit. A group with nothing in it goes.
 export function trayMenu(w: World): TrayEntry[][] {
-  return [
-    [{ command: "Open Pitboard" }],
-    toolsOn("linux").flatMap(([tool, name]): TrayEntry[] => [
-      { heading: name },
+  const shown = toolsOn("linux").filter(([tool]) => listed(w, tool).length > 0);
+  const groups: TrayEntry[][] = [
+    [{ command: "Open Pitboard", does: "open" }],
+    shown.flatMap(([tool, name]): TrayEntry[] => [
+      ...(shown.length > 1 ? [{ heading: name, tool }] : []),
       ...listed(w, tool).map((a) => ({
         account: menuTitle(a, w, "gnome"),
         label: a.label,
+        tool,
         checked: isInUse(a, w),
       })),
     ]),
-    [{ command: addAccountAsks("gnome") }, { command: "Refresh" }],
-    [{ command: settings("gnome", true) }, { command: "Help" }],
-    [{ command: "Quit" }],
+    [
+      { command: addAccountAsks("gnome"), does: "add-account" },
+      { command: "Refresh", does: "refresh" },
+    ],
+    [
+      { command: settings("gnome", true), does: "preferences" },
+      { command: "Help", does: "help" },
+    ],
+    [{ command: "Quit", does: "quit" }],
   ];
+  return groups.filter((group) => group.length > 0);
 }
 
 // The tray's tooltip, its first line its title and the rest its text (presence.rs `face`).
