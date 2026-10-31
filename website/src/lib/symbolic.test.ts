@@ -37,10 +37,25 @@ test("a symbolic icon is drawn in the foreground colour, as GTK recolours it", (
   assert.match(link.body, /fill="none"/);
 });
 
-test("an icon that is not symbolic keeps its colours, a Breeze class giving currentColor its own", () => {
-  const missing = symbolOf(read("breeze/image-missing.svg"), false);
-  assert.equal(missing.body.match(/fill="#da4453"/g)?.length, 2);
-  assert.doesNotMatch(missing.body, /currentColor/);
+test("an icon that is not symbolic keeps its colours, its `color` giving currentColor its own", () => {
+  const app = symbolOf(
+    readFileSync(
+      new URL(
+        "../../../apps/linux/data/icons/scalable/apps/com.usepitboard.Pitboard.svg",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    false,
+  );
+  assert.equal(app.viewBox, "0 0 128 128");
+  assert.match(app.body, /fill="#4dd170"/);
+  assert.doesNotMatch(app.body, /currentColor/);
+  const inked = symbolOf(
+    '<svg viewBox="0 0 16 16"><style>.Text { color: #232629; }</style><path class="Text" style="fill:currentColor" d="M0 0h16v16H0z"/></svg>',
+    false,
+  );
+  assert.match(inked.body, /fill="#232629"/);
 });
 
 test("every icon becomes a symbol the page can carry", () => {
