@@ -12,13 +12,16 @@ test("llms.txt, the docs and the README lead with the site's tagline", () => {
   assert.equal(/^# Pitboard\n\n(.+)$/m.exec(repo("README.md"))?.[1], TAGLINE);
 });
 
-test("llms.txt, the install tabs and /download name the Linux app's systems in one wording", () => {
+test("llms.txt, the install tabs, /download, the README and the install docs name the Linux app's systems in one wording", () => {
   const needs =
     "Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma";
   for (const path of [
     "website/public/llms.txt",
     "website/src/components/InstallTabs.astro",
     "website/src/pages/download.astro",
+    "README.md",
+    "docs/install.mdx",
+    "docs/install/linux-repository.mdx",
   ])
     assert.ok(repo(path).replace(/\s+/g, " ").includes(needs), path);
 });
