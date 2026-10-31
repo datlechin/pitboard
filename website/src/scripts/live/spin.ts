@@ -249,6 +249,8 @@ export function gtkSpin(
     go(n === null ? value : Math.min(o.max, Math.max(o.min, Math.round(n))));
   }
   input.addEventListener("input", () => (typing = true));
+  // one the app takes no typing in: nothing typed, pasted or dropped lands
+  if (!o.read) input.addEventListener("beforeinput", (e) => e.preventDefault());
   input.addEventListener("keydown", (e) => {
     const ends: Record<string, number> = {
       Home: o.min,

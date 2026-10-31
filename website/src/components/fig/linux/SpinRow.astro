@@ -1,8 +1,9 @@
 ---
 // AdwSpinRow (_lists.scss, _spin-button.scss): its title over its subtitle, then its value, numeric,
-// and the round minus and plus buttons, 30 square, 10 and 2 of margin and 6 apart; a spin button for the page, its
-// value stepped with the buttons, the arrows or, where `typed`, typed; the buttons out of the Tab
-// order and unspoken, as GTK keeps them.
+// and the round minus and plus buttons, 30 square, 10 and 2 of margin and 6 apart; a spin button for
+// the page, its value stepped with the buttons, the arrows or, where `typed`, typed; the buttons out
+// of the Tab order and unspoken, as GTK keeps them. One that takes no typing keeps the phone's
+// keyboard away, and live/ refuses what is typed, so it is not said to be read-only.
 import Row from "./Row.astro";
 import Symbolic from "./Symbolic.astro";
 
@@ -36,8 +37,7 @@ const button =
       aria-valuemax={max}
       aria-valuetext={value}
       value={value}
-      readonly={!typed}
-      inputmode={typed ? "numeric" : undefined}
+      inputmode={typed ? "numeric" : "none"}
       enterkeyhint={typed ? "done" : undefined}
       autocomplete="off"
       data-part="value"
