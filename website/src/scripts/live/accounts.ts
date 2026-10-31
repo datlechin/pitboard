@@ -114,8 +114,9 @@ export abstract class AccountsFigure extends LiveFigure {
         return;
       case "refresh":
         return refreshFromApp(this.system);
+      // SettingsSection.WarmUp, which macOS's Settings opens on its Limits pane
       case "warm-settings":
-        return bringForward("settings", this.system);
+        return bringForward("warm", this.system);
       case "add":
         return this.sheets?.signIn(
           this,

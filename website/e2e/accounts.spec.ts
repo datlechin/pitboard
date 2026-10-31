@@ -28,6 +28,13 @@ async function accounts(page: Page, platform: Platform) {
   };
 }
 
+// whether a WinUI button is drawn in the accent, as the Rename dialog's Rename is
+const accent = (button: Locator) =>
+  button.evaluate((el) => {
+    const rename = el.ownerDocument.querySelector('#win-accounts-rename [data-part="confirm"]')!;
+    return getComputedStyle(el).backgroundColor === getComputedStyle(rename).backgroundColor;
+  });
+
 // what ⌘C or Ctrl+C would put on the clipboard, read from the copy event they send
 const copied = (on: Locator) =>
   on.evaluate((el) => {
@@ -354,6 +361,9 @@ test.describe("on macOS", () => {
     await row("work").click(at);
     await expect(note).toHaveText("Off");
     expect((await button.boundingBox())!.y).toBeLessThan((await note.boundingBox())!.y);
+    // it opens Settings on Limits, which the figure cut at Warm-Up draws
+    await button.click();
+    await expect(page.locator("#warm-mac")).toBeInViewport();
   });
 
   test("the toolbar's Inspector and ⌃⌘I hide the inspector and show it again", async ({ page }) => {
@@ -476,6 +486,44 @@ test.describe("on Windows", () => {
     await expect(offers.first()).toHaveText("Switch to spare");
   });
 
+  test("an account's Warm-up settings opens the warm-up's expander at the page's top, with the focus on it", async ({
+    page,
+  }) => {
+    const { fig, toggle } = await accounts(page, "windows");
+    await toggle("personal").click();
+    await fig.getByRole("button", { name: "Warm-up settings" }).first().click();
+    const settings = fig.locator('[data-pane-panel="settings"]');
+    await expect(settings).toBeVisible();
+    const expand = settings.locator('[data-section="warm"] [data-expander]');
+    await expect(expand).toHaveAttribute("aria-expanded", "true");
+    await expect(expand).toBeFocused();
+    // at the top, or as far up as the page scrolls
+    const placed = await settings.locator('[data-part="scroller"]').evaluate((scroller) => {
+      const section = scroller.querySelector('[data-section="warm"]')!;
+      const gap = section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const end = scroller.scrollHeight - scroller.clientHeight;
+      return scroller.scrollTop > 0 && (Math.abs(gap) < 1 || scroller.scrollTop >= end - 1);
+    });
+    expect(placed).toBe(true);
+  });
+
+  test("Uninstall Pitboard? opens on Cancel, its default, and Uninstall quits until Reset", async ({
+    page,
+  }) => {
+    const { fig } = await accounts(page, "windows");
+    await fig.locator('[role="tab"][data-pane="settings"]').click();
+    await fig.locator('[data-setting="uninstall"]').click();
+    const dialog = page.locator("#win-accounts-uninstall");
+    await expect(dialog).toBeVisible();
+    const cancel = dialog.getByRole("button", { name: "Cancel" });
+    await expect(cancel).toBeFocused();
+    expect(await accent(cancel)).toBe(true);
+    expect(await accent(dialog.getByRole("button", { name: "Uninstall" }))).toBe(false);
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect(fig.locator('[data-part="window"]')).toBeVisible();
+  });
+
   test("F2 renames in a ContentDialog that Escape cancels", async ({ page }) => {
     const { row, toggle } = await accounts(page, "windows");
     const dialog = page.locator("#win-accounts-rename");
@@ -508,6 +556,9 @@ test.describe("on Windows", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button")).toHaveText(["Remove", "Cancel"]);
     await expect(dialog.getByRole("button", { name: "Remove" })).toBeFocused();
+    // Remove is the default button, which WinUI draws in the accent
+    expect(await accent(dialog.getByRole("button", { name: "Remove" }))).toBe(true);
+    expect(await accent(dialog.getByRole("button", { name: "Cancel" }))).toBe(false);
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
     await expect(row("personal")).toBeHidden();
@@ -560,6 +611,8 @@ test.describe("on Windows", () => {
     const name = page.locator("#win-accounts-rename");
     await expect(name).toHaveAccessibleName("Name this account");
     await expect(name.locator('input[name="name"]')).toHaveValue("travel");
+    // the account is saved under that name already, so Done is the step's one button
+    await expect(name.getByRole("button")).toHaveText(["Done"]);
     await expect(name.getByRole("button", { name: "Done" })).toBeEnabled();
     await page.keyboard.press("Enter");
     await expect(name).toBeHidden();

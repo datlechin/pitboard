@@ -122,6 +122,7 @@ class WinWindow extends RowsFigure {
         return true;
       case "warm-settings":
         this.#panes?.show("settings");
+        this.#warmUp();
         return true;
       case "navigation":
         this.#navigation(this.window.dataset.state !== "open");
@@ -209,7 +210,21 @@ class WinWindow extends RowsFigure {
     });
   }
 
-  // Uninstall Pitboard asks first, its answer no default, as SettingsPage.xaml.cs does
+  // An account's Warm-up settings: the warm-up's expander open at the page's top, with the focus
+  // on its first control, its header (SettingsPage.xaml.cs `BringIntoView`)
+  #warmUp() {
+    const panel = this.#panel("settings");
+    const section = panel?.querySelector<HTMLElement>('[data-section="warm"]');
+    const expand = section?.querySelector<HTMLButtonElement>("[data-expander]");
+    const scroller = panel?.querySelector<HTMLElement>('[data-part="scroller"]');
+    if (!section || !expand || !scroller) return;
+    if (expand.getAttribute("aria-expanded") !== "true") expand.click();
+    scroller.scrollTop +=
+      section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    expand.focus({ preventScroll: true });
+  }
+
+  // Uninstall Pitboard asks first, its default Cancel, as SettingsPage.xaml.cs does
   // departs from the apps: Uninstall Pitboard on Windows quits Pitboard until Reset
   #uninstall() {
     const d = document.querySelector<HTMLDialogElement>("#win-accounts-uninstall");

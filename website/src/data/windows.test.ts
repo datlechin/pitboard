@@ -583,3 +583,24 @@ test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl
     ),
   );
 });
+
+test("each question's default is its verb but Uninstall Pitboard?'s, and the Name step offers Done alone", () => {
+  const host = views("DialogHost.cs");
+  assert.ok(
+    host.includes(
+      "dialog.DefaultButton = question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.Close;",
+    ),
+  );
+  assert.ok(
+    present("accounts.rs").includes("destructive: true,\n            confirm_is_default: true,"),
+  );
+  assert.ok(
+    present("removal.rs").includes("intent: Intent::Uninstall,") &&
+      present("removal.rs").includes("confirm_is_default: false,"),
+  );
+  assert.ok(
+    shell("SheetPage.cs").includes(
+      "public override string? CloseTitle => Sheet is Sheet.Name ? null : Words.Window.Cancel;",
+    ),
+  );
+});

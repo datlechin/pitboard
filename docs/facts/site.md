@@ -337,8 +337,11 @@ cannot tell apart:
   Rename… F2; Open claude.ai; Copy email address Ctrl+C; Remove account… Del. Copy email address
   copied personal's address.
 - Delete on the selected row opens the Remove dialog with focus, and its focus rectangle, on
-  Remove, the primary button on the left; Cancel is on the right; neither is drawn as the
-  default. Enter presses Remove.
+  Remove, the primary button on the left; Cancel is on the right. Enter presses Remove.
+- Each question's default button is the accent one, which the focus opens on: its verb, or
+  Cancel where the model says the verb is not the default, as of Uninstall Pitboard?
+  (`DialogHost.cs` `Buttons`, read from source). The Name step after a sign-in offers Done alone
+  (`SheetPage.cs` `CloseTitle`).
 - After Remove no row is selected and focus is on the window's title bar, `AppTitleBar`, not the
   list: Down moves nothing.
 - On the fixture, In use showed 0.19 to 0.37 s after the row's button was invoked on

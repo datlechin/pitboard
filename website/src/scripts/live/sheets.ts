@@ -144,6 +144,9 @@ class AppSheets implements Sheets {
     text(part(d, "title"), added ? nameThisAccount(this.front) : renameTitle(a.label));
     text(part(d, "message"), added ? naming(a.email, toolName(a.tool)) : RENAMING);
     text(part(d, "confirm"), added ? DONE : RENAME);
+    // Windows' Name step offers Done alone, the account being saved under the name it starts on
+    // (SheetPage.cs `CloseTitle`), where macOS pairs Done with Cancel (NameSheets.swift)
+    shown(d.querySelector('[data-does="cancel"]'), !added || this.system !== "windows");
     const field = d.querySelector<HTMLInputElement>('input[name="name"]')!;
     field.value = a.label;
     field.placeholder = added ? NAME_PROMPT : a.label;
