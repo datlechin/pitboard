@@ -11,7 +11,7 @@ Removing the program alone leaves every parked login on the machine. The app's *
 
 ## Uninstall from the app
 
-The app deletes every saved sign-in, as `pitboard uninstall` does, and its own settings and account windows, then removes itself. On Linux, your package manager removes it.
+The app deletes every saved sign-in, as `pitboard uninstall` does, and its own settings, then removes itself. On macOS and Windows, it also deletes what its account windows keep. On Linux, your package manager removes it.
 
 <Tabs>
   <Tab title="macOS">
@@ -39,7 +39,7 @@ The app deletes every saved sign-in, as `pitboard uninstall` does, and its own s
 
 <Steps>
   <Step title="Quit the app">
-    If the app is open, click Pitboard's item in the menu bar, then choose **Quit Pitboard**. On Windows, right-click Pitboard's icon in the notification area, then select **Exit**. `pitboard uninstall` refuses while the app runs.
+    If the app is open, click Pitboard's item in the menu bar, then choose **Quit Pitboard**. On Windows, right-click Pitboard's icon in the notification area, then select **Exit**. On Linux, press Ctrl+Q in the Pitboard window, or choose **Quit** in its tray menu. `pitboard uninstall` refuses while the app runs.
   </Step>
   <Step title="Remove the status line">
     If Claude Code's status line runs `pitboard statusline`, delete the `statusLine` field from `~/.claude/settings.json`, or the call from your own script. On Windows, the file is `%USERPROFILE%\.claude\settings.json`. Each run makes the Pitboard directory again.
@@ -80,9 +80,16 @@ Turned off the daily renewal schedule.
 
 On Windows, the last line names the directory in full, such as `C:\Users\me\AppData\Local\Pitboard`.
 
-Deleting the directory by hand leaves daily renewal and the watch service in place. `pitboard schedule uninstall` and `pitboard watch uninstall` remove them. On Linux and Windows, the parked logins are files in the directory and go with it.
+Deleting the directory by hand leaves daily renewal and the watch service in place. `pitboard schedule uninstall` and `pitboard watch uninstall` remove them.
 
-On macOS, deleting `~/.pitboard` by hand leaves the parked logins of Claude Code and OpenAI's Codex CLI in the keychain, still valid. Nothing else names them, so `pitboard uninstall` cannot find them. If you already deleted it, delete the `pitboard-park-` items in Keychain Access.
+Parked logins outside the directory stay, still valid. Nothing else names them, so `pitboard uninstall` cannot find them:
+
+| Parked logins | After you delete the directory by hand |
+| --- | --- |
+| Claude Code's and Codex's on macOS, in the keychain | They stay. Delete the `pitboard-park-` items in Keychain Access. |
+| On Linux, in your login keyring, or KWallet on KDE Plasma | They stay. Delete the items labelled `Pitboard parked login` there. |
+| On Linux, in [files](/reference/files#parked-logins) | They go with it. |
+| On Windows | They go with it, as files in the directory. |
 
 If you set `PITBOARD_HOME`, or `pitboard uninstall` refuses, keeps the directory or leaves parked logins, see [`uninstall`](/reference/maintenance-commands#uninstall).
 

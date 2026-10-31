@@ -10,7 +10,7 @@ description: "Install the app or the command line on macOS, Windows or Linux, an
 | --- | --- | --- |
 | macOS | Apple silicon or Intel | macOS 14 or later, on Apple silicon or Intel |
 | Windows | Windows 11 24H2 or later, or Windows Server 2025, on x64 or ARM64 | The same as the command line |
-| Linux | x86_64 or aarch64, on any distribution | Debian 13, Ubuntu 26.04, Fedora 43 or later, or openSUSE Tumbleweed, on x86_64 or aarch64 |
+| Linux | x86_64 or aarch64, on any distribution | Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma, on x86_64 or aarch64 |
 
 The app includes the command line, so install one or the other. On an older Windows, Pitboard [changes nothing](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows).
 
@@ -58,7 +58,7 @@ On Linux, Pitboard was run with real Claude Code and Codex logins on 30 October 
     | Fedora 43 and later | `sudo dnf install pitboard-app` |
     | openSUSE Tumbleweed | `sudo zypper install pitboard-app` |
 
-    It installs the command line, the `pitboard` package, with it. For the command line alone, install `pitboard`.
+    It installs the command line, the `pitboard` package, with it. For the command line alone, install `pitboard`. On another distribution, install the command line with [the script](#install-with-the-script).
 
     Until 1.0.0, the app comes from the repository's beta channel alone.
   </Tab>
@@ -66,7 +66,7 @@ On Linux, Pitboard was run with real Claude Code and Codex logins on 30 October 
 
 ## Install with the script
 
-On macOS and Linux, the install script installs the command line:
+On macOS, or on a Linux distribution Pitboard's repository does not cover, the install script installs the command line:
 
 ```sh
 curl -fsSL https://usepitboard.com/install.sh | sh
@@ -76,7 +76,7 @@ curl -fsSL https://usepitboard.com/install.sh | sh
 
 ## Install with Homebrew
 
-On macOS and Linux, the `pitboard` cask installs the command line, with its man page and completions:
+On macOS, or on a Linux distribution Pitboard's repository does not cover, the `pitboard` cask installs the command line, with its man page and completions:
 
 ```sh
 brew install datlechin/tap/pitboard

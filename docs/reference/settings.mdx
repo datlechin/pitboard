@@ -1,6 +1,6 @@
 ---
 title: "Settings"
-description: "Look up each control in the app's Settings, section by section, on macOS and on Windows."
+description: "Look up each control in the app's Settings, or Preferences on Linux, section by section."
 ---
 
 <Tabs>
@@ -9,6 +9,9 @@ description: "Look up each control in the app's Settings, section by section, on
   </Tab>
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Settings**, or select **Settings** at the foot of the Pitboard window's navigation pane (Ctrl+Comma). Settings is one page in the Pitboard window, with the sections **General**, **Limits**, **Advanced**, **Troubleshoot** and **About**.
+  </Tab>
+  <Tab title="Linux">
+    In the Pitboard window, open the main menu and choose **Preferences** (Ctrl+Comma), or choose **Preferences** in its tray menu. **Preferences** opens over the window, with the pages **General**, **Limits** and **Advanced**. [Preferences](/reference/linux-app#preferences) lists where they differ from macOS.
   </Tab>
 </Tabs>
 
@@ -19,6 +22,7 @@ description: "Look up each control in the app's Settings, section by section, on
 | **Open Pitboard at Login** | macOS | Off |
 | **Menu Bar Shows** | macOS | **Account and Usage** |
 | **Start when you sign in to Windows** | Windows | Off |
+| **Start Pitboard at Login** | Linux | Off |
 
 ### Open Pitboard at login
 
@@ -31,6 +35,10 @@ If macOS refuses the change, its reason shows under the setting.
 On Windows, turned on, it writes the value `Pitboard` in your account's `Run` key, which starts Pitboard without its window when you sign in.
 
 Where Windows' own **Startup** settings turned Pitboard off, the switch is dimmed and reads **Turned off in Settings > Apps > Startup, where you can turn it on again.** **Open Startup settings** under it opens that page. Pitboard reads the setting again each time Settings opens, and as you come back to the Pitboard window while it shows Settings.
+
+### Start Pitboard at login
+
+On Linux, turned on, it writes an autostart entry, which starts Pitboard with no window each time you log in, as [Start at login](/reference/linux-app#start-at-login) says.
 
 ### Notifications
 
@@ -87,6 +95,9 @@ On macOS, Pitboard's item in the menu bar shows:
 
     A copy that cannot update itself, or a beta with nothing to check for, says why, has no **Check for updates automatically**, and dims **Check now**.
   </Tab>
+  <Tab title="Linux">
+    Your package manager updates the app, as [Update Pitboard](/install#update-pitboard) says, so **Preferences** has no update controls.
+  </Tab>
 </Tabs>
 
 [What leaves your machine](/security#what-leaves-your-machine) lists what a check sends.
@@ -113,7 +124,9 @@ While the app is open, it acts once a limit of the account in use reaches the sh
 | **Notify Me** | Posts one notification for each limit and reset, with **Switch** where another account of the tool is under the share in every limit. [Notifications](/reference/mac-app#notifications) lists its words. |
 | **Switch Automatically** | Switches Claude Code, as [Switch before an account runs out](/guides/automatic-switching) gives the rules. It notifies of Codex as **Notify Me** does. |
 
-**At** shows under **Notify Me** and **Switch Automatically**: a field and a stepper on macOS, a number box from 50 to 99 on Windows. On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
+On Linux, where the desktop shows no tray icon, [Watch in the Background](/reference/linux-app#watch-in-the-background) goes on once the window is closed.
+
+**At** shows under **Notify Me** and **Switch Automatically**: a field and a stepper on macOS, a number box from 50 to 99 on Windows. On Linux, it is a field with buttons. On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
 
 A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains. Whatever is chosen, **Is this allowed?** under the choice opens [Is this allowed](/concepts/limits#is-this-allowed).
 
@@ -161,7 +174,7 @@ On Windows, the line sits under **Warm-up**, and shows while the section is clos
 
 ### Keep saved sign-ins fresh
 
-Off by default. A note under it reads **Your Mac refreshes your saved sign-ins once a day, so one you leave alone doesn't expire.** On Windows, it starts **Your PC**. Once a Claude Desktop account is added on macOS, it reads **Your Mac refreshes saved sign-ins, except Claude Desktop's, once a day so they don't expire.**
+Off by default. A note under it reads **Your Mac refreshes your saved sign-ins once a day, so one you leave alone doesn't expire.** On Windows, it starts **Your PC**, and on Linux **This computer**. Once a Claude Desktop account is added on macOS, it reads **Your Mac refreshes saved sign-ins, except Claude Desktop's, once a day so they don't expire.**
 
 It has the system's scheduler run `pitboard renew` once a day, with the command line that came with the app. That run refreshes the saved sign-ins that are due and nothing else. [Keep parked logins alive](/guides/renewal) says why.
 
@@ -173,7 +186,8 @@ You can always turn it off. You cannot turn it on in these cases:
 | --- | --- | --- |
 | macOS runs the app from a temporary copy | macOS | Dimmed, with a note that starts **Move Pitboard to your Applications folder first.** |
 | No command line that can run came with the app, as in a build run from Xcode or from its build folder | macOS, Windows | Dimmed, with **This copy of Pitboard has no command line inside it to run on a schedule.** |
-| `PITBOARD_HOME` names a directory other than [the default one](/reference/files#the-pitboard-directory) | macOS, Windows | A refusal under the setting: the schedule refreshes only the saved sign-ins in the default directory. |
+| No `pitboard` that can run is beside the app | Linux | Dimmed, with **This copy of Pitboard has no command line beside it to run on a schedule.** |
+| `PITBOARD_HOME` names a directory other than [the default one](/reference/files#the-pitboard-directory) | All | A refusal under the setting: the schedule refreshes only the saved sign-ins in the default directory. |
 
 ### Command line
 
@@ -181,7 +195,8 @@ You can always turn it off. You cannot turn it on in these cases:
 
 | The `pitboard` found | Note |
 | --- | --- |
-| The one that came with the app, directly or through a link | **The one inside this app, so it updates with the app.** |
+| On macOS and Windows, the one that came with the app, directly or through a link | **The one inside this app, so it updates with the app.** |
+| On Linux, the `pitboard` package's, beside the app | **The one from the pitboard package this app needs, so your package manager updates it with the app.** |
 | Any other | **Installed apart from this app, so update it the way you installed it.** |
 
 <Tabs>
@@ -201,6 +216,11 @@ You can always turn it off. You cannot turn it on in these cases:
     Pitboard looks on the `PATH` your account and the machine set, then in `.cargo\bin` in your profile folder, then in `bin` in the app's folder, then where npm, WinGet and Scoop put programs.
 
     The installer puts the command line on your `PATH`, so the section has no install button. With none found, the note reads **Pitboard's installer puts pitboard on your PATH, which terminals opened after it ran see.**
+  </Tab>
+  <Tab title="Linux">
+    Pitboard looks on your login shell's `PATH`, then in `~/.cargo/bin`, `~/.local/bin` and `/home/linuxbrew/.linuxbrew/bin`.
+
+    The app's package needs the `pitboard` package, which puts the command line in `/usr/bin`, so **Command Line** has no install button.
   </Tab>
 </Tabs>
 

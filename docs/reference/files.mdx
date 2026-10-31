@@ -320,15 +320,43 @@ The environment holds the proxy variables as they were set at install, and on ma
 
     Removing Pitboard in **Settings** > **Apps** > **Installed apps** deletes the install folder, the shortcut, the link scheme, the `PATH` entry, the `Run` value, the Jump List and `%LOCALAPPDATA%\Pitboard App`. The app's **Uninstall Pitboard** deletes Pitboard's directory, then removes Pitboard the same way.
   </Tab>
+  <Tab title="Linux">
+    The `pitboard-app` package installs the app for every user of the computer:
+
+    | Path | What it is |
+    | --- | --- |
+    | `/usr/bin/pitboard-app` | The app |
+    | `/usr/share/applications/com.usepitboard.Pitboard.desktop` | Its entry among your desktop's apps, with **Add Account** and **Refresh**. It claims [Pitboard links](/reference/account-windows#pitboard-links). |
+    | `/usr/share/dbus-1/services/com.usepitboard.Pitboard.service` | What starts the app when the desktop asks for it over D-Bus |
+    | `/usr/share/gnome-shell/search-providers/com.usepitboard.Pitboard.search-provider.ini` | Its results in GNOME's [search](/reference/linux-app#search) |
+    | `/usr/share/krunner/dbusplugins/com.usepitboard.Pitboard.desktop` | Its results in KRunner |
+    | `/usr/share/metainfo/com.usepitboard.Pitboard.metainfo.xml` | What GNOME Software and Discover say of it |
+    | The `com.usepitboard.Pitboard` icons in `/usr/share/icons/hicolor` | Its icon, and the icons its tray icon shows |
+    | `/usr/share/man/man1/pitboard-app.1` | Its man page |
+
+    The `pitboard` package puts the command line in `/usr/bin/pitboard`, with its man page and completions. `pitboard-plasma-widget` puts the [Plasma widget](/reference/linux-app#plasma-widget) in `/usr/share/plasma/plasmoids/com.usepitboard.Pitboard`.
+
+    The app keeps these in your home:
+
+    | Path | What it is |
+    | --- | --- |
+    | `~/.local/share/com.usepitboard.Pitboard/window.json` | The window's size, and whether it was maximized |
+    | `~/.cache/com.usepitboard.Pitboard` | The app's cache folder |
+    | `~/.config/autostart/com.usepitboard.Pitboard.desktop` | **Start Pitboard at Login**, while it is on: `/usr/bin/pitboard-app --sign-in` |
+
+    Where `XDG_DATA_HOME`, `XDG_CACHE_HOME` or `XDG_CONFIG_HOME` is set, its folder takes the place of `~/.local/share`, `~/.cache` or `~/.config`.
+
+    The app's **Uninstall Pitboard** deletes Pitboard's directory, the autostart entry and both folders, then names the command that removes the packages. Removing the packages alone leaves your home as it is.
+  </Tab>
 </Tabs>
 
-Both apps keep these in `app.json` in Pitboard's directory, so they follow `PITBOARD_HOME`:
+The apps keep these in `app.json` in Pitboard's directory, so they follow `PITBOARD_HOME`:
 
 | Key | Holds |
 | --- | --- |
 | `second_account_declined` | The tools, `claude`, `codex` or `desktop`, whose second-account tip you dismissed with **Not Now** |
 | `tips_declined` | The other setup tips you dismissed with **Not Now**: `at_limit` or `use_codex` |
-| `has_been_seen` | Whether the app has shown its welcome window |
+| `has_been_seen` | Whether the app has shown its welcome |
 | `at_limit` | The choice in **When a limit reaches**: `nothing`, `notify` or `switch`. While left out, `auto_switch` decides. |
 | `auto_switch` | `true` while **Switch Automatically** is chosen. Left out otherwise. Without `at_limit`, `true` reads as **Switch Automatically** and anything else as **Notify Me**. |
 | `auto_switch_at` | The share it notifies or switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |

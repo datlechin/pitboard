@@ -10,6 +10,8 @@ An open Claude Code session follows a switch within about 33 seconds, with no re
 
 On Windows, where `.credentials.json` is Claude Code's store, a session checks the file's modification time before each request and reads it again once a switch has changed it, as read in 2.1.301. On a Windows 11 PC with 2.1.302, a running session answered its next prompt as the account switched to, sent 11 seconds after one switch and 21 seconds after another. Where Credential Manager is the store, a session keeps the login it read there for 30 seconds, as read in 2.1.301 and not measured. Pitboard gives 33 seconds on Windows too.
 
+On Linux, a session checks `.credentials.json` at each request and reads it again once a switch has changed it, as measured with 2.1.314. On Fedora 44, a running session opened the file again at its first request after a switch, 4.6 seconds after the switch began. Pitboard gives 33 seconds on Linux too.
+
 Until then the session uses the account it is leaving. As read in 2.1.294, its `/status` already names the account switched to, from the rewritten config. `/usage` and every request still use the login it holds.
 
 As read in 2.1.284, sessions and the daemon that renews their login read it again under the write lock before writing. None can write the previous account back.
