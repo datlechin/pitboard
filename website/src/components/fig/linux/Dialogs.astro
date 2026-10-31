@@ -1,0 +1,180 @@
+---
+// The dialogs the window opens, each drawn closed for live/ to open over it: Add Account and Sign In
+// Again with their sign-in (data/ui/sign-in.ui), Name This Account and Rename (sheet.ui), Remove's
+// question (dialogs/question.rs), Open Link (open-link.ui), Keyboard Shortcuts (dialogs/
+// shortcuts.rs) and About Pitboard (dialogs/about.rs, libadwaita's own).
+import AlertDialog from "./AlertDialog.astro";
+import Button from "./Button.astro";
+import Dialog from "./Dialog.astro";
+import Group from "./Group.astro";
+import List from "./List.astro";
+import Row from "./Row.astro";
+import Spinner from "./Spinner.astro";
+import Symbolic from "./Symbolic.astro";
+import { shortcuts } from "../../../data/linux.ts";
+import { about, acceleratorLabel, openLink } from "../../../data/linux-window.ts";
+import {
+  ACCOUNT,
+  CANCEL,
+  DONE,
+  NAME,
+  TOOL,
+  OPEN,
+  REMOVE,
+  RENAME,
+  WAITING_FOR_BROWSER,
+  addAccount,
+  copyLink,
+  finishInBrowser,
+  nameThisAccount,
+  signInAsking,
+  signInMessage,
+} from "../../../data/window.ts";
+import { toolsOn } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+  version: string;
+}
+const { prefix, version } = Astro.props;
+const id = (part: string) => `${prefix}-${part}`;
+const tools = toolsOn("linux");
+// AdwClamp's child in each width, less its box's margins (adw-clamp-layout.c)
+const content = "flex flex-col gap-12 px-12 pt-12 pb-24";
+const toggle =
+  "h-28 flex-1 rounded-u-6 px-12 font-bold outline-none focus-adw aria-pressed:bg-adw-toggle aria-pressed:shadow-adw-toggle live:cursor-default";
+---
+
+{/* Add Account, Sign In Again, and the sign-in they wait on */}
+<Dialog id={id("sign-in")} width={500} title={addAccount("gnome")} actions>
+  <Button slot="start" data-does="cancel">{CANCEL}</Button>
+  <Button slot="end" look="suggested" data-part="confirm" data-does="sign-in"
+    >{signInAsking("gnome")}</Button
+  >
+  <div class:list={[content, "mx-8"]}>
+    <p data-part="message">{signInMessage(tools[0][1], null)}</p>
+    {/* AdwToggleGroup (_toggle-group.scss): 3 of padding on the current colour at 10%, at radius 9 */}
+    <div
+      class="flex gap-3 rounded-u-9 bg-current/10 p-3"
+      role="group"
+      aria-label={TOOL}
+      data-part="tool"
+    >
+      {tools.map(([tool, name], i) => <button
+        class={toggle}
+        type="button"
+        aria-pressed={i === 0 ? "true" : "false"}
+        value={tool}
+      >
+        {name}
+      </button>)}
+    </div>
+    <List data-part="account" hidden>
+      <Row property title={ACCOUNT}><span slot="subtitle" data-part="label"></span></Row>
+    </List>
+    <div class="flex flex-col items-center gap-12" data-part="waiting" hidden>
+      <Spinner size={32} label={WAITING_FOR_BROWSER} />
+    </div>
+    {/* departs from the apps: A simulated sign-in keeps Copy Link and Open dimmed */}
+    <div class="mx-auto grid auto-cols-fr grid-flow-col gap-12" data-part="link" hidden>
+      <Button shape="pill" disabled>{copyLink("gnome")}</Button>
+      <Button shape="pill" disabled>{OPEN}</Button>
+    </div>
+  </div>
+  <template data-part="waiting-message">{finishInBrowser(null)}</template>
+</Dialog>
+
+{/* Name This Account, which has no Cancel, and Rename */}
+<Dialog id={id("name")} width={400} title={nameThisAccount("gnome")} actions>
+  <span slot="start" data-part="cancel" hidden><Button data-does="cancel">{CANCEL}</Button></span>
+  <Button slot="end" look="suggested" data-part="confirm" data-does="name">{DONE}</Button>
+  <div class={content}>
+    <p data-part="message"></p>
+    {/* AdwEntryRow: its title small over what is typed, the pencil at its end */}
+    <List>
+      <label class="box-content flex min-h-50 items-center px-8 py-2">
+        <span class="my-6 flex min-w-0 flex-1 flex-col gap-3 px-6">
+          <span class="adw-smaller opacity-55">{NAME}</span>
+          <input
+            class="w-full bg-transparent outline-none"
+            name="name"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </span>
+        <span class="flex size-34 items-center justify-center" aria-hidden="true">
+          <Symbolic name="adw-entry-edit" />
+        </span>
+      </label>
+    </List>
+    <p class="text-adw-error adw-caption" data-part="problem" hidden></p>
+  </div>
+  <template data-part="rename">{RENAME}</template>
+</Dialog>
+
+<AlertDialog id={id("remove")}>
+  <Button slot="responses" data-does="cancel" autofocus>{CANCEL}</Button>
+  <Button slot="responses" look="destructive" type="submit" value="forget">{REMOVE}</Button>
+</AlertDialog>
+
+{/* AdwStatusPage, compact (_misc.scss): 24 and 12 of margin, the icon 96 and dimmed */}
+<Dialog id={id("open-link")} width={420} title={openLink.title}>
+  <div class="flex flex-col items-center gap-24 px-12 py-24 text-center" data-state="none">
+    <span class="flex flex-col items-center gap-12">
+      <span class="mb-12 flex opacity-55" data-part="icon">
+        <span class="flex" data-icon="none"><Symbolic name="insert-link" class="size-96" /></span>
+        <span class="flex" data-icon="link" hidden
+          ><Symbolic name="web-browser" class="size-96"
+        /></span>
+      </span>
+      <span class="adw-title-2" data-part="title">{openLink.none.title}</span>
+      <span class="[line-height:140%]" data-part="detail">{openLink.none.detail}</span>
+      <span class="adw-monospace" data-part="link" hidden></span>
+    </span>
+    <span class="flex justify-center gap-12">
+      <Button shape="pill" data-does="paste">{openLink.none.paste}</Button>
+      <span data-part="open" hidden
+        ><Button shape="pill" look="suggested" data-does="open-in-browser"
+          >{openLink.link.open}</Button
+        ></span
+      >
+    </span>
+  </div>
+</Dialog>
+
+<Dialog id={id("shortcuts")} width={420} title={shortcuts.section && "Keyboard Shortcuts"}>
+  <div class="px-12 py-24">
+    <Group id={id("shortcuts-general")} title={shortcuts.section}>
+      <List labelledby={`${id("shortcuts-general")}-title`}>
+        {shortcuts.keys.map(([key, title]) => <Row title={title}>
+          <kbd slot="suffix" class="font-[inherit] opacity-55">
+            {acceleratorLabel(key)}
+          </kbd>
+        </Row>)}
+      </List>
+    </Group>
+  </div>
+</Dialog>
+
+{/* AdwAboutDialog (adw-about-dialog.ui, _misc.scss `dialog.about`): 12 of margin and 6 between the
+   app's icon at 128, its name in title-1, its developer and its version, a button on the accent at
+   10%; then, 18 further and 18 apart, the rows the metainfo gives, Details and Legal leading on, the
+   links off the page */}
+<Dialog id={id("about")} width={360}>
+  <div class="flex flex-col gap-6 p-12 text-center">
+    <svg class="mx-auto size-128" aria-hidden="true"><use href="#pb-linux-app"></use></svg>
+    <span class="adw-title-1">{about.name}</span>
+    <span>{about.developer}</span>
+    <span
+      class="mx-auto mt-3 flex min-h-30 items-center rounded-pill bg-adw-accent/10 px-18 font-bold text-adw-accent"
+      >{version}</span
+    >
+    <div class="mt-18 mb-6 flex flex-col gap-18 text-left">
+      {about.rows.map((rows, i) => <List>
+        {rows.map((title) => <Row title={title}>
+          <Symbolic slot="suffix" name={i === 1 ? "adw-external-link" : "go-next"} />
+        </Row>)}
+      </List>)}
+    </div>
+  </div>
+</Dialog>

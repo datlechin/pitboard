@@ -1,0 +1,35 @@
+---
+// A limit of an account (data/ui/limit-row.ui, window/limit_row.rs): its name over when it resets,
+// then its GtkLevelBar, 120 wide and 8 tall at a round radius, its block tinted for the limit's
+// level (data/style.css), and its figure, numeric and 4 characters wide; read as one sentence.
+// Without `limit` it is the template a limit a read finds is made from.
+import Row from "./Row.astro";
+import type { Group } from "../../../data/linux-window.ts";
+
+interface Props {
+  limit?: Group["limits"][number];
+}
+const { limit } = Astro.props;
+---
+
+<Row data-part="limit">
+  <Fragment slot="title"
+    ><span aria-hidden="true" data-part="name">{limit?.title}</span
+    ><span class="sr-only" data-part="spoken">{limit?.spoken}</span></Fragment
+  >
+  <span slot="subtitle" aria-hidden="true" data-part="resets">{limit?.resets}</span>
+  <span slot="suffix" class="flex items-center gap-6" aria-hidden="true">
+    <svg class="h-8 w-120" viewBox="0 0 120 8">
+      <rect class="fill-current/15" width="120" height="8" rx="4"></rect>
+      <rect
+        class="data-[fill=low]:fill-adw-warning-bg data-[fill=out]:fill-adw-error-bg data-[fill=plenty]:fill-adw-accent-bg"
+        width={limit ? (Math.min(100, limit.percent) * 120) / 100 : 0}
+        height="8"
+        rx="4"
+        data-part="fill"
+        data-fill={limit?.fill}
+      ></rect>
+    </svg>
+    <span class="min-w-[4ch] text-right tabular-nums" data-part="figure">{limit?.figure}</span>
+  </span>
+</Row>

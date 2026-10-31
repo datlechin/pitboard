@@ -1,0 +1,106 @@
+---
+// The Pitboard window (data/ui/window.ui): an AdwWindow, 600 by 640, at radius 15 with libadwaita's
+// shadow and rim, whose AdwNavigationView holds the accounts and pushes Diagnostics or Activity
+// over them, each page under its own header bar: Add Account… at the accounts' start, Refresh and
+// the main menu at their end, a back button and the page's own buttons on the others. The main menu
+// opens under its button, in two sections and no Quit (window/mod.rs), an account's under its
+// group's. An open dialog dims the window (floating-sheet's dimming) and floats over it from the
+// `dialogs` slot. Every node a state shows is drawn; `pane` is the page shown.
+import AccountMenu from "./AccountMenu.astro";
+import ActivityPage from "./ActivityPage.astro";
+import Button from "./Button.astro";
+import DiagnosticsPage from "./DiagnosticsPage.astro";
+import HeaderBar from "./HeaderBar.astro";
+import MenuItem from "./MenuItem.astro";
+import MenuSeparator from "./MenuSeparator.astro";
+import Popover from "./Popover.astro";
+import { header, mainMenu } from "../../../data/linux.ts";
+
+interface Props {
+  prefix: string;
+  pane?: "accounts" | "diagnostics" | "activity";
+  updated: string;
+  dimmed?: boolean;
+  class?: string;
+}
+const { prefix, pane = "accounts", updated, dimmed = false, class: extra } = Astro.props;
+// what each of the main menu's items opens, in its order
+const opens = [
+  ["open-link", "diagnostics", "activity"],
+  ["preferences", "shortcuts", "help", "about"],
+];
+if (mainMenu.some((s, i) => s.length !== opens[i]?.length))
+  throw new Error("the main menu changed");
+---
+
+<pb-linux-window
+  id={prefix}
+  class:list={[
+    "relative block h-640 w-600 shrink-0 [anchor-name:var(--window)] rounded-u-15 bg-adw-window adw-type text-adw-text shadow-linux-window outline-1 -outline-offset-1 outline-adw-outline select-none",
+    extra,
+  ]}
+  inert
+  data-output
+  data-pane={pane}
+>
+  <div class="absolute inset-0 overflow-hidden rounded-u-15">
+    <div class="flex h-full flex-col" data-page="accounts" hidden={pane !== "accounts"}>
+      <HeaderBar title={header.title} subtitle={updated} titleId={`${prefix}-title`}>
+        <Button
+          slot="start"
+          look="flat"
+          shape="image"
+          icon="list-add"
+          aria-label={header.add.name}
+          title={header.add.tip}
+          aria-keyshortcuts="Control+N"
+          data-does="add"
+        />
+        <Button
+          slot="end"
+          look="flat"
+          shape="image"
+          icon="view-refresh"
+          aria-label={header.refresh.name}
+          title={header.refresh.tip}
+          aria-keyshortcuts="Control+R"
+          data-does="refresh"
+        />
+        <Button
+          slot="end"
+          look="flat"
+          shape="image"
+          icon="open-menu"
+          aria-label={header.menu.name}
+          title={header.menu.tip}
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls={`${prefix}-main-menu`}
+          aria-keyshortcuts="F10"
+          data-does="main-menu"
+        />
+      </HeaderBar>
+      <div class="min-h-0 flex-1 overflow-hidden live:overflow-y-auto" data-part="scroller">
+        <slot name="accounts" />
+      </div>
+    </div>
+    <DiagnosticsPage prefix={prefix} hidden={pane !== "diagnostics"} />
+    <ActivityPage prefix={prefix} hidden={pane !== "activity"} />
+  </div>
+  {/* under the menu button, which KDE Plasma's Minimize and Maximize push in */}
+  <Popover class="top-48 left-537 kde:left-463" id={`${prefix}-main-menu`} label={header.menu.name}>
+    {mainMenu.map((section, i) => (
+      <>
+        {i > 0 && <MenuSeparator />}
+        {section.map((title, j) => <MenuItem data-does={opens[i][j]}>{title}</MenuItem>)}
+      </>
+    ))}
+  </Popover>
+  <AccountMenu prefix={prefix} />
+  <div
+    class="absolute inset-0 z-4 rounded-u-15 bg-adw-dimming"
+    data-part="dimming"
+    hidden={!dimmed}
+  ></div>
+  <slot name="dialogs" />
+</pb-linux-window>

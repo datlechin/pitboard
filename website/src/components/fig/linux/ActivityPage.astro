@@ -1,0 +1,62 @@
+---
+// Activity (data/ui/activity.ui, pages/activity.rs), pushed over the accounts: the back button, its
+// title and Refresh, over a GtkColumnView data-table on the view's ground: its headers' captions
+// bold at 40% in a 30 tall row, then a line a change, 2 and 6 of padding, the date numeric, the
+// result quieter where it was done and By always.
+import Button from "./Button.astro";
+import HeaderBar from "./HeaderBar.astro";
+import { activityPage as page } from "../../../data/linux-window.ts";
+import { header } from "../../../data/linux.ts";
+
+interface Props {
+  prefix: string;
+  hidden?: boolean;
+}
+const { prefix, hidden = false } = Astro.props;
+// Date and By keep their own width, the rest share what is left
+const expands = [false, true, true, true, false];
+const quiet = [false, false, false, true, true];
+---
+
+<div class="flex h-full flex-col" data-page="activity" hidden={hidden}>
+  <HeaderBar title={page.title} titleId={`${prefix}-activity-title`} back>
+    <Button
+      slot="end"
+      look="flat"
+      shape="image"
+      icon="view-refresh"
+      aria-label={header.refresh.name}
+      title={page.refreshHelp}
+      data-does="refresh-log"
+    />
+  </HeaderBar>
+  <div class="min-h-0 flex-1 overflow-hidden bg-adw-view live:overflow-y-auto">
+    <table class="w-full border-collapse text-left" aria-labelledby={`${prefix}-activity-title`}>
+      <thead>
+        <tr>
+          {page.columns.map((c, i) => <th
+            class:list={[
+              "h-30 px-6 py-3 font-bold leading-none whitespace-nowrap text-current/40 [font-size:82%]",
+              { "w-0": !expands[i] },
+            ]}
+            scope="col"
+          >
+            {c}
+          </th>)}
+        </tr>
+      </thead>
+      <tbody data-part="log">
+        {page.rows.map((r) => <tr>
+          {[r.date, r.change, r.account, r.result, r.by].map((said, i) => <td
+            class:list={[
+              "px-6 py-2 whitespace-nowrap",
+              { "tabular-nums": i === 0, "opacity-55": quiet[i] },
+            ]}
+          >
+            {said}
+          </td>)}
+        </tr>)}
+      </tbody>
+    </table>
+  </div>
+</div>

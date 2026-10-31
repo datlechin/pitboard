@@ -1,0 +1,26 @@
+---
+// A boxed list (_lists.scss, _misc.scss `.card`): a card at radius 12 with its shadow, a hairline of
+// the card's shade between its rows, which a row's height counts.
+interface Props {
+  class?: string;
+  label?: string;
+  labelledby?: string;
+  hidden?: boolean;
+  [data: `data-${string}`]: string | undefined;
+}
+const { class: extra, label, labelledby, hidden, ...data } = Astro.props;
+---
+
+<div
+  class:list={[
+    "flex flex-col rounded-u-12 bg-adw-card shadow-adw-card [&>:not([hidden])~*]:border-t [&>:not([hidden])~*]:border-adw-card-shade",
+    extra,
+  ]}
+  role="group"
+  aria-label={label}
+  aria-labelledby={labelledby}
+  hidden={hidden}
+  {...data}
+>
+  <slot />
+</div>

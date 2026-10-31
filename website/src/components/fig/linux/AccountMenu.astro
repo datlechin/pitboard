@@ -1,0 +1,33 @@
+---
+// An account's menu, under its group's menu button (window/account_group.rs `offer`): what it does
+// to the account but the header's own button, then Copy Email Address, then Remove Account…, each
+// dimmed while the model holds it back (present/accounts.rs `actions`). live/ fills it for the
+// account it opens for: Switch to its name, and what is dimmed.
+import MenuItem from "./MenuItem.astro";
+import MenuSeparator from "./MenuSeparator.astro";
+import Popover from "./Popover.astro";
+import { group } from "../../../data/linux-window.ts";
+import {
+  RENAME_OFFER,
+  copyEmail,
+  removeAccount,
+  signInAgain,
+  warmUpNow,
+} from "../../../data/window.ts";
+
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
+---
+
+<Popover class="top-(--y) left-(--x)" id={`${prefix}-account-menu`} label={group.account}>
+  <MenuItem data-offer="use"><span data-part="title"></span></MenuItem>
+  <MenuItem data-offer="sign-in-again">{signInAgain("gnome")}</MenuItem>
+  <MenuItem data-offer="rename">{RENAME_OFFER}</MenuItem>
+  <MenuItem data-offer="warm" disabled>{warmUpNow("gnome")}</MenuItem>
+  <MenuSeparator data-after="does" />
+  <MenuItem data-offer="copy">{copyEmail("gnome")}</MenuItem>
+  <MenuSeparator data-after="copy" />
+  <MenuItem data-offer="forget">{removeAccount("gnome")}</MenuItem>
+</Popover>

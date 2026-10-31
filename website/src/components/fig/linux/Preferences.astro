@@ -1,0 +1,314 @@
+---
+// Preferences (data/ui/preferences.ui, preferences/): an AdwPreferencesDialog floating over the
+// dimmed window, 540 by 600 in it, its view switcher in the header bar with each page's icon and
+// title side by side, and Close. General: Start Pitboard at Login and the version; Limits: what
+// happens before an account runs out, chosen Switch Automatically, at 95%, then Warm-Up's hours and
+// a switch an account; Advanced: Keep Saved Sign-Ins Fresh, the command line the package puts
+// beside the app, and Uninstall, whose question and Remove the App wait over it. Where a desktop
+// shows no status item, as stock GNOME does, it says that closing the window quits Pitboard, and
+// offers Watch in the Background; KDE Plasma's tray keeps Pitboard running, so it says neither.
+// `show` is where Limits is scrolled to: its top, or Warm-Up.
+import AccountsPage from "./AccountsPage.astro";
+import AlertDialog from "./AlertDialog.astro";
+import Button from "./Button.astro";
+import Group from "./Group.astro";
+import HeaderBar from "./HeaderBar.astro";
+import List from "./List.astro";
+import Row from "./Row.astro";
+import SpinRow from "./SpinRow.astro";
+import Switch from "./Switch.astro";
+import Symbolic from "./Symbolic.astro";
+import Window from "./Window.astro";
+import { accountsPage, atLimitNote, prefs, warmAccounts } from "../../../data/linux-window.ts";
+import { moments } from "../../../data/world.ts";
+
+interface Props {
+  prefix: string;
+  show: "switch" | "warm";
+  version: string;
+}
+const { prefix, show, version } = Astro.props;
+const id = (part: string) => `${prefix}-${part}`;
+const { general, limits, advanced } = prefs;
+const world = moments.after;
+const chosen = "switch";
+const [note, closed] = [atLimitNote(chosen, true)!, atLimitNote(chosen, false)!];
+const tab =
+  "group/tab flex h-34 items-center justify-center gap-6 rounded-u-9 px-12 font-bold whitespace-nowrap outline-none focus-adw aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/7 live:aria-selected:hover:bg-current/15";
+const caption = "mt-12 adw-caption opacity-55";
+---
+
+<div class="desk flex items-center justify-center py-32 desk-px-680">
+  <Window prefix={prefix} updated={accountsPage(world).updated} dimmed>
+    <AccountsPage slot="accounts" prefix={prefix} moment="after" />
+    <Fragment slot="dialogs">
+      <pb-linux-preferences
+        class="absolute top-20 left-30 z-5 flex h-600 w-540 flex-col overflow-hidden rounded-u-15 bg-adw-window shadow-adw-sheet outline-1 -outline-offset-1 outline-adw-outline"
+        id={id("preferences")}
+        role="dialog"
+        aria-labelledby={id("preferences-title")}
+        inert
+        data-output
+      >
+        <h2 class="sr-only" id={id("preferences-title")}>{prefs.title}</h2>
+        <HeaderBar controls="dialog">
+          {/* AdwViewSwitcher, wide (_view-switcher.scss): its buttons one width each, 3 apart */}
+          <span
+            slot="title"
+            class="grid auto-cols-fr grid-flow-col gap-3"
+            role="tablist"
+            aria-label={prefs.title}
+          >
+            {prefs.pages.map(([page, title, icon]) => <button
+              class={tab}
+              type="button"
+              role="tab"
+              id={id(`${page}-tab`)}
+              aria-selected={page === "limits" ? "true" : "false"}
+              aria-controls={id(page)}
+              tabindex={page === "limits" ? undefined : -1}
+              data-page={page}
+            >
+              <Symbolic name={icon} />
+              {title}
+            </button>)}
+          </span>
+        </HeaderBar>
+        {/* the toolbar view's undershoot, which shows once the page is scrolled under its header */}
+        <div
+          class="pointer-events-none absolute inset-x-0 top-46 z-1 h-4 adw-undershoot-top"
+          data-part="undershoot"
+          hidden={show !== "warm"}
+        ></div>
+        <div
+          class:list={[
+            "flex min-h-0 flex-1 flex-col overflow-hidden live:justify-start live:overflow-y-auto",
+            { "justify-end": show === "warm" },
+          ]}
+          data-part="scroller"
+        >
+          <div
+            class="mx-auto flex w-509 flex-col gap-24 px-12 py-24"
+            id={id("general")}
+            role="tabpanel"
+            aria-labelledby={id("general-tab")}
+            hidden
+          >
+            {/* general.rs: a description where no status item keeps Pitboard running */}
+            <div class="flex flex-col">
+              <p class="mb-12 opacity-55 [line-height:140%]" data-on="gnome">
+                {general.closingQuits}
+              </p>
+              <List>
+                <Row
+                  title={general.startAtLogin}
+                  subtitle={general.startNote}
+                  titleId={id("start-title")}
+                >
+                  <Switch slot="suffix" labelledby={id("start-title")} data-part="start-at-login" />
+                </Row>
+              </List>
+            </div>
+            <List>
+              <Row title={general.version}>
+                <span slot="suffix" class="opacity-55 select-text">{version}</span>
+              </Row>
+            </List>
+          </div>
+          <div
+            class="mx-auto flex w-509 shrink-0 flex-col gap-24 px-12 py-24"
+            id={id("limits")}
+            role="tabpanel"
+            aria-labelledby={id("limits-tab")}
+          >
+            <Group id={id("at-limit")} title={limits.title}>
+              <Fragment slot="description"
+                ><span data-part="note">{note}</span
+                ><span data-on="gnome" data-part="once-closed"
+                  >{closed.slice(note.length)}</span
+                ></Fragment
+              >
+              <List>
+                {/* AdwComboRow: the choice and its arrow at its end, its list in a popover */}
+                <Row
+                  title={limits.heading}
+                  subtitle={limits.standing}
+                  titleId={id("at-limit-title")}
+                >
+                  <button
+                    slot="suffix"
+                    class="flex items-center gap-6 outline-none focus-adw live:cursor-default"
+                    type="button"
+                    role="combobox"
+                    aria-labelledby={id("at-limit-title")}
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-controls={id("at-limit-choices")}
+                    data-part="choice"
+                  >
+                    <span data-part="chosen">{limits.choices.find(([v]) => v === chosen)![1]}</span>
+                    <Symbolic name="pan-down" />
+                  </button>
+                </Row>
+                <SpinRow
+                  title={limits.share.label}
+                  subtitle={limits.share.range}
+                  value={`${limits.share.at}%`}
+                  now={limits.share.at}
+                  min={50}
+                  max={99}
+                  typed
+                  part="share"
+                />
+                <a
+                  class="flex text-inherit no-underline outline-none focus-adw live:cursor-default live:hover:bg-current/3 live:active:bg-current/8"
+                  href={limits.terms.href}
+                  data-part="terms"
+                >
+                  <Row class="flex-1" title={limits.terms.link} subtitle={limits.terms.sentence}>
+                    <Symbolic slot="suffix" name="adw-external-link" />
+                  </Row>
+                </a>
+              </List>
+            </Group>
+            <Group id={id("warm")} title={limits.warm.title}>
+              <Fragment slot="description"
+                ><span data-on="gnome">{limits.warm.note(false)}</span
+                ><span data-on="kde">{limits.warm.note(true)}</span></Fragment
+              >
+              <List>
+                <SpinRow
+                  title="From"
+                  value={limits.warm.from}
+                  now={7 * 60}
+                  min={0}
+                  max={1439}
+                  part="from"
+                />
+                <SpinRow
+                  title="To"
+                  value={limits.warm.to}
+                  now={23 * 60}
+                  min={0}
+                  max={1439}
+                  part="to"
+                />
+                {warmAccounts(world).map((a) => <Row
+                  title={a.label}
+                  subtitle={a.standing}
+                  titleId={id(`warm-${a.label}`)}
+                  data-warm={a.label}
+                >
+                  <Switch slot="suffix" on={a.on} labelledby={id(`warm-${a.label}`)} />
+                </Row>)}
+              </List>
+              <p class={caption} data-part="warm-standing">{limits.warm.standing}</p>
+            </Group>
+          </div>
+          <div
+            class="mx-auto flex w-509 flex-col gap-24 px-12 py-24"
+            id={id("advanced")}
+            role="tabpanel"
+            aria-labelledby={id("advanced-tab")}
+            hidden
+          >
+            <List>
+              <Row title={advanced.renew} subtitle={advanced.renewAbout} titleId={id("renew")}>
+                <Switch slot="suffix" labelledby={id("renew")} data-part="renew" />
+              </Row>
+            </List>
+            <List data-on="gnome">
+              <Row
+                title={advanced.watch}
+                subtitle={advanced.watchAbout(true)}
+                titleId={id("watch")}
+              >
+                <Switch slot="suffix" labelledby={id("watch")} data-part="watch" />
+              </Row>
+            </List>
+            <Group
+              id={id("command-line")}
+              title={advanced.commandLine}
+              description={advanced.updateNote}
+            >
+              <List>
+                <Row title={advanced.path} subtitle={advanced.inTerminal} />
+              </List>
+            </Group>
+            <Group
+              id={id("uninstall")}
+              title={advanced.uninstall}
+              description={advanced.uninstallNote}
+            >
+              <List>
+                {/* AdwButtonRow: its title in bold, centred, 40 tall */}
+                <button
+                  class="flex min-h-40 items-center justify-center rounded-u-12 px-12 adw-heading outline-none focus-adw live:cursor-default live:hover:bg-current/3 live:active:bg-current/8"
+                  type="button"
+                  data-does="uninstall"
+                >
+                  {advanced.uninstallButton}
+                </button>
+              </List>
+            </Group>
+          </div>
+        </div>
+        {/* GtkDropDown's list, under the combo row, the one chosen checked */}
+        <div
+          class="absolute top-(--y) right-24 z-3 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 shadow-adw-popover"
+          id={id("at-limit-choices")}
+          role="listbox"
+          aria-labelledby={id("at-limit-title")}
+          hidden
+        >
+          {limits.choices.map(([value, title]) => <div
+            class="flex h-32 items-center gap-6 rounded-u-9 px-12 whitespace-nowrap live:cursor-default live:hover:bg-current/10"
+            role="option"
+            aria-selected={value === chosen ? "true" : "false"}
+            data-value={value}
+          >
+            {title}
+            <Symbolic
+              name="object-select"
+              class:list={["size-16", { invisible: value !== chosen }]}
+            />
+          </div>)}
+        </div>
+      </pb-linux-preferences>
+      <AlertDialog
+        id={id("uninstall-question")}
+        title={prefs.uninstallQuestion.title}
+        message={prefs.uninstallQuestion.says}
+      >
+        <Button slot="responses" data-does="cancel" autofocus
+          >{prefs.uninstallQuestion.cancel}</Button
+        >
+        <Button slot="responses" type="submit" value="uninstall"
+          >{prefs.uninstallQuestion.uninstall}</Button
+        >
+      </AlertDialog>
+      <AlertDialog
+        id={id("remove-the-app")}
+        title={prefs.removeTheApp.title}
+        message={prefs.removeTheApp.message}
+      >
+        <List>
+          <Row class="adw-monospace" title={prefs.removeTheApp.command}>
+            <Button
+              slot="suffix"
+              look="flat"
+              shape="image"
+              icon="edit-copy"
+              aria-label={prefs.removeTheApp.copy}
+              title={prefs.removeTheApp.copy}
+              data-does="copy-command"
+            />
+          </Row>
+        </List>
+        <Button slot="responses" type="submit" value="quit" autofocus
+          >{prefs.removeTheApp.quit}</Button
+        >
+      </AlertDialog>
+    </Fragment>
+  </Window>
+</div>

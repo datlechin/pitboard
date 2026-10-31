@@ -1,0 +1,39 @@
+---
+// The Pitboard window on its desk, on the accounts or pushed to Activity: whole at its default 600
+// by 640, or a `crop` desk that shows its top, which draws the dialogs every view of the window
+// shares, as the macOS and Windows figures draw theirs once with their top view's.
+import AccountsPage from "./AccountsPage.astro";
+import Dialogs from "./Dialogs.astro";
+import Window from "./Window.astro";
+import { accountsPage } from "../../../data/linux-window.ts";
+import { moments, type Moment } from "../../../data/world.ts";
+
+interface Props {
+  prefix: string;
+  moment: Moment;
+  pane?: "accounts" | "activity";
+  crop?: boolean;
+  // the release About Pitboard names, drawn with the cut window's dialogs
+  version?: string;
+}
+const { prefix, moment, pane = "accounts", crop = false, version = "" } = Astro.props;
+const page = accountsPage(moments[moment]);
+---
+
+<div
+  class:list={[
+    "desk [anchor-name:var(--desk)] desk-px-680",
+    crop ? "block h-356" : "flex items-center justify-center py-32",
+  ]}
+  id={`${prefix}-desk`}
+>
+  <Window
+    prefix={prefix}
+    pane={pane}
+    updated={page.updated}
+    class={crop ? "absolute top-24 left-40" : undefined}
+  >
+    <AccountsPage slot="accounts" prefix={prefix} moment={moment} />
+    {crop && <Dialogs slot="dialogs" prefix={prefix} version={version} />}
+  </Window>
+</div>

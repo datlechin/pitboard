@@ -1,0 +1,35 @@
+---
+// AdwActionRow (_lists.scss): a list row's 2 of padding around its header, which is at least 50
+// tall with 12 a side, its title over its smaller, dimmed subtitle 6 from its top and bottom and 3
+// apart, a prefix 12 before it and suffixes 6 apart after it; a `property` row's title small and
+// dimmed over its subtitle at full size. In a boxed list, a hairline of the card's shade between
+// rows.
+interface Props extends Omit<astroHTML.JSX.HTMLAttributes, "class" | "title" | "property"> {
+  title?: string;
+  subtitle?: string | null;
+  property?: boolean;
+  class?: string;
+  titleId?: string;
+}
+const { title, subtitle, property = false, class: extra, titleId, ...rest } = Astro.props;
+---
+
+<div class:list={["box-content flex min-h-50 items-center gap-6 px-14 py-2", extra]} {...rest}>
+  {Astro.slots.has("prefix") && <span class="mr-6 flex shrink-0 items-center">
+    <slot name="prefix" />
+  </span>}
+  <span class="my-6 flex min-w-0 flex-1 flex-col gap-3">
+    <span class:list={[{ "adw-smaller opacity-55": property }]} id={titleId} data-part="title"
+      >{title}<slot name="title"
+    /></span>
+    <span
+      class:list={["whitespace-pre-line", { "adw-smaller opacity-55": !property }]}
+      data-part="subtitle"
+      hidden={!subtitle && !Astro.slots.has("subtitle")}
+      >{subtitle}<slot name="subtitle"
+    /></span>
+  </span>
+  {Astro.slots.has("suffix") && <span class="flex shrink-0 items-center gap-6">
+    <slot name="suffix" />
+  </span>}
+</div>

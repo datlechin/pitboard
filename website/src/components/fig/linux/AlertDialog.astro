@@ -1,0 +1,41 @@
+---
+// AdwAlertDialog (_message-dialog.scss, adw-alert-dialog.c): the dialog's ground at radius 18, at
+// most 372 wide, its title-2 heading over its message, centred, 32 from its top and 24 a side, 10
+// apart; anything more under them, then its responses side by side, one width each, 12 apart, 24
+// from its edges, each 10 and 20 of padding at radius 12. A <dialog> live/ opens with showModal().
+interface Props {
+  id: string;
+  title?: string;
+  message?: string;
+}
+const { id, title, message } = Astro.props;
+---
+
+<dialog
+  class="w-372 overflow-hidden rounded-u-18 bg-adw-dialog text-adw-text shadow-adw-sheet outline-1 -outline-offset-1 outline-adw-outline backdrop:bg-transparent supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2"
+  id={id}
+  role="alertdialog"
+  aria-labelledby={`${id}-title`}
+  aria-describedby={`${id}-message`}
+>
+  <form class="flex flex-col adw-type" method="dialog">
+    <div class="flex flex-col gap-10 pt-32 pb-9 text-center">
+      <h2 class="px-24 adw-title-2" id={`${id}-title`} data-part="title">{title}</h2>
+      <p
+        class="px-24 whitespace-pre-line [line-height:140%]"
+        id={`${id}-message`}
+        data-part="message"
+      >
+        {message}
+      </p>
+      {Astro.slots.has("default") && <div class="mt-8 px-24 text-left">
+        <slot />
+      </div>}
+    </div>
+    <div
+      class="grid auto-cols-fr grid-flow-col gap-12 p-24 pt-12 [&>button]:h-44 [&>button]:rounded-u-12 [&>button]:px-20"
+    >
+      <slot name="responses" />
+    </div>
+  </form>
+</dialog>

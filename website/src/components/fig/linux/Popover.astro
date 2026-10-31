@@ -1,0 +1,33 @@
+---
+// A GtkPopoverMenu (_popovers.scss, _menus.scss): the popover's ground at radius 15 inside its
+// hairline, with its shadow and its arrow, 24 by 8, at the button it opens from; 6 of padding, its
+// items 32 tall at radius 9 with 12 a side, each section 6 from the next across a separator.
+interface Props {
+  id: string;
+  label: string;
+  class?: string;
+  role?: "menu" | "listbox";
+}
+const { id, label, class: extra, role = "menu" } = Astro.props;
+---
+
+<div
+  class:list={[
+    "absolute z-3 min-w-120 -translate-x-1/2 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 text-adw-text shadow-adw-popover outline-none live:cursor-default",
+    extra,
+  ]}
+  id={id}
+  role={role}
+  aria-label={label}
+  tabindex="-1"
+  hidden
+>
+  <svg
+    class="absolute -top-8 left-1/2 h-8 w-24 -translate-x-1/2 overflow-visible fill-adw-popover stroke-black/14"
+    viewBox="0 0 24 8"
+    aria-hidden="true"
+  >
+    <path d="M0 8.5 12 0l12 8.5"></path>
+  </svg>
+  <slot />
+</div>

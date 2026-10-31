@@ -1,0 +1,39 @@
+---
+// An AdwDialog floating over its window (_dialogs.scss, adw-floating-sheet.c): the window's ground
+// at radius 15 with libadwaita's shadow and rim, `width` wide, its header bar's title the dialog's
+// and Close its one window control, or `actions` in its place: a button at its start and the one
+// that goes on at its end. A <dialog> live/ opens with showModal() over its window, centred, and
+// the window dims; its ids start `id`.
+import HeaderBar from "./HeaderBar.astro";
+
+// each dialog's content width (data/ui/*.ui), About's libadwaita's own
+const widths = { 360: "w-360", 400: "w-400", 420: "w-420", 500: "w-500" };
+
+interface Props {
+  id: string;
+  width: keyof typeof widths;
+  title?: string;
+  // Cancel and the step's button in the header bar, in place of Close
+  actions?: boolean;
+  class?: string;
+}
+const { id, width, title, actions = false, class: extra } = Astro.props;
+---
+
+<dialog
+  class:list={[
+    "max-h-600 overflow-hidden rounded-u-15 bg-adw-window text-adw-text shadow-adw-sheet outline-1 -outline-offset-1 outline-adw-outline backdrop:bg-transparent supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2",
+    widths[width],
+    extra,
+  ]}
+  id={id}
+  aria-labelledby={title ? `${id}-title` : undefined}
+>
+  <form class="flex flex-col adw-type" method="dialog">
+    <HeaderBar title={title} titleId={`${id}-title`} controls={actions ? "none" : "dialog"}>
+      <slot name="start" slot="start" />
+      <slot name="end" slot="end" />
+    </HeaderBar>
+    <slot />
+  </form>
+</dialog>

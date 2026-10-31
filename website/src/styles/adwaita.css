@@ -16,6 +16,7 @@
   --color-adw-card-shade: light-dark(rgb(0 0 6 / 0.07), rgb(0 0 6 / 0.36));
   --color-adw-dialog: light-dark(#fafafb, #36363a);
   --color-adw-popover: light-dark(#ffffff, #36363a);
+  --color-adw-shade: light-dark(rgb(0 0 6 / 0.07), rgb(0 0 6 / 0.25));
   /* floating-sheet's dimming, the shade colour at twice its alpha */
   --color-adw-dimming: light-dark(rgb(0 0 6 / 0.14), rgb(0 0 6 / 0.5));
   --color-adw-accent-bg: #3584e4;
@@ -36,6 +37,9 @@
      KDE's Noto Sans 10 through kde-gtk-config; neither is shipped, so Inter stands in */
   --font-gnome: "Adwaita Sans", "Inter", system-ui, sans-serif;
   --font-kde: "Noto Sans", "Inter", system-ui, sans-serif;
+  /* and the monospace beside it, Adwaita Mono 11 and Noto Sans Mono 10, JetBrains Mono standing in */
+  --font-gnome-mono: "Adwaita Mono", var(--font-mono);
+  --font-kde-mono: "Noto Sans Mono", var(--font-mono);
 }
 
 @theme inline {
@@ -71,6 +75,14 @@
   }
 }
 
+/* the `monospace` style class, in each desktop's monospace font at the size of the text around it */
+@utility adw-monospace {
+  font-family: var(--font-gnome-mono);
+  :where(:root[data-desktop="kde"]) & {
+    font-family: var(--font-kde-mono);
+  }
+}
+
 /* _labels.scss: .title-1, .title-2, .heading, .caption, and a row's subtitle, `smaller` */
 @utility adw-title-1 {
   font-weight: 800;
@@ -89,6 +101,18 @@
 }
 @utility adw-smaller {
   font-size: smaller;
+}
+
+/* _drawing.scss `undershoot(top)`: under a header a scrolled page passes beneath, a line and 4
+   pixels fading, of the shade colour at 75% */
+@utility adw-undershoot-top {
+  --adw-undershoot: color-mix(in srgb, var(--color-adw-shade) 75%, transparent);
+  box-shadow: inset 0 calc(1 * var(--u)) var(--adw-undershoot);
+  background-image: linear-gradient(
+    to bottom,
+    var(--adw-undershoot),
+    transparent calc(4 * var(--u))
+  );
 }
 
 /* _drawing.scss `focus-ring`: 2 pixels of the accent at half strength, inside the control */

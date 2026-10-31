@@ -1,0 +1,8 @@
+---
+// A section's edge in a popover menu, 6 from the items on either side.
+interface Props {
+  [data: `data-${string}`]: string | undefined;
+}
+---
+
+<div class="my-6 h-1 bg-current/15" role="separator" {...Astro.props}></div>

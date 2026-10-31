@@ -1,0 +1,45 @@
+---
+// A notice (data/ui/notice-row.ui, window/notices.rs): its severity's icon, its title over what it
+// says and the countdown under that, the model's buttons, then the flat round Dismiss. A tool's
+// last switch says it was switched and counts down to its open sessions following; a switch made
+// by itself offers Switch Back.
+import Button from "./Button.astro";
+import Row from "./Row.astro";
+import Symbolic from "./Symbolic.astro";
+import { group, switchNotice } from "../../../data/linux-window.ts";
+
+interface Props {
+  tool: string;
+  title: string;
+  countdown: string;
+  shown: boolean;
+}
+const { tool, title, countdown, shown } = Astro.props;
+---
+
+<Row title={title} data-notice={tool} hidden={!shown}>
+  <span slot="prefix" class="flex" data-part="severity">
+    <span class="flex" data-severity="info"><Symbolic name="dialog-information" /></span>
+    <span class="flex" data-severity="warning" hidden><Symbolic name="dialog-warning" /></span>
+  </span>
+  <Fragment slot="subtitle"
+    ><span class="block" data-part="lines" hidden></span><span
+      class="block tabular-nums"
+      data-part="countdown"
+      >{countdown}</span
+    ></Fragment
+  >
+  <span slot="suffix" class="flex items-center gap-6">
+    <span data-part="actions" hidden>
+      <Button data-does="switch-back">{switchNotice.switchBack}</Button>
+    </span>
+    <Button
+      look="flat"
+      shape="circular"
+      icon="window-close"
+      aria-label={group.dismiss}
+      title={group.dismiss}
+      data-does="dismiss"
+    />
+  </span>
+</Row>

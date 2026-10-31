@@ -1,0 +1,35 @@
+---
+// AdwSpinner (adw-spinner-paintable.c): a ring of the current colour at 15%, its line 2.5 wide at
+// 16 and growing to 7 at 64, the most it draws, under an arc of the colour, turning; still, the arc
+// a quarter round.
+interface Props {
+  size?: 16 | 32 | 64;
+  class?: string;
+  label?: string;
+}
+const { size = 16, class: extra, label } = Astro.props;
+const radius = size / 2;
+const width = 2.5 + 4.5 * ((radius - 8) / 24);
+const r = radius - width / 2;
+const at = (turn: number) =>
+  `${radius + r * Math.cos(turn * 2 * Math.PI)} ${radius + r * Math.sin(turn * 2 * Math.PI)}`;
+---
+
+<svg
+  class:list={[
+    "shrink-0 animate-spin",
+    { 16: "size-16", 32: "size-32", 64: "size-64" }[size],
+    extra,
+  ]}
+  viewBox={`0 0 ${size} ${size}`}
+  fill="none"
+  stroke="currentColor"
+  stroke-width={width}
+  stroke-linecap="round"
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+>
+  <circle cx={radius} cy={radius} r={r} stroke-opacity="0.15"></circle>
+  <path d={`M${at(-0.4)}A${r} ${r} 0 0 1 ${at(-0.15)}`}></path>
+</svg>

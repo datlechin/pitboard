@@ -1,0 +1,88 @@
+---
+// One account (data/ui/account-group.ui, window/account_group.rs): an AdwPreferencesGroup titled
+// with its name over the tool and plan, and at its header's end In Use with its check, the spinner
+// named Switching while a switch to it runs, or its button, then the flat menu button named
+// Account. Its rows: each limit with its 120 wide level bar tinted by level and its figure 4
+// characters wide, read as one sentence; Email, Sign-In and, for Claude Code, Warm-Up with Warm-Up
+// Preferences. Without `group` it is the template an account a visitor adds is made from.
+import Button from "./Button.astro";
+import Group from "./Group.astro";
+import LimitRow from "./LimitRow.astro";
+import List from "./List.astro";
+import Row from "./Row.astro";
+import Spinner from "./Spinner.astro";
+import Symbolic from "./Symbolic.astro";
+import { group as words, type Group as Shown } from "../../../data/linux-window.ts";
+import { SWITCH } from "../../../data/window.ts";
+
+interface Props {
+  prefix: string;
+  group?: Shown;
+}
+const { prefix, group } = Astro.props;
+const id = `${prefix}-${group?.id ?? "added"}`;
+---
+
+<Group
+  id={id}
+  title={group?.label ?? ""}
+  description={group?.description}
+  data-account={group?.id}
+  data-tool={group?.tool}
+>
+  <span slot="suffix" class="flex items-center gap-6">
+    <span class="flex items-center gap-6 opacity-55" data-part="in-use" hidden={!group?.inUse}>
+      <Symbolic name="object-select" />
+      {words.inUse}
+    </span>
+    <span data-part="switching" hidden>
+      <Spinner label={words.switching} />
+    </span>
+    <span data-part="action" hidden={!group?.button}>
+      <Button aria-label={group?.button?.spoken} data-does="use">
+        {group?.button?.title ?? SWITCH}
+      </Button>
+    </span>
+    <Button
+      look="flat"
+      shape="image"
+      icon="view-more"
+      aria-label={words.account}
+      title={words.account}
+      aria-haspopup="menu"
+      aria-expanded="false"
+      aria-controls={`${prefix}-account-menu`}
+      data-does="account-menu"
+    />
+  </span>
+  <List label={group?.label} data-part="rows">
+    {group?.limits.map((l) => (
+      <LimitRow limit={l} />
+    ))}
+    <Row
+      property
+      title={words.email}
+      subtitle={group?.email}
+      data-part="email"
+      hidden={!group?.email}
+    />
+    <Row
+      property
+      title={words.signIn}
+      subtitle={group?.signIn}
+      data-part="sign-in"
+      hidden={!group?.signIn}
+    />
+    <Row
+      property
+      title={words.warmUp}
+      subtitle={group?.warm}
+      data-part="warm"
+      hidden={!group?.warm}
+    >
+      <Button slot="suffix" look="flat" shape="label" data-does="warm-preferences"
+        >{words.warmUpPreferences}</Button
+      >
+    </Row>
+  </List>
+</Group>

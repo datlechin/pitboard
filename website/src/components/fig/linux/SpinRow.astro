@@ -1,0 +1,49 @@
+---
+// AdwSpinRow (_lists.scss, _spin-button.scss): its title over its subtitle, then its value, numeric,
+// and the round minus and plus buttons, 30 square, 10 and 2 of margin and 6 apart; a spin button for the page, its
+// value stepped with the buttons, the arrows or, where `typed`, typed; the buttons out of the Tab
+// order and unspoken, as GTK keeps them.
+import Row from "./Row.astro";
+import Symbolic from "./Symbolic.astro";
+
+interface Props {
+  title: string;
+  subtitle?: string;
+  value: string;
+  now: number;
+  min: number;
+  max: number;
+  typed?: boolean;
+  part: string;
+}
+const { title, subtitle, value, now, min, max, typed = false, part } = Astro.props;
+const button =
+  "mx-2 my-10 flex size-30 items-center justify-center rounded-circle bg-current/10 live:cursor-default live:hover:bg-current/15 live:active:bg-current/30";
+---
+
+<Row title={title} subtitle={subtitle} data-part={part}>
+  <span slot="suffix" class="flex items-center gap-6">
+    {/* the value as drawn, and once the figure works the field itself */}
+    <span class="tabular-nums live:hidden">{value}</span>
+    <input
+      class="hidden w-[5ch] bg-transparent text-right tabular-nums outline-none select-text live:block"
+      type="text"
+      role="spinbutton"
+      aria-label={title}
+      aria-valuenow={now}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuetext={value}
+      value={value}
+      readonly={!typed}
+      inputmode={typed ? "numeric" : undefined}
+      enterkeyhint={typed ? "done" : undefined}
+      autocomplete="off"
+      data-part="value"
+    />
+    <span class="flex gap-6" aria-hidden="true">
+      <span class={button} data-spin="down"><Symbolic name="value-decrease" /></span>
+      <span class={button} data-spin="up"><Symbolic name="value-increase" /></span>
+    </span>
+  </span>
+</Row>

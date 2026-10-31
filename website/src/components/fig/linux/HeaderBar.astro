@@ -1,0 +1,91 @@
+---
+// AdwHeaderBar, flat in its toolbar view (_header-bar.scss): 46 tall, 6 of padding, its 7 a side
+// less the 1 it reaches past the window's edge, 6 between its children, and AdwWindowTitle's bold
+// title over its smaller, dimmed subtitle, centred, or a `title` slot's widget in its place. Its
+// window controls follow each desktop's layout (research/kde-portal.md): GNOME's `appmenu:close`,
+// Close alone; KDE Plasma's `icon:minimize,maximize,close`, the app's icon at its start, then
+// Minimize, Maximize and Close, each a 24 round on a 34 button, 3 apart. A dialog's has Close
+// alone on both, which cancels it as Escape does. A page pushed over another has a back button
+// first.
+import Button from "./Button.astro";
+import Symbolic from "./Symbolic.astro";
+import type { Icon } from "../../../data/linux-window.ts";
+
+interface Props {
+  title?: string;
+  subtitle?: string;
+  titleId?: string;
+  controls?: "window" | "dialog" | "none";
+  back?: boolean;
+}
+const { title, subtitle, titleId, controls = "window", back = false } = Astro.props;
+const control = (name: Icon, does: string, spoken: string, on?: string) => ({
+  name,
+  does,
+  spoken,
+  on,
+});
+const ends =
+  controls === "window"
+    ? [
+        control("window-minimize", "minimize", "Minimize", "kde"),
+        control("window-maximize", "maximize", "Maximize", "kde"),
+        control("window-close", "close", "Close"),
+      ]
+    : controls === "dialog"
+      ? [control("window-close", "cancel", "Close")]
+      : [];
+---
+
+{/* GtkCenterBox: the title centred while both ends leave it room */}
+<div
+  class="grid h-46 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-6 px-6 py-6"
+  data-part="header-bar"
+>
+  <span class="flex items-center gap-6 justify-self-start">
+    {controls === "window" && <span class="flex size-34 items-center justify-center" data-on="kde">
+      <svg class="size-16" aria-hidden="true">
+        <use href="#pb-linux-app" />
+      </svg>
+    </span>}
+    {back && (
+      <Button look="flat" shape="image" icon="go-previous" aria-label="Back" data-does="back" />
+    )}
+    <slot name="start" />
+  </span>
+  <span class="flex min-w-0 flex-col items-center text-center">
+    <slot name="title" />
+    {title !== undefined && (
+      <>
+        <span class="max-w-full truncate px-12 font-bold" id={titleId} data-part="title">
+          {title}
+        </span>
+        <span
+          class="max-w-full truncate px-12 adw-smaller opacity-55"
+          data-part="subtitle"
+          hidden={!subtitle}
+        >
+          {subtitle}
+        </span>
+      </>
+    )}
+  </span>
+  <span class="flex items-center gap-6 justify-self-end">
+    <slot name="end" />
+    {ends.length > 0 && <span class="flex gap-3">
+      {ends.map((c) => <button
+        class="group/control flex size-34 items-center justify-center rounded-circle outline-none focus-adw live:cursor-default"
+        type="button"
+        aria-label={c.spoken}
+        data-does={c.does}
+        data-on={c.on}
+      >
+        <span
+          class="flex size-24 items-center justify-center rounded-circle bg-current/10 live:group-hover/control:bg-current/15 live:group-active/control:bg-current/30"
+        >
+          <Symbolic name={c.name} />
+        </span>
+      </button>)}
+    </span>}
+  </span>
+</div>
