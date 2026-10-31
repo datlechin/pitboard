@@ -4,7 +4,7 @@
 // each terminal draws, which live/term.ts runs.
 import CommandRow from "./CommandRow.astro";
 import Prompt from "./Prompt.astro";
-import LinuxTerminal from "./linux/Terminal.astro";
+import Ptyxis from "./gnome/Ptyxis.astro";
 import MacTerminal from "./mac/Terminal.astro";
 import WinTerminal from "./win/Terminal.astro";
 import { printed, type Session } from "../../data/sessions.ts";
@@ -100,12 +100,12 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
     data-command={session.command}
     data-version={version("linux")}
   >
-    <LinuxTerminal title={session.title} id={`${prefix}-linux`}>
+    <Ptyxis title={session.title} id={`${prefix}-linux`} solo>
       {lines("linux").map((line) => (
         <div set:html={line} />
       ))}
       <Prompt id={`${prefix}-linux`} ps={prompts.linux[0]} cursor={prompts.linux[1]} />
-    </LinuxTerminal>
+    </Ptyxis>
     <CommandRow id={`${prefix}-linux`} commands={commands} />
     <span id={`${prefix}-linux-keys`} hidden>{keys}</span>
   </pb-term>

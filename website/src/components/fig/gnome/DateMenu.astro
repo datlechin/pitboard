@@ -1,0 +1,109 @@
+---
+// The clock's menu (js/ui/dateMenu.js, js/ui/calendar.js, widgets/_calendar.scss), approx. A lone
+// notification gets no group header. With none, the list says "No Notifications" without the bell
+// over it, which is GNOME Shell's own under the GPL. The column is drawn: the six weeks the
+// calendar always shows, the card of the session's local calendar, and Clocks' and Weather's, which
+// Fedora Workstation installs, set up with nothing. With `posted`, the list starts with the
+// notification. The clock of the same `prefix` opens and names it.
+import Message from "./Message.astro";
+import { month, shell, todayButton } from "../../../data/gnome.ts";
+
+interface Props {
+  prefix: string;
+  at: number;
+  posted?: boolean;
+}
+const { prefix, at, posted = false } = Astro.props;
+const today = todayButton(at);
+const calendar = month(at);
+// %card_common's radius, 4 of margin and its 1 pixel edge; %card has the card's ground, %card_flat
+// the menu's
+const card = "m-4 rounded-u-12 border-(length:--u) border-transparent";
+const pager = "flex size-38 items-center justify-center rounded-full";
+---
+
+<dialog
+  class="absolute top-38 left-1/2 z-4 m-0 h-auto max-h-none w-max max-w-none -translate-x-1/2 overflow-visible border-0 bg-transparent p-0 text-inherit outline-none open:block"
+  id={`${prefix}-center`}
+  aria-labelledby={`${prefix}-clock`}
+  tabindex="-1"
+  data-part="center"
+>
+  {/* .popup-menu-content's 6 of padding and #calendarArea's 4 */}
+  <div
+    class="flex rounded-u-30 border-(length:--u) border-shell-menu-edge bg-shell-menu p-10 shell-type text-shell-text shadow-shell-popover"
+  >
+    <div class="mr-4 box-content flex w-425 flex-col border-r-(length:--u) border-white/10 pr-6">
+      <div class="relative min-h-0 flex-1 overflow-y-auto pr-12" data-part="list">
+        <p
+          class="absolute inset-0 flex items-center justify-center shell-title-3 text-white/45"
+          data-part="none"
+          hidden={posted}
+        >
+          {shell.noNotifications}
+        </p>
+        <div data-part="group" hidden={!posted}>
+          <Message prefix={prefix} />
+        </div>
+      </div>
+      <div class="flex gap-6 p-12 pb-9 font-bold">
+        <button
+          class="box-content min-h-22 rounded-full bg-shell-button px-24 py-3 font-bold focus-shell live:cursor-default live:hover:bg-shell-button-hover"
+          type="button"
+          aria-label={shell.clearAll}
+          data-does="clear"
+          hidden={!posted}
+        >
+          {shell.clear}
+        </button>
+      </div>
+    </div>
+    {/* as wide as the calendar, seven days of 36 and 2 a side, its edge and margin (CalendarColumnLayout) */}
+    <div class="ml-6 flex w-290 flex-col gap-6" aria-hidden="true">
+      <div class:list={[card, "bg-shell-menu p-9"]}>
+        <b class="block font-bold" data-part="day">{today.day}</b>
+        <span class="block shell-title-2" data-part="date">{today.date}</span>
+      </div>
+      <div class:list={[card, "mt-0 bg-shell-menu"]}>
+        <div class="flex items-center">
+          <span class={pager}
+            ><svg class="size-16"><use href="#adwaita-pan-start" /></svg></span
+          >
+          <span class="mx-auto w-147 rounded-full py-8 text-center font-bold" data-part="month"
+            >{calendar.label}</span
+          >
+          <span class={pager}
+            ><svg class="size-16"><use href="#adwaita-pan-end" /></svg></span
+          >
+        </div>
+        <div class="grid grid-cols-7 text-center shell-small font-bold" data-part="weeks">
+          {calendar.headings.map((h) => <span class="m-4 rounded-u-8 px-6 py-3">{h.letter}</span>)}
+          {calendar.weeks.flat().map((d) => <span
+            class:list={[
+              "m-2 flex size-36 items-center justify-center rounded-full",
+              d.today
+                ? "bg-shell-accent text-white"
+                : d.otherMonth
+                  ? "font-normal text-white/50"
+                  : d.weekend && "text-shell-dim",
+            ]}
+          >
+            {d.label}
+          </span>)}
+        </div>
+      </div>
+      <div class="flex flex-col gap-6">
+        <div class:list={[card, "bg-shell-card p-12"]}>
+          <b class="block pb-6 font-bold text-shell-card-dim">{shell.today}</b>
+          <i class="block text-shell-card-dim">{shell.noEvents}</i>
+        </div>
+        <div class:list={[card, "bg-shell-card p-12"]}>
+          <b class="block font-bold">{shell.addWorldClocks}</b>
+        </div>
+        <div class:list={[card, "bg-shell-card p-12"]}>
+          <b class="block font-bold">{shell.selectWeatherLocation}</b>
+        </div>
+      </div>
+    </div>
+  </div>
+</dialog>

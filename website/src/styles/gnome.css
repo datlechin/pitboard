@@ -1,0 +1,75 @@
+/* GNOME Shell 50.6 as Fedora 44 draws it, dark in both of the site's schemes: the session mode
+   prefers dark, and GNOME Settings' Light writes `default`, never `prefer-light`
+   (research/linux-visuals.md, "GNOME Shell"). Colours are data/theme/gnome-shell-sass's dark
+   variant; one Sass derives is computed as dart-sass does it, lighten and darken in HSL. St rounds
+   every length to a whole pixel, so a desk unit is one. */
+
+@theme {
+  /* $panel_bg_color, $fg_color, and $bg_color under every menu and popover */
+  --color-shell-panel: #000000;
+  --color-shell-text: #ffffff;
+  --color-shell-menu: #36363a;
+  /* $outer_borders_color, lighten($bg_color, 5%), around a popover */
+  --color-shell-menu-edge: #424247;
+  /* $card_bg_color, lighten($bg_color, 7%), and %card's hover, st-lighten of it by 4% */
+  --color-shell-card: #47474c;
+  --color-shell-card-hover: #515157;
+  /* .message, lighten($card_bg_color, 5%) */
+  --color-shell-message: #54545a;
+  /* $insensitive_fg_color, a weekend in the calendar, and $card_insensitive_fg_color, a message's
+     header and the events card's title */
+  --color-shell-dim: #9b9b9d;
+  --color-shell-card-dim: #b2b2b3;
+  /* %button, the message list's Clear: st-mix($fg_color, $bg_color, 9%), and its hover */
+  --color-shell-button: #48484c;
+  --color-shell-button-hover: #525256;
+  /* -st-accent-color, blue on a stock session, under today in the calendar */
+  --color-shell-accent: #3584e4;
+  /* the focus ring, $accent_color (the accent 60% into white) at 80% */
+  --color-shell-focus: rgb(134 181 239 / 0.8);
+
+  /* Ptyxis 50.1 behind a window that has focus (ptyxis-window-dressing.c): its header bar takes
+     mix(foreground, background, 0.99) of its GNOME palette, light or dark as the site is */
+  --color-ptyxis-bar-backdrop: light-dark(#fdfdfd, #1e1e21);
+}
+
+@theme inline {
+  /* .datemenu-popover, 12 * 1.5 + 6 * 3 */
+  --radius-u-30: calc(30 * var(--u));
+  /* .notification-banner, and .popup-menu-content's beside its 1 pixel edge */
+  --shadow-shell-banner: 0 calc(2 * var(--u)) calc(4 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.2);
+  --shadow-shell-popover: 0 calc(2 * var(--u)) calc(4 * var(--u)) rgb(0 0 0 / 0.2);
+  /* libadwaita's window shadow while another window has focus (_window.scss `:backdrop`) */
+  --shadow-linux-window-backdrop:
+    0 0 calc(10 * var(--u)) calc(5 * var(--u)) rgb(0 0 0 / 0.08),
+    0 0 0 calc(1 * var(--u)) rgb(0 0 0 / 0.05);
+}
+
+/* The shell's type: the interface font at 11 points, 96 to the inch, with Pango's line height */
+@utility shell-type {
+  font-family: var(--font-gnome);
+  font-size: calc(44 / 3 * var(--u));
+  line-height: normal;
+}
+
+/* _common.scss's %caption and %smaller, 9 points, and %title_2 and %title_3, 15 points, each as
+   `fontsize` rounds it to an em of the 11 point font */
+@utility shell-small {
+  font-size: calc(12 * var(--u));
+}
+@utility shell-title-2 {
+  font-weight: 800;
+  font-size: calc(20 * var(--u));
+}
+@utility shell-title-3 {
+  font-weight: 700;
+  font-size: calc(20 * var(--u));
+}
+
+/* _drawing.scss `focus_ring`: 2 pixels inside the control */
+@utility focus-shell {
+  &:focus-visible {
+    outline: calc(2 * var(--u)) solid var(--color-shell-focus);
+    outline-offset: calc(-2 * var(--u));
+  }
+}
