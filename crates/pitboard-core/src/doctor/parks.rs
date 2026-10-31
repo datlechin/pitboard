@@ -1,6 +1,7 @@
 use super::{Check, Facts, account_code, fail, ok, warn, words};
 use crate::context::Context;
 use crate::error::Error;
+use crate::host::Keyring;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{Park, State, renewal_due};
 use crate::words as said;
@@ -136,6 +137,13 @@ pub(super) fn form_fact(ctx: &Context) -> Option<FormFact> {
     })
 }
 
+// What the Secret Service's collection is called: the login keyring where doctor cannot tell.
+pub(super) fn keyring(facts: &Facts) -> Keyring {
+    (facts.vault_form.as_ref())
+        .and_then(|form| form.kept.keyring)
+        .unwrap_or(Keyring::Login)
+}
+
 // Every sealed park lost at once is one finding, worded for a reset only where the code says so.
 pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
     if facts.vault != store::Backend::SealedFile {
@@ -172,6 +180,7 @@ pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
 fn judge_form(fact: &FormFact) -> Option<Check> {
     use crate::host::Vault;
     let kept = &fact.kept;
+    let keyring = kept.keyring.unwrap_or(Keyring::Login);
     let folder = kept
         .folder
         .as_deref()
@@ -179,7 +188,7 @@ fn judge_form(fact: &FormFact) -> Option<Check> {
         .unwrap_or_default();
     let name = "parked logins";
     if let Some(to) = kept.moving_to {
-        let detail = words::moving_into(&words::form(to, &folder));
+        let detail = words::moving_into(&words::form(to, &folder, keyring));
         return Some(warn(
             "vault",
             name,
@@ -188,7 +197,7 @@ fn judge_form(fact: &FormFact) -> Option<Check> {
         ));
     }
     if let Some((from, parks)) = kept.leaving {
-        let detail = words::left_in(parks, &words::form(from, &folder));
+        let detail = words::left_in(parks, &words::form(from, &folder, keyring));
         return Some(warn(
             "vault",
             name,
@@ -200,15 +209,15 @@ fn judge_form(fact: &FormFact) -> Option<Check> {
         (Vault::SecretService, _) if fact.locked => warn(
             "vault",
             name,
-            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER,
+            words::in_a_keyring_that_does_not_answer(keyring),
             words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
         ),
-        (Vault::SecretService, _) => ok("vault", name, words::IN_THE_LOGIN_KEYRING),
+        (Vault::SecretService, _) => ok("vault", name, words::in_the_keyring(keyring)),
         (Vault::Files, Some(true)) => warn(
             "vault",
             name,
             words::in_files_though_a_secret_service_answers(&folder),
-            words::MOVE_INTO_THE_LOGIN_KEYRING,
+            words::move_into_the_keyring(keyring),
         ),
         (Vault::Files, _) => ok("vault", name, words::in_files(&folder)),
         (Vault::Keychain | Vault::SealedFiles, _) => return None,
@@ -237,11 +246,21 @@ pub(super) fn lost_parks(facts: &Facts) -> Vec<&ParkFact> {
     }
 }
 
-pub(super) fn judge_park(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -> Check {
-    park_judged(fact, now, moment).about(&fact.key())
+pub(super) fn judge_park(
+    fact: &ParkFact,
+    now: i64,
+    keyring: Keyring,
+    moment: &dyn Fn(i64, i64) -> String,
+) -> Check {
+    park_judged(fact, now, keyring, moment).about(&fact.key())
 }
 
-fn park_judged(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -> Check {
+fn park_judged(
+    fact: &ParkFact,
+    now: i64,
+    keyring: Keyring,
+    moment: &dyn Fn(i64, i64) -> String,
+) -> Check {
     let code = account_code(
         fact.provider,
         "parked_login",
@@ -262,7 +281,7 @@ fn park_judged(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -
             return warn(
                 code,
                 name,
-                words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+                words::not_read_the_keyring_is_locked(keyring),
                 words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
             );
         }

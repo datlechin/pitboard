@@ -7,6 +7,10 @@
 //! for each question, on the session's bus as `bus::session` finds it. Read in the Secret
 //! Service API 0.2 draft and measured with gnome-keyring 48.0 (`docs/facts/linux.md`).
 //!
+//! The collection is named for what answers for it, by the names its connection holds: KWallet
+//! where KDE's daemon does, and the login keyring otherwise. A collection's label is the
+//! person's to change, and gnome-keyring's is translated.
+//!
 //! A locked collection, a prompt dismissed and nothing on the bus to answer say nothing of what
 //! the collection holds, so each is `Locked`, never a collection with nothing in it: a keyring
 //! locked since its daemon started answers every search with nothing. A run the schedule or the
@@ -17,6 +21,7 @@
 
 use super::bus;
 use crate::context::Context;
+use crate::host::Keyring;
 use crate::permit::Permit;
 use crate::schedule::Job;
 use crate::store::{Backend, Error, RawStore};
@@ -36,6 +41,16 @@ const LOCKED: [&str; 3] = [
     "org.freedesktop.Secret.Error.IsLocked",
     "org.freedesktop.DBus.Error.ServiceUnknown",
     "org.freedesktop.DBus.Error.NameHasNoOwner",
+];
+
+const SECRETS: &str = "org.freedesktop.secrets";
+// What KWallet's daemon takes beside SECRETS on its one connection: ksecretd at kwallet 6.31.0,
+// kwalletd6 and kwalletd5 at 6.13.0 (docs/facts/linux.md, The Secret Service).
+const KWALLET: [&str; 4] = [
+    "org.kde.ksecretd",
+    "org.kde.secretservicecompat",
+    "org.kde.kwalletd6",
+    "org.kde.kwalletd5",
 ];
 
 /// The parks every home of this session keeps in the Secret Service.
@@ -100,6 +115,29 @@ fn connected<'a>(
 /// or not, as a new home asks before it records its form. Nothing is unlocked to tell.
 pub(super) fn answers(ctx: &Context) -> bool {
     connected(ctx, Error::Unreadable).is_ok_and(|service| service.get_default_collection().is_ok())
+}
+
+/// What owns `org.freedesktop.secrets` on this session's bus, asked of the bus alone: nothing is
+/// started to tell, so where nothing does it is the login keyring.
+pub(super) fn keyring(ctx: &Context) -> Keyring {
+    let kwallet = bus::session(ctx).ok().and_then(|connection| {
+        let bus = zbus::blocking::fdo::DBusProxy::new(&connection).ok()?;
+        let owner = |name: &str| {
+            let name = zbus::names::BusName::try_from(name).ok()?;
+            bus.get_name_owner(name).ok()
+        };
+        let answering = owner(SECRETS)?;
+        Some(
+            KWALLET
+                .iter()
+                .any(|name| owner(name).as_ref() == Some(&answering)),
+        )
+    });
+    if kwallet == Some(true) {
+        Keyring::KWallet
+    } else {
+        Keyring::Login
+    }
 }
 
 fn attributes(service: &str) -> HashMap<&str, &str> {
@@ -492,6 +530,32 @@ mod tests {
                 && asked.iter().any(|member| member == "Prompt"),
             "a person's run asks: {asked:?}"
         );
+    }
+
+    // gnome-keyring's collection is the login keyring, and ksecretd's KWallet's.
+    #[test]
+    fn the_keyring_is_named_for_what_owns_the_secret_service() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let gnome = started(scratch.path());
+        let kde = Started::ksecretd(&scratch.path().join("kde"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+        let nobody = Started::without_a_provider(&scratch.path().join("nobody"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+
+        assert_eq!(
+            keyring(&home(scratch.path(), "gnome", &gnome)),
+            Keyring::Login
+        );
+        let ctx = home(scratch.path(), "kde", &kde);
+        assert_eq!(keyring(&ctx), Keyring::KWallet);
+        assert!(answers(&ctx), "a closed wallet is one to park in");
+        assert_eq!(
+            keyring(&home(scratch.path(), "nobody", &nobody)),
+            Keyring::Login
+        );
+        let without_a_bus =
+            Context::for_unit_test().with_pitboard_home(scratch.path().join("bare"));
+        assert_eq!(keyring(&without_a_bus), Keyring::Login);
     }
 
     // As over SSH or in a container: a home on the Secret Service cannot tell what it holds.

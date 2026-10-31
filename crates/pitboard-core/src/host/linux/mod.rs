@@ -17,7 +17,9 @@ pub(crate) use super::unix::{fs, proc, user};
 use super::administered::Administered;
 use super::unix::service;
 use super::unix::shell::Spawn;
-use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Process, Scheduler};
+use super::{
+    Elevation, Floor, Host, Jar, JarError, Keyring, Listed, LoginPath, Os, Process, Scheduler,
+};
 use crate::context::{Context, Environment};
 use crate::state::VaultForm;
 use crate::store::vault::FileVault;
@@ -90,6 +92,10 @@ impl Host for Linux {
             VaultForm::SecretService => secret_service::answers(ctx),
             VaultForm::Files => true,
         }
+    }
+
+    fn keyring(&self, ctx: &Context) -> Keyring {
+        secret_service::keyring(ctx)
     }
 
     fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {

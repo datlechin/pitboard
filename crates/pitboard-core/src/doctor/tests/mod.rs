@@ -21,7 +21,7 @@ use super::{
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::task::{Drift, Task};
-use crate::host::{Access, Kind, Os, SecretStore};
+use crate::host::{Access, Keyring, Kind, Os, SecretStore};
 use crate::in_use::Stored;
 use crate::permit::Permit;
 use crate::provider::ProviderId;
@@ -91,6 +91,9 @@ pub(super) fn said(checks: &[Check], code: &str) -> Vec<(Level, String)> {
 
 pub(super) const SID: &str = "S-1-5-21-1004336348-1177238915-682003330-1001";
 
+// What doctor calls the Secret Service's collection where gnome-keyring answers for it.
+pub(super) const LOGIN: Keyring = Keyring::Login;
+
 pub(super) fn open_to_users() -> Access {
     Access {
         shared: true,
@@ -100,7 +103,7 @@ pub(super) fn open_to_users() -> Access {
 
 // Codex's section for a machine with no Codex accounts parked.
 pub(super) fn codex_checks(codex: &CodexFacts) -> Vec<Check> {
-    judge_codex(crate::host::OS, None, codex, &[], NOW, &time::moment)
+    judge_codex(crate::host::OS, None, codex, &[], NOW, LOGIN, &time::moment)
 }
 
 pub(super) fn named<'a>(checks: &'a [Check], name: &str) -> &'a Check {
@@ -335,6 +338,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
                     shared: true,
                     folder: Some(PathBuf::from("/home/x/.pitboard/vault")),
                     secret_service: Some(true),
+                    keyring: Some(LOGIN),
                     moving_to: None,
                     leaving: None,
                 },

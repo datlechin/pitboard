@@ -10,7 +10,7 @@
 //! `time::moment`, and the app in the format its Mac is set to.
 
 use crate::doctor::Level;
-use crate::host::{Os, SecretStore, WINDOWS_FLOOR, token};
+use crate::host::{Keyring, Os, SecretStore, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
 use crate::state::renewal_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
@@ -334,6 +334,14 @@ pub fn store_in_front(store: SecretStore) -> &'static str {
     match store {
         SecretStore::Keychain => "the keychain",
         SecretStore::CredentialManager => "Credential Manager",
+    }
+}
+
+/// The Secret Service's collection, as a person's desktop names it.
+pub fn keyring(keyring: Keyring) -> &'static str {
+    match keyring {
+        Keyring::Login => "the login keyring",
+        Keyring::KWallet => "KWallet",
     }
 }
 

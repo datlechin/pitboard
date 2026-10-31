@@ -196,6 +196,7 @@ pub(super) fn judge_codex(
     facts: &CodexFacts,
     parks: &[&ParkFact],
     now: i64,
+    keyring: crate::host::Keyring,
     moment: &dyn Fn(i64, i64) -> String,
 ) -> Vec<Check> {
     let mut checks = Vec::new();
@@ -358,7 +359,7 @@ pub(super) fn judge_codex(
         });
     }
 
-    checks.extend(parks.iter().map(|p| judge_park(p, now, moment)));
+    checks.extend(parks.iter().map(|p| judge_park(p, now, keyring, moment)));
     checks.extend(parks.iter().filter_map(|p| judge_dormant(p, now)));
 
     checks.push(judge_codex_version(os, facts));

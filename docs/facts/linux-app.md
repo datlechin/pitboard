@@ -863,6 +863,15 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
   that follows the model sets `content-height` to -1 once it has shown what changed, which
   measures it again (`a_failure_said_after_a_sign_in_is_in_sight`,
   `a_failure_stays_in_the_dialog`).
+- The model answers Show Diagnostics with a window request for Diagnostics and nothing else
+  (`Intent::Show`). The macOS app opens Diagnostics as a window of its own, in front of the
+  welcome and the sheet on it (`PlaceWindow.swift`), and the Windows app brings its main window
+  forward on the Diagnostics page, the welcome being a window of its own (`Follow` in
+  `App.xaml.cs`). Here the welcome and the sheet over it are dialogs in the window, so the page
+  came up under both, and the welcome's Continue then went back to the accounts. Before it pushes
+  Diagnostics or Activity, the window closes its dialogs top first, up to one whose `can-close`
+  is off, and the welcome goes telling the model nothing
+  (`show_diagnostics_in_a_dialog_over_the_welcome_shows_diagnostics_in_front`).
 - `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
   `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
   same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its

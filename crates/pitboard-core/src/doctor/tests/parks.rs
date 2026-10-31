@@ -412,6 +412,7 @@ fn kept_in(place: crate::host::Vault, answers: bool) -> switch::Keeping {
         shared: place == crate::host::Vault::SecretService,
         folder: Some(PathBuf::from("/home/x/.pitboard/vault")),
         secret_service: Some(answers),
+        keyring: Some(LOGIN),
         moving_to: None,
         leaving: None,
     }
@@ -452,19 +453,19 @@ fn the_vault_check_on_linux() {
         (
             on_linux(keyring(), false),
             Level::Ok,
-            words::IN_THE_LOGIN_KEYRING.to_string(),
+            words::in_the_keyring(LOGIN),
             "",
         ),
         (
             on_linux(keyring(), true),
             Level::Warn,
-            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string(),
+            words::in_a_keyring_that_does_not_answer(LOGIN),
             words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
         ),
         (
             on_linux(kept_in(Vault::SecretService, false), true),
             Level::Warn,
-            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string(),
+            words::in_a_keyring_that_does_not_answer(LOGIN),
             words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
         ),
         (
@@ -537,9 +538,37 @@ fn doctor_reads_where_the_home_keeps_its_parks() {
     host.vault().fault_all(Fault::Locked);
     assert_eq!(
         vault(&m.ctx),
-        (
-            Level::Warn,
-            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string()
-        )
+        (Level::Warn, words::in_a_keyring_that_does_not_answer(LOGIN))
     );
+}
+
+// KDE Plasma's Secret Service is KWallet's, which doctor names wherever it names the collection.
+#[test]
+fn doctor_names_kwallet_where_it_answers_for_the_secret_service() {
+    use crate::host::memory::MemoryHost;
+    use crate::store::memory::Fault;
+    let host = MemoryHost::by_form();
+    host.answered_by_kwallet();
+    let m = switch::harness::machine_on(Arc::clone(&host), "doctor-vault-kwallet");
+    let checks = || run(&m.ctx, &time::moment).checks;
+    let kwallet = Keyring::KWallet;
+
+    assert_eq!(
+        check(&checks(), "vault").detail,
+        words::in_the_keyring(kwallet)
+    );
+    host.vault().fault_all(Fault::Locked);
+    let locked = checks();
+    assert_eq!(
+        check(&locked, "vault").detail,
+        words::in_a_keyring_that_does_not_answer(kwallet)
+    );
+    assert_eq!(
+        named(&locked, "account there").detail,
+        words::not_read_the_keyring_is_locked(kwallet)
+    );
+    let login: Vec<&Check> = (locked.iter())
+        .filter(|c| format!("{} {}", c.detail, c.advice).contains("login keyring"))
+        .collect();
+    assert!(login.is_empty(), "{login:#?}");
 }
