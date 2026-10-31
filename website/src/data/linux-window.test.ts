@@ -335,6 +335,8 @@ test("Open Link, Keyboard Shortcuts and About say what the app gives them", () =
     ["Ctrl+N", "Ctrl+R", "Ctrl+,", "Ctrl+?", "F10", "Alt+Left", "Ctrl+W", "Ctrl+Q"],
   );
   assert.equal(about.name, "Pitboard");
+  // the dialog's title, libadwaita's, names it where its header bar shows none
+  assert.equal(about.title, "About");
   assert.ok(
     linux("data/com.usepitboard.Pitboard.metainfo.xml.in").includes("<name>Pitboard</name>"),
   );

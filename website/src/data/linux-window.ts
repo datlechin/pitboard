@@ -403,9 +403,10 @@ export const acceleratorLabel = (accelerator: string) =>
     .replace(/<Alt>/g, "Alt+")
     .replace(/(?<=\+|^)(\w+)$/, (k) => keyNames[k] ?? k.toUpperCase());
 
-// About Pitboard, libadwaita's dialog from the metainfo: its rows are libadwaita's own words
-// (adw-about-dialog.ui).
+// About Pitboard, libadwaita's dialog from the metainfo: its title, which its header bar does not
+// show, and its rows are libadwaita's own words (adw-about-dialog.ui).
 export const about = {
+  title: "About",
   name: "Pitboard",
   developer: "Pitboard",
   rows: [["Details"], ["Support Questions", "Report an Issue"], ["Legal"]],

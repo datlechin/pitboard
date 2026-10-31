@@ -140,7 +140,7 @@ class LinuxWindow extends AccountsFigure {
       case "w":
         return does(() => this.#close());
       case "q":
-        return does(() => quit());
+        return does(() => this.#hide(quit));
     }
   }
 
@@ -169,7 +169,7 @@ class LinuxWindow extends AccountsFigure {
         return true;
       case "minimize":
         // out of sight until the tray's Open Pitboard brings it back, as Activate does
-        closeAppWindow();
+        this.#hide(closeAppWindow);
         return true;
       case "maximize":
         // departs from the apps: Maximize keeps the Linux window at the size its desk draws
@@ -192,8 +192,17 @@ class LinuxWindow extends AccountsFigure {
   // (application.rs, Host::keeps_running)
   // departs from the apps: Closing the Pitboard window on GNOME, or Ctrl+W there, quits Pitboard until Reset
   #close() {
-    if (surfaces(this.system).statusItem) closeAppWindow();
-    else quit();
+    this.#hide(surfaces(this.system).statusItem ? closeAppWindow : quit);
+  }
+
+  // the window goes from its desk, and focus that was in it goes to Reset, which brings it back
+  #hide(act: () => void) {
+    const had = this.contains(document.activeElement);
+    act();
+    if (had)
+      this.closest("figure")
+        ?.querySelector<HTMLElement>("[data-reset]:not([hidden])")
+        ?.focus({ preventScroll: true });
   }
 
   #dialog(what: Shown) {

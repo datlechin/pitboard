@@ -47,6 +47,7 @@ const body = banner
       class="size-16 flex-none"
       viewBox={mark.viewBox}
       fill="currentColor"
+      aria-hidden="true"
       set:html={mark.body}
     />
     <span class="box-content flex min-h-24 flex-1 items-end gap-6 pb-6">
@@ -61,7 +62,10 @@ const body = banner
       aria-controls={actions}
       data-does="expand"
     >
-      <svg class="size-16 transition-transform duration-200 group-aria-expanded/expand:rotate-180">
+      <svg
+        class="size-16 transition-transform duration-200 group-aria-expanded/expand:rotate-180"
+        aria-hidden="true"
+      >
         <use href="#adwaita-pan-down" />
       </svg>
     </button>}
@@ -72,7 +76,7 @@ const body = banner
       data-close={banner ? "" : undefined}
       data-does={banner ? undefined : "dismiss"}
     >
-      <svg class="size-16"><use href="#adwaita-window-close" /></svg>
+      <svg class="size-16" aria-hidden="true"><use href="#adwaita-window-close" /></svg>
     </button>
   </div>
   <div class="flex flex-col gap-4 p-6">

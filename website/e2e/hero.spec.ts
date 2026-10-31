@@ -610,6 +610,8 @@ test.describe("on GNOME", () => {
       const window = page.locator(gnome.window);
       await window.getByRole("button", { name: "Close" }).click();
       await expect(window).toBeHidden();
+      // focus goes to Reset, which brings the window back
+      await expect(page.locator(heroReset)).toBeFocused();
       await page.locator(heroReset).click();
       await expect(window).toBeVisible();
       await expect(window.getByRole("button", { name: "Add Account…" })).toBeFocused();
