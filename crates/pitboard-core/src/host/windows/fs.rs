@@ -1402,9 +1402,9 @@ mod tests {
         std::fs::remove_dir_all(&dir).expect("cleared");
     }
 
-    // RF-C4's 10,000 replaces, through Pitboard's own write, beside another process reading the
-    // file again and again through Pitboard's own read; then beside one holding it without
-    // sharing its deletion.
+    // RF-C4's 10,000 replaces, through Pitboard's own write under its lock, beside another
+    // process reading the file again and again through Pitboard's own read; then beside one
+    // holding it without sharing its deletion.
     #[test]
     fn ten_thousand_replaces_never_leave_a_reader_without_the_whole_file() {
         use crate::atomic::{Perms, write};
@@ -1413,11 +1413,14 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("a folder");
         let path = dir.join("state.json");
         let permit = Permit::for_a_test();
+        let lock = open_private_lock(permit, &dir.join("state.lock")).expect("a lock");
         write(permit, &path, &record(0), Perms::Secret).expect("written");
         let reader = Helper::start(Job::Reads, &path);
         for round in 1..=10_000 {
+            lock.lock().expect("locked");
             write(permit, &path, &record(round), Perms::Secret)
                 .unwrap_or_else(|e| panic!("round {round}: {e}"));
+            lock.unlock().expect("unlocked");
         }
         let said = reader.stop();
         let [reads, whole, torn, missing, failed] = counts(&said);
@@ -1438,7 +1441,8 @@ mod tests {
         );
         holder.stop();
         assert_eq!(std::fs::read(&path).expect("read"), record(10_000));
-        assert_eq!(std::fs::read_dir(&dir).expect("listed").count(), 1);
+        assert_eq!(std::fs::read_dir(&dir).expect("listed").count(), 2);
+        drop(lock);
         std::fs::remove_dir_all(&dir).expect("cleared");
     }
 
