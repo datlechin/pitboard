@@ -16,7 +16,7 @@ A Claude Desktop account signs in again inside Claude, as [Use Pitboard with Cla
 - `nothing parked`
 - `login replaced outside Pitboard`
 
-In the app, the account's line reads **Sign-in expired**, **Not signed in** or **Sign-in no longer works**. Pitboard's menu offers **Sign In to work Again**, its row in **Accounts** offers **Sign In**, and a notification offers **Sign In Again**. On Windows, the menu names the reason after the account, as in **work (sign-in expired)**. [Account status](/reference/account-status) says what each means.
+In the app, the account's line reads **Sign-in expired**, **Not signed in** or **Sign-in no longer works**. Pitboard's menu offers **Sign In to work Again**, its row in **Accounts** offers **Sign In**, and a notification offers **Sign In Again**. On Windows, and in the tray menu on Linux, the menu names the reason after the account, as in **work (sign-in expired)**. [Account status](/reference/account-status) says what each means.
 
 A switch to such an account moves nothing and names the same command:
 
@@ -57,6 +57,19 @@ On Windows, a switch that refuses with `credential_sealed` needs a sign-in again
       </Step>
     </Steps>
   </Tab>
+  <Tab title="Linux">
+    <Steps>
+      <Step title="Open the dialog">
+        In the Pitboard window, click **Sign In** in the account's group, or open the account's menu and choose **Sign In Again**. Where the desktop shows Pitboard's tray icon, its tray menu offers **Sign In to work Again** too.
+      </Step>
+      <Step title="Start the sign-in">
+        In the **Sign In to work Again** dialog, click **Sign In**. Your browser opens the tool's sign-in.
+      </Step>
+      <Step title="Sign in">
+        Sign in as that account. The dialog closes once the tool has the login.
+      </Step>
+    </Steps>
+  </Tab>
 </Tabs>
 
 If the browser does not open or a **Code** field appears, see [Add another account](/guides/accounts#add-another-account). On the command line, write `codex/work` for a Codex account:
@@ -79,7 +92,7 @@ Start again and sign in as `me@company.com`.
 
 ## Sign in again to the account in use
 
-The new login takes the place of the one the tool has, and Pitboard parks nothing. In the app, sign in again from the account's shortcut menu, as for any account. After the sign-in, a notice titled **Signed in to work** says the new sign-in is the one in use.
+The new login takes the place of the one the tool has, and Pitboard parks nothing. In the app, sign in again from the account's shortcut menu, as for any account. On Linux, use the account's menu. After the sign-in, a notice titled **Signed in to work** says the new sign-in is the one in use.
 
 On the command line, `pitboard enroll work --sign-in` ends with:
 
