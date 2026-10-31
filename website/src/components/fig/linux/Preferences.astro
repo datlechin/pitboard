@@ -32,11 +32,16 @@ const { prefix, show, version } = Astro.props;
 const id = (part: string) => `${prefix}-${part}`;
 const { general, limits, advanced } = prefs;
 const world = moments.after;
-// the choice drawn, which live code keeps to the state: Switch Automatically in Automatic switch's
-// figure, as macOS's and Windows' draw it, and in Warm-Up's the one the page starts at; then, where
-// no status item keeps Pitboard running, what follows the note
+// the choice drawn: Switch Automatically in Automatic switch's figure, as macOS's and Windows' draw
+// it, and in Warm-Up's the one the page starts at. Each choice's note is drawn, the others hidden,
+// so live code keeps to the state by what it shows; then, where no status item keeps Pitboard
+// running, what follows the note.
 const { atLimit: starts, share } = start().preferences;
 const chosen: AtLimit = show === "switch" ? "switch" : starts;
+const notes = limits.choices.flatMap(([value]) => {
+  const said = atLimitNote({ atLimit: value, share }, true);
+  return said ? [[value, said] as const] : [];
+});
 const note = atLimitNote({ atLimit: chosen, share }, true);
 const whole = atLimitNote({ atLimit: chosen, share }, false);
 const closed = whole && note ? whole.slice(note.length).trim() : (whole ?? "");
@@ -132,7 +137,12 @@ const caption = "mt-12 adw-caption opacity-55";
           >
             <Group id={id("at-limit")} title={limits.title}>
               <Fragment slot="description"
-                ><span data-part="note" hidden={!note}>{note}</span>
+                >{notes.map(([value, said]) => <span
+                  data-part="note"
+                  data-note={value}
+                  hidden={value !== chosen}
+                  >{said}</span
+                >)}
                 <span data-on="gnome" data-part="once-closed" hidden={!closed}
                   >{closed}</span
                 ></Fragment
@@ -238,10 +248,11 @@ const caption = "mt-12 adw-caption opacity-55";
                 <Switch slot="suffix" labelledby={id("renew")} data-part="renew" />
               </Row>
             </List>
+            {/* shown only once the figure works, so in the words of the page's own choice */}
             <List data-on="gnome">
               <Row
                 title={advanced.watch}
-                subtitle={advanced.watchAbout(chosen === "switch")}
+                subtitle={advanced.watchAbout(starts === "switch")}
                 titleId={id("watch")}
                 data-part="watch-row"
               >

@@ -293,7 +293,7 @@ for (const system of ["gnome", "kde"] as const)
       const fig = await preferences(page, system);
       const box = fig.getByRole("combobox", { name: "When a limit reaches" });
       const list = page.locator("#auto-linux-at-limit-choices");
-      const note = fig.locator('[data-part="note"]');
+      const note = fig.locator('[data-part="note"]:not([hidden])');
       await expect(chosen(box)).toHaveText("Notify Me");
       await expect(note).toHaveText(notify);
       await box.click();
@@ -348,7 +348,7 @@ for (const system of ["gnome", "kde"] as const)
       await at.fill("80%");
       await at.press("Enter");
       await expect(at).toHaveAttribute("aria-valuenow", "80");
-      await expect(fig.locator('[data-part="note"]')).toContainText("reaches 80%");
+      await expect(fig.locator('[data-part="note"]:not([hidden])')).toContainText("reaches 80%");
     });
 
     test("Advanced offers Watch in the Background only where no status item keeps Pitboard", async ({

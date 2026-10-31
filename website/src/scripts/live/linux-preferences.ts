@@ -300,22 +300,26 @@ class LinuxPreferences extends LiveFigure {
     );
     // Limits: the choice and its standing, the share where something happens at it, and the note
     this.#choice.set(p.atLimit);
+    // what is hidden keeps its words, so the drawing stays as Astro drew it
     const standing = p.atLimit === "switch" ? s.autoStanding : null;
     const said = this.#part("at-limit-row").querySelector<HTMLElement>('[data-part="subtitle"]');
     shown(said, !!standing);
-    text(said, standing ? autoStandingSaid(standing) : "");
+    if (standing) text(said, autoStandingSaid(standing));
     this.#share.set(p.share, true);
     shown(this.#part("share"), p.atLimit !== "nothing");
     const note = atLimitNote(p, true);
     const whole = atLimitNote(p, statusItem, watched);
     const description = this.#part("note").closest<HTMLElement>('[data-part="description"]');
     shown(description, !!whole);
-    shown(this.#part("note"), !!note);
-    text(this.#part("note"), note ?? "");
+    for (const el of this.querySelectorAll<HTMLElement>('[data-part="note"]')) {
+      const mine = !!note && el.dataset.note === p.atLimit;
+      shown(el, mine);
+      if (mine) text(el, note);
+    }
     const closed = whole && note ? whole.slice(note.length).trim() : (whole ?? "");
     const once = this.#part("once-closed");
     shown(once, !!closed);
-    text(once, closed);
+    if (closed) text(once, closed);
     // Warm-Up: its hours, each Claude Code account's switch and standing, and the next warm-up
     this.#from.set(s.warm.from % DAY, true);
     this.#to.set(s.warm.to % DAY, true);
