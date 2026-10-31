@@ -29,6 +29,15 @@ description: "Read each account's five-hour and weekly limits, when they reset a
       <img src="/images/window-windows.png" alt="The Pitboard window on Windows listing Claude Code and Codex accounts, each with a bar per limit, how much of it is used and when it resets, and a Sign in button on an account whose sign-in has expired" />
     </Frame>
   </Tab>
+  <Tab title="Linux">
+    Open **Pitboard** from your desktop's apps. Each account's group has a bar per limit, how much of it is used and when it resets, such as **Resets 5:26 AM**.
+
+    Where the desktop shows Pitboard's tray icon, its tray menu says how much of its fullest limit each account has used, such as **personal (73%)**. On KDE Plasma, point to the icon: its tooltip lists each account in use and how much of each limit it has used, such as **personal: 5-hour 59% used, weekly 73%**.
+
+    <Frame>
+      <img src="/images/window-linux.png" alt="The Pitboard window, with a tip about switching before a limit runs out, then the Claude Code account in use with a bar for each limit, how much of it is used and when it resets, and under it an account whose sign-in has expired, offering Sign In" width="600" />
+    </Frame>
+  </Tab>
 </Tabs>
 
 On the command line, run `pitboard`, the same as `pitboard status`:
@@ -52,7 +61,7 @@ With accounts of more than one tool, each tool has its own heading and its own a
 
 ## See usage in a widget or from Shortcuts
 
-On macOS, Pitboard's widgets and the Shortcuts action **Get Usage** show usage without opening Pitboard. On Windows, Pitboard has neither.
+On macOS, Pitboard's widgets and the Shortcuts action **Get Usage** show usage without opening Pitboard. On Windows, Pitboard has neither. On KDE Plasma 6.4 or later, the [Pitboard widget](/reference/linux-app#plasma-widget) shows the accounts and their limits while Pitboard runs.
 
 To add a widget, Control-click the wallpaper, choose **Edit Widgets**, search for `Pitboard`, then click **Account** or **Accounts**. For Notification Center, click **Edit Widgets** at its foot instead. **Account** shows the account in use: to show another, Control-click the widget, choose to edit it, then choose the account.
 
@@ -70,7 +79,7 @@ In Shortcuts, or in Spotlight on macOS 26 and later, run **Get Usage**. With no 
 
 To see the last numbers measured, without asking Anthropic or OpenAI, run `pitboard status --offline`. It renews no parked login, and each Claude Code or Codex account ends with a line such as `measured 14:02, 3m ago · read without asking Anthropic`.
 
-To ask Anthropic and OpenAI again, even about an account asked moments ago, run `pitboard status --fresh`, or choose **Refresh** in Pitboard's menu (Command-R). On Windows, select **Refresh** in the Pitboard window, or press F5 there.
+To ask Anthropic and OpenAI again, even about an account asked moments ago, run `pitboard status --fresh`, or choose **Refresh** in Pitboard's menu (Command-R). On Windows, select **Refresh** in the Pitboard window, or press F5 there. On Linux, click **Refresh** in the Pitboard window's header bar, or press Ctrl+R there.
 
 When Pitboard cannot get newer numbers, it shows the last ones with when and why, as in `measured 14:02, 3m ago · Anthropic could not be reached`. The app shows the reason under the account in the window. [Usage shows old numbers](/troubleshooting/accounts#usage-shows-old-numbers) says what to do.
 
@@ -78,4 +87,4 @@ When Pitboard cannot get newer numbers, it shows the last ones with when and why
 
 On macOS, choose from the **Menu Bar Shows** pop-up menu in **Settings** > **General** to show the percentage alone or the icon alone. [Settings](/reference/settings#menu-bar-shows) lists each choice.
 
-On Windows, the icon has no such setting. Its lit row shrinks as one limit of the account in use fills, as [Icon in the notification area](/reference/windows-app#icon-in-the-notification-area) says.
+On Windows, the icon has no such setting. Its lit row shrinks as one limit of the account in use fills, as [Icon in the notification area](/reference/windows-app#icon-in-the-notification-area) says. On Linux, the tray icon has none either, and shows the same, as [Tray icon](/reference/linux-app#tray-icon) says.
