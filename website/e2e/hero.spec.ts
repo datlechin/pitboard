@@ -63,16 +63,35 @@ async function recordFrames(page: Page) {
 const frames = (page: Page) =>
   page.evaluate(() => (window as unknown as { frames_: unknown[] }).frames_);
 
-// the frames the demo set on the root, with what `probe` read of a desk as each began
-async function recordStates(page: Page, probe: () => string) {
-  await page.addInitScript((probe) => {
-    const read = new Function(`return (${probe})()`) as () => string;
+// the frames the demo set on the root, with what each began on of a desk's switch: GNOME's window,
+// or KDE Plasma's menu and tooltip. Each is read in the script itself, as WebKit's CSP refuses
+// code made from a string.
+async function recordStates(page: Page, desk: "gnome" | "kde") {
+  await page.addInitScript((desk) => {
+    const gnome = () => {
+      const on = (id: string, part: string) =>
+        (
+          document
+            .querySelector(`#hero-gnome-window [data-account="${id}"]`)
+            ?.querySelector(`[data-part="${part}"]`) as HTMLElement | null
+        )?.hidden === false;
+      return on("work", "switching") ? "switching" : on("work", "in-use") ? "work" : "personal";
+    };
+    const kde = () => {
+      const tip = document.getElementById("hero-kde-tip");
+      const work = document.querySelector(
+        '#hero-kde-menu [data-moment="after"] [data-account="work"]',
+      );
+      const chosen = work?.getAttribute("aria-checked") === "true" ? "work" : "personal";
+      return tip?.checkVisibility() ? `tip ${chosen}` : chosen;
+    };
+    const read = desk === "gnome" ? gnome : kde;
     const seen: { demo: string | null; state: string }[] = [];
     (window as unknown as { states_: typeof seen }).states_ = seen;
     new MutationObserver(() =>
       seen.push({ demo: document.documentElement.getAttribute("data-demo"), state: read() }),
     ).observe(document, { subtree: true, attributeFilter: ["data-demo"] });
-  }, probe.toString());
+  }, desk);
 }
 const states = (page: Page) =>
   page.evaluate(() => (window as unknown as { states_: unknown[] }).states_);
@@ -535,13 +554,7 @@ test.describe("on GNOME", () => {
   test("the demo presses Switch beside work, its spinner turns until the switch is made, and hands over", async ({
     page,
   }) => {
-    await recordStates(page, () => {
-      const group = (id: string) =>
-        document.querySelector(`#hero-gnome-window [data-account="${id}"]`)!;
-      const on = (id: string, part: string) =>
-        (group(id)?.querySelector(`[data-part="${part}"]`) as HTMLElement | null)?.hidden === false;
-      return on("work", "switching") ? "switching" : on("work", "in-use") ? "work" : "personal";
-    });
+    await recordStates(page, "gnome");
     await choose(page.context(), { system: "gnome" });
     await page.clock.install();
     await page.goto("/");
@@ -647,14 +660,7 @@ test.describe("on KDE Plasma", () => {
   test("the demo opens the tray's menu, chooses work, shuts it, and the tooltip names work", async ({
     page,
   }) => {
-    await recordStates(page, () => {
-      const tip = document.getElementById("hero-kde-tip");
-      const work = document.querySelector(
-        '#hero-kde-menu [data-moment="after"] [data-account="work"]',
-      );
-      const chosen = work?.getAttribute("aria-checked") === "true" ? "work" : "personal";
-      return tip?.checkVisibility() ? `tip ${chosen}` : chosen;
-    });
+    await recordStates(page, "kde");
     await choose(page.context(), { system: "kde" });
     await page.clock.install();
     await page.goto("/");
