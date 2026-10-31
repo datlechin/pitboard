@@ -4,7 +4,7 @@ sidebarTitle: "App on Linux"
 description: "Look up the app on Linux: its window, tray icon, notifications, start at login, search, Plasma widget and keyboard shortcuts."
 ---
 
-The app on Linux is made for GNOME and KDE Plasma, and needs GTK 4.18 and libadwaita 1.7 or later: Debian 13, Ubuntu 26.04 and Fedora 43 or later. It does what [the menu bar app](/reference/mac-app) does, in GNOME's words, and has no Claude Desktop accounts. This page gives where it differs.
+The app on Linux is made for GNOME and KDE Plasma, and needs GTK 4.18 and libadwaita 1.7 or later: Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed. It does what [the menu bar app](/reference/mac-app) does, in GNOME's words, and has no Claude Desktop accounts. This page gives where it differs.
 
 Its windows are the Pitboard window and its dialogs: **Preferences**, the [welcome](#welcome), **Open Link**, **Keyboard Shortcuts** and **About Pitboard**. The first time Pitboard runs, the welcome opens over its window. Opened while it runs, Pitboard brings its window to the front.
 
@@ -33,7 +33,9 @@ The welcome lists what the menu bar app's [welcome window](/reference/mac-app#we
 
 Pitboard shows an icon where the desktop keeps a tray of status icons, as KDE Plasma does. GNOME keeps one only with an extension, such as AppIndicator. The icon comes and goes as the tray does, while Pitboard runs.
 
-The icon shows how much of a limit is used, as [the icon on Windows](/reference/windows-app#icon-in-the-notification-area) does, with a mark of its own while something needs attention. A click opens the Pitboard window, and a right-click opens its menu:
+The icon shows how much of a limit is used, as [the icon on Windows](/reference/windows-app#icon-in-the-notification-area) does, with a mark of its own while something needs attention.
+
+On KDE Plasma, a click opens the Pitboard window, and a right-click opens its menu. With GNOME's AppIndicator extension, a click opens the menu. The menu holds:
 
 1. **Open Pitboard**.
 2. The notices the menu bar app's menu lists.
