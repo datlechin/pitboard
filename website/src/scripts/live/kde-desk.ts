@@ -16,7 +16,7 @@ import {
   type State,
 } from "../../lib/model.ts";
 import { isInUse, listed, menuBarLevel, menuTitle, statusLine } from "../../lib/words.ts";
-import { trayAttention, trayTip, type TrayCommand } from "../../data/linux.ts";
+import { trayAttention, trayNotices, trayTip, type TrayCommand } from "../../data/linux.ts";
 import type { Tool } from "../../data/world.ts";
 
 // Plasma's ToolTipArea waits plasmarc's tooltip Delay, 700 ms by default (tooltiparea.cpp)
@@ -123,6 +123,7 @@ class KdeDesk extends LiveFigure {
     }
     switch (item.dataset.does as TrayCommand) {
       case "open":
+      case "issues":
         return this.#open();
       case "add-account":
         showAppWindow();
@@ -157,6 +158,10 @@ class KdeDesk extends LiveFigure {
     text(this.#tip.querySelector('[data-part="title"]'), tip.title);
     text(this.#tip.querySelector('[data-part="text"]'), tip.text);
     html(this.querySelector('[data-part="status"]'), statusLine(s));
+    const [notice] = trayNotices(s);
+    const notices = this.#menu.el.querySelector('[data-part="notices"]');
+    shown(notices, !!notice);
+    text(notices?.querySelector('[data-part="title"]'), notice?.command ?? "");
     const after = this.#menu.el.querySelector('[data-moment="after"]')!;
     for (const group of after.querySelectorAll<HTMLElement>("[data-tool]"))
       this.#accounts(s, group, group.dataset.tool as Tool);

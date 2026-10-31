@@ -12,12 +12,13 @@ import {
   shortcuts,
   trayAttention,
   trayMenu,
+  trayNotices,
   trayTip,
 } from "./linux.ts";
 import { ADD_HELP, REFRESH_HELP } from "./window.ts";
 import { moments } from "./world.ts";
 import { CLOSING_QUITS } from "../lib/words.ts";
-import { advised, start } from "../lib/model.ts";
+import { advised, model, reset, start, use } from "../lib/model.ts";
 import { noticeMoment } from "../lib/moment.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -217,6 +218,31 @@ test("the tray's menu is presence.rs's, in the entries a Linux session saw it dr
       "Open Pitboard, each tool's name as a disabled header where there are two, its accounts as radio entries with the one in use checked, then Add Account…, Refresh, Preferences, Help and Quit.",
     ),
   );
+});
+
+test("the tray's notices follow Open Pitboard, the pressing ones counted in one entry that opens the window", () => {
+  const presence = linux("src/presence.rs");
+  inOrder(presence, [
+    "&words.open_pitboard,",
+    "let notices = &snapshot.menu_notices;",
+    "&entry.title,",
+    "&section.heading",
+  ]);
+  const notices = present("notices.rs");
+  for (const part of [
+    "title: words::issues(seen.front, others.len()),",
+    "place: Some(Place::Accounts),",
+  ])
+    assert.ok(notices.includes(part), part);
+  reset();
+  assert.deepEqual(trayNotices(model.get()), []);
+  // a switch of Codex warns that its running sessions keep the old account
+  use("codex", "spare", "app");
+  assert.deepEqual(trayNotices(model.get()), [{ command: "1 Issue", does: "issues" }]);
+  assert.deepEqual(trayMenu(moments.after, trayNotices(model.get())).slice(0, 2), [
+    [{ command: "Open Pitboard", does: "open" }],
+    [{ command: "1 Issue", does: "issues" }],
+  ]);
 });
 
 test("the tray's menu heads a tool's accounts with its name only while two tools have accounts", () => {

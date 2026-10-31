@@ -8,7 +8,8 @@
 // 4 in and the text 35 in for want of icons, separators 5 tall, the menu's corners 5; its width is
 // the widest text's (approx). It opens above the item, its left edge on the item's
 // (systemtray.cpp showSystemTrayMenuWayland). With `live`, the moment after the switch is the one
-// the live code keeps to the state, and a template draws an account a visitor adds.
+// the live code keeps to the state, after Open Pitboard the notices group it shows while the state
+// has any, and a template draws an account a visitor adds.
 import { trayMenu, type TrayEntry } from "../../../data/linux.ts";
 import { account, moments, type Moment } from "../../../data/world.ts";
 
@@ -123,6 +124,12 @@ const dot =
               )}
             </div>;
           })}
+          {own && i === 0 && <div data-part="notices" hidden>
+            <div class="mx-4 my-2 h-1 bg-kde-menu-edge" role="separator" />
+            <div class:list={[item, works]} role="menuitem" tabindex="-1" data-does="issues">
+              <span data-part="title"></span>
+            </div>
+          </div>}
         </>
       );
     })}

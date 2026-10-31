@@ -776,15 +776,25 @@ test.describe("on KDE Plasma", () => {
       await expect(page.locator("#switch-linux")).toBeInViewport();
     });
 
-    test("a switch of Codex makes the icon ask for attention, and its tooltip says so", async ({
+    test("a switch of Codex makes the icon ask for attention, its tooltip say so, and its menu offer 1 Issue, which shows the window", async ({
       page,
     }) => {
+      const issues = page.locator(kde.does("issues"));
       await page.locator(kde.icon).click({ button: "right" });
+      await expect(issues).toBeHidden();
       await page.locator(kde.account("spare")).click();
       await expect(page.locator(kde.icon)).toHaveAttribute("data-attention", "true", {
         timeout: 4000,
       });
       await expect(page.locator(kde.icon)).toHaveAccessibleDescription(/Needs attention/);
+      await page.locator(kde.icon).click({ button: "right" });
+      // presence.rs puts the notices between Open Pitboard and the accounts
+      await expect(page.locator(`${kde.menu} [role="menuitem"]:visible`).nth(1)).toHaveText(
+        "1 Issue",
+      );
+      await issues.click();
+      await expect(page.locator(kde.menu)).toBeHidden();
+      await expect(page.locator("#switch-linux")).toBeInViewport();
     });
 
     test("open, the menu keeps WAI-ARIA's rules", async ({ page }) => {
