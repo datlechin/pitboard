@@ -94,21 +94,44 @@ fn replace(
 }
 
 // Any reader can find a file missing while NTFS replaces it (docs/facts/windows-runners.md).
-pub(crate) fn read<T>(path: &Path, read: impl Fn(&Path) -> io::Result<T>) -> io::Result<T> {
-    let mut waits = crate::host::replace::read_waits();
+// Each writer replaces it under `lock`, so a miss is looked at again while another run holds
+// that, and once more after.
+pub(crate) fn read<T>(
+    path: &Path,
+    lock: &Path,
+    read: impl Fn(&Path) -> io::Result<T>,
+) -> io::Result<T> {
+    let mut waits = crate::host::replace::waits();
+    let mut looked_again = false;
     loop {
         match read(path) {
             Err(missing)
                 if cfg!(windows) && crate::host::replace::read_again(missing.raw_os_error()) =>
             {
-                match waits.next() {
-                    Some(wait) => std::thread::sleep(wait),
-                    None => return Err(missing),
+                if held(lock) {
+                    match waits.next() {
+                        Some(wait) => std::thread::sleep(wait),
+                        None => return Err(missing),
+                    }
+                } else if looked_again {
+                    return Err(missing);
+                } else {
+                    looked_again = true;
                 }
             }
             read => return read,
         }
     }
+}
+
+// The lock's file is opened to read, never made, and no file is no holder.
+fn held(lock: &Path) -> bool {
+    File::open(lock).is_ok_and(|file| {
+        matches!(
+            file.try_lock_shared(),
+            Err(std::fs::TryLockError::WouldBlock)
+        )
+    })
 }
 
 /// Numbers every temporary this process creates, so writers on different threads never
@@ -197,28 +220,34 @@ mod tests {
         assert!(private(&path));
     }
 
-    // Six misses in a row, as runs 40499207815 and 40525130910 saw.
+    // A miss outlasted 63 ms of looks once in run 41198296070.
     #[test]
     fn a_read_looks_again_where_windows_shows_a_file_being_replaced_missing() {
-        let misses = std::cell::Cell::new(6);
-        let found = read(Path::new("state.json"), |_| match misses.get() {
-            0 => Ok("whole"),
-            left => {
-                misses.set(left - 1);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let lock = scratch.path().join("state.lock");
+        let held = fs::open_private_lock(Permit::for_a_test(), &lock).expect("a lock");
+        held.lock().expect("locked");
+        let started = std::time::Instant::now();
+        let found = read(Path::new("state.json"), &lock, |_| {
+            if started.elapsed() < std::time::Duration::from_millis(300) {
                 Err(io::Error::from_raw_os_error(2))
+            } else {
+                Ok("whole")
             }
         });
         assert_eq!(found.is_ok(), cfg!(windows), "{found:?}");
+        drop(held);
         let tries = |error: i32| {
             let tried = std::cell::Cell::new(0);
-            let gone = read(Path::new("state.json"), |_| {
+            let gone = read(Path::new("state.json"), &lock, |_| {
                 tried.set(tried.get() + 1);
                 Err::<(), _>(io::Error::from_raw_os_error(error))
             });
             assert_eq!(gone.unwrap_err().raw_os_error(), Some(error));
             tried.get()
         };
-        assert_eq!(tries(2), if cfg!(windows) { 7 } else { 1 });
+        let once_more = if cfg!(windows) { 2 } else { 1 };
+        assert_eq!(tries(2), once_more, "with nobody holding the lock");
         assert_eq!(tries(3), 1, "a folder that is not there is read once");
     }
 

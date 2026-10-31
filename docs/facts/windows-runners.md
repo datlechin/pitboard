@@ -240,9 +240,14 @@ Replacing a file:
   in 5 of 1850950 reads on windows-11-arm (run 40499207815) and 2 of 3586285 on windows-2025
   (run 40525130910), each six times in a row, beside the other tests. In runs 40641149227 and
   40642867084, 12.2 million reads that did not look again found it missing in none, on either
-  image, the second with every core busy for the 10000 renames, which made one take 4.7 s. On
-  Windows `atomic::read`, which `state.json`'s load uses, looks again where `CreateFileW` fails
-  2, six times, 1 ms to 32 ms apart, and reads once where the folder is not there, 3.
+  image, the second with every core busy for the 10000 renames, which made one take 4.7 s.
+- Through six looks again 1 ms to 32 ms apart, 63 ms in all, the reader still found the file
+  missing once in 1716136 reads on windows-11-arm, the test taking 162 s beside the other tests
+  against 78 s on its retry (run 41198296070). In run 41205131132, 6665538 reads that did not
+  look again found it missing in none, on either image. Every replace of `state.json` is made
+  under `state.lock`, so on Windows `atomic::read`, which its load uses, looks again where
+  `CreateFileW` fails 2 for as long as another run holds that lock, up to the 2.3 s a writer
+  waits, and once more where nobody does. It reads once where the folder is not there, 3.
 - Beside readers that reopen the file without a pause, one not sharing delete,
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up

@@ -378,9 +378,11 @@ mod tests {
                 println!("{UNDER_WAY}");
                 let (mut reads, mut whole_reads, mut torn, mut missing) = (0u64, 0u64, 0u64, 0u64);
                 let mut failed = Vec::new();
+                // the lock each writer holds over its replace, as state.json's do
+                let lock = file.with_file_name("state.lock");
                 while !closed.load(Ordering::Acquire) {
                     reads += 1;
-                    match crate::atomic::read(&file, |file| std::fs::read(file)) {
+                    match crate::atomic::read(&file, &lock, |file| std::fs::read(file)) {
                         Ok(read) if whole(&read) => whole_reads += 1,
                         Ok(_) => torn += 1,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => missing += 1,

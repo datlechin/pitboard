@@ -1056,7 +1056,8 @@ fn current_document(ctx: &Context) -> Result<Option<Value>> {
     let path = file(ctx);
     home::check_absolute(ctx)?;
     home::check_location(ctx, &home::dir(ctx))?;
-    let raw = match atomic::read(&path, |path| std::fs::read_to_string(path)) {
+    let lock = home::dir(ctx).join("state.lock");
+    let raw = match atomic::read(&path, &lock, |path| std::fs::read_to_string(path)) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(source) => return Err(Error::StateUnreadable { path, source }),

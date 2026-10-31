@@ -43,17 +43,10 @@ pub(crate) fn read_again(error: Option<i32>) -> bool {
     error == Some(ERROR_FILE_NOT_FOUND)
 }
 
-// Six waits doubling from 1 ms to 32 ms, 63 ms in all: six times the 10 ms a miss outlasted in
-// runs 40499207815 and 40525130910, and below the 114 ms the fastest warm status line took in
-// run 39000408726.
-pub(crate) fn read_waits() -> impl Iterator<Item = Duration> {
-    (0..6u32).map(|attempt| Duration::from_millis(1 << attempt))
-}
-
-// 50 waits doubling from 1 ms to 50 ms, about 2.3 s in all. Beside readers that reopen the file
-// without a pause, `MoveFileExW` needed at most 33 attempts on windows-11-arm, and on
-// windows-2025 ran out in 30 of 184 rounds, which no longer wait helps
-// (docs/facts/windows-runners.md).
+// 50 waits doubling from 1 ms to 50 ms, about 2.3 s in all, for a writer and for a reader that
+// finds the file missing under another run's lock. Beside readers that reopen the file without a
+// pause, `MoveFileExW` needed at most 33 attempts on windows-11-arm, and on windows-2025 ran out
+// in 30 of 184 rounds, which no longer wait helps (docs/facts/windows-runners.md).
 pub(crate) fn waits() -> impl Iterator<Item = Duration> {
     (0..50u32).map(|attempt| Duration::from_millis((1u64 << attempt.min(6)).min(50)))
 }
@@ -98,12 +91,6 @@ mod tests {
         for other in [None, Some(3), Some(5), Some(32)] {
             assert!(!read_again(other), "{other:?}");
         }
-    }
-
-    #[test]
-    fn a_readers_waits_double_to_thirty_two_milliseconds_and_end() {
-        let waits: Vec<u128> = read_waits().map(|wait| wait.as_millis()).collect();
-        assert_eq!(waits, [1, 2, 4, 8, 16, 32]);
     }
 
     #[test]
