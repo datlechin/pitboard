@@ -202,7 +202,7 @@ class LinuxWindow extends AccountsFigure {
       "pb-linux-preferences",
     );
     if (own?.present) own.present(page);
-    else bringForward("settings", this.system, page);
+    else bringForward(page === "warm" ? "warm" : "settings", this.system, page);
   }
 
   #chosen(does: string) {

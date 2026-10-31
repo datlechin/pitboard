@@ -7,14 +7,15 @@ export type Shown = "accounts" | "settings" | "warm";
 
 // Each app's window, its settings and their warm-up, by the element of the figures that draw them:
 // macOS's Settings cut at Warm-Up is a figure of its own, Windows' Settings is a page of its
-// window, and the Linux app's Preferences a dialog over its window, drawn in figures of their own.
+// window, and the Linux app's Preferences a dialog over its window, drawn in figures of their own,
+// its warm-up in the one drawn scrolled to Warm-Up.
 const figures: Record<Platform, Record<Shown, string>> = {
   macos: { accounts: "pb-mac-accounts", settings: "pb-settings", warm: "pb-warm" },
   windows: { accounts: "pb-win-window", settings: "pb-win-window", warm: "pb-win-window" },
   linux: {
     accounts: "pb-linux-window",
     settings: "pb-linux-preferences",
-    warm: "pb-linux-preferences",
+    warm: 'pb-linux-preferences[data-show="warm"]',
   },
 };
 
