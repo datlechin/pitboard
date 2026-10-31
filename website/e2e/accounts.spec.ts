@@ -892,8 +892,11 @@ for (const system of ["gnome", "kde"] as const)
       await page.keyboard.press("Enter");
       await expect(remove).toBeHidden();
       await expect(group("personal")).toBeHidden();
+      // the header bar's, as the tip that asks for a second account offers one too
       await expect(
-        page.locator("#usage-linux").getByRole("button", { name: "Add Account…" }),
+        page
+          .locator('#usage-linux [data-part="header-bar"]')
+          .getByRole("button", { name: "Add Account…" }),
       ).toBeFocused();
     });
 
