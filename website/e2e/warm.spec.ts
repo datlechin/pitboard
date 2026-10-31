@@ -170,7 +170,11 @@ for (const system of ["gnome", "kde"] as const)
       // wrapping, a step from an end goes to the other, 23:59 as the app's adjustment has it
       await page.keyboard.press("ArrowDown");
       await expect(from).toHaveAttribute("aria-valuetext", "23:59");
-      await expect(from).not.toBeEditable();
+      // nothing typed lands, though the field is not said to be read-only
+      await expect(from).toBeEditable();
+      await page.keyboard.type("12");
+      await page.keyboard.press("Enter");
+      await expect(from).toHaveValue("23:59");
       const to = fig.getByRole("spinbutton", { name: "To" });
       await to.focus();
       await page.keyboard.press("ArrowDown");

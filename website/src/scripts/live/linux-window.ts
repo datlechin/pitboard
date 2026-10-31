@@ -25,13 +25,17 @@ import {
   limitRow,
   limitTitle,
   listed,
-  signInExpired,
-  switchSpoken,
   toolsOn,
   updated,
 } from "../../lib/words.ts";
-import { SWITCH, WARM_UP_OFF, signInAgain, signInAsking, toolIfShown } from "../../data/window.ts";
-import { accountMenu, headerOffer, levelOf, signInOf } from "../../data/linux-window.ts";
+import { WARM_UP_OFF, toolIfShown } from "../../data/window.ts";
+import {
+  accountMenu,
+  headerButton,
+  headerOffer,
+  levelOf,
+  signInOf,
+} from "../../data/linux-window.ts";
 import type { Account } from "../../data/world.ts";
 
 const FRONT = "gnome";
@@ -136,7 +140,7 @@ class LinuxWindow extends AccountsFigure {
       case "w":
         return does(() => this.#close());
       case "q":
-        return does(() => quit());
+        return does(() => this.#hide(quit));
     }
   }
 
@@ -165,7 +169,7 @@ class LinuxWindow extends AccountsFigure {
         return true;
       case "minimize":
         // out of sight until the tray's Open Pitboard brings it back, as Activate does
-        closeAppWindow();
+        this.#hide(closeAppWindow);
         return true;
       case "maximize":
         // departs from the apps: Maximize keeps the Linux window at the size its desk draws
@@ -188,8 +192,17 @@ class LinuxWindow extends AccountsFigure {
   // (application.rs, Host::keeps_running)
   // departs from the apps: Closing the Pitboard window on GNOME, or Ctrl+W there, quits Pitboard until Reset
   #close() {
-    if (surfaces(this.system).statusItem) closeAppWindow();
-    else quit();
+    this.#hide(surfaces(this.system).statusItem ? closeAppWindow : quit);
+  }
+
+  // the window goes from its desk, and focus that was in it goes to Reset, which brings it back
+  #hide(act: () => void) {
+    const had = this.contains(document.activeElement);
+    act();
+    if (had)
+      this.closest("figure")
+        ?.querySelector<HTMLElement>("[data-reset]:not([hidden])")
+        ?.focus({ preventScroll: true });
   }
 
   #dialog(what: Shown) {
@@ -342,6 +355,7 @@ class LinuxWindow extends AccountsFigure {
     if (this.#page !== "accounts") return;
     this.notices(s);
     shown(part(this, "notices"), !!this.querySelector("[data-notice]:not([hidden])"));
+    this.setup(s);
     this.#groups(s);
   }
 
@@ -383,14 +397,9 @@ class LinuxWindow extends AccountsFigure {
     const header = headerOffer(a, s, s.switching?.id ?? null);
     shown(part(group, "action"), header !== null);
     const button = group.querySelector<HTMLButtonElement>('[data-does="use"]')!;
-    const again = signInExpired(a, s);
-    text(button, again ? signInAsking(FRONT) : SWITCH);
-    attr(
-      button,
-      "aria-label",
-      header === null ? null : again ? signInAgain(FRONT) : switchSpoken(a),
-    );
-    attr(button, "disabled", s.switching ? "" : null);
+    const offered = header === null ? null : headerButton(a, s);
+    if (offered) text(button, offered.title);
+    attr(button, "aria-label", offered?.spoken ?? null);
     const rows = part(group, "rows")!;
     attr(rows, "aria-label", a.label);
     this.#limits(s, rows, a);

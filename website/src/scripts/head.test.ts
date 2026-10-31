@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
+import { onOf, type Platform } from "../lib/platform.ts";
 
 const script = readFileSync(new URL("./head.js", import.meta.url), "utf8");
 
@@ -127,10 +128,11 @@ const readers = [
 ];
 
 test("shows macOS for the visit where a link names a section the reader's system does not show", () => {
-  const named = /var only = \{([^}]*)\}/.exec(script)![1];
+  // head.js's map is index.astro's sections, each with the data-on its Feature gives it
+  const only = JSON.parse(/var only = (\{[^}]*\})/.exec(script)![1]);
   assert.deepEqual(
-    [...named.matchAll(/"#([\w-]+)"/g)].map((m) => m[1]),
-    sections.map((s) => s.id),
+    only,
+    Object.fromEntries(sections.map(({ id, on }) => [`#${id}`, onOf(on as Platform[])])),
   );
   for (const { id, on } of sections) {
     assert.ok(on.includes("macos"), `#${id} shows to macOS`);

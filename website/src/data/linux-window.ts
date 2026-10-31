@@ -18,8 +18,9 @@ import {
   shareLabel,
   shareRange,
   terms,
+  warm,
 } from "./limits.ts";
-import { renewalAbout } from "./settings.ts";
+import { renew, renewalAbout } from "./settings.ts";
 import {
   CANCEL,
   EMAIL,
@@ -31,13 +32,21 @@ import {
   copyEmail,
   inUse as inUseSaid,
   removeAccount,
+  nameOf,
   signInAgain,
   signInAsking,
+  signInToAgain,
   switchOffer,
   toolIfShown,
   warmUpNow,
 } from "./window.ts";
-import { header, preferences as pages } from "./linux.ts";
+import {
+  COPY_COMMAND,
+  PASTE_LINK,
+  WATCH_IN_THE_BACKGROUND,
+  header,
+  preferences as pages,
+} from "./linux.ts";
 import {
   CLOSING_QUITS,
   SIGN_IN_EXPIRED,
@@ -50,7 +59,6 @@ import {
   listed,
   settings,
   signInExpired,
-  switchSpoken,
   thisMachine,
   titled,
   toolsOn,
@@ -118,7 +126,7 @@ export const levelOf = { g: "plenty", y: "low", r: "out" } as const;
 // removing it (present/accounts.rs `actions`): Switch while the header offers it, Sign In Again
 // while no sign-in runs, Warm Up Now while a warm-up is due, and Remove for an account not in use.
 // `now` says what holds them back; none of the page's drawn moments is switching, signing in or
-// due a warm-up.
+// due a warm-up. While any switch runs, no header offers a button (present/accounts.rs `action`).
 export interface Offer {
   title: string;
   offer: "use" | "sign-in-again" | "rename" | "warm" | "copy" | "forget";
@@ -130,7 +138,7 @@ export interface Holding {
   warmDue: boolean;
 }
 export const headerOffer = (a: Account, w: World, switching: string | null = null) =>
-  isInUse(a, w) || switching === a.id ? null : signInExpired(a, w) ? "sign-in-again" : "use";
+  isInUse(a, w) || switching !== null ? null : signInExpired(a, w) ? "sign-in-again" : "use";
 export function accountMenu(
   a: Account,
   w: World,
@@ -152,6 +160,15 @@ export function accountMenu(
     a.email ? [{ title: copyEmail(FRONT), offer: "copy", enabled: true }] : [],
     [{ title: removeAccount(FRONT), offer: "forget", enabled: !inUse }],
   ];
+}
+
+// The header's button: Switch, or Sign In… for a sign-in that expired, each named for the account
+// with its tool where two tools are listed (present/accounts.rs `action`, from `name_of`).
+export function headerButton(a: Account, w: World): { title: string; spoken: string } {
+  const name = nameOf(a, w, FRONT);
+  return signInExpired(a, w)
+    ? { title: signInAsking(FRONT), spoken: `${signInToAgain(FRONT, name)}…` }
+    : { title: SWITCH, spoken: switchOffer(name) };
 }
 
 export interface Group {
@@ -188,7 +205,6 @@ export function accountsPage(w: World) {
     groups: toolsOn("linux").flatMap(([tool]) =>
       listed(w, tool).map((a): Group => {
         const inUse = isInUse(a, w);
-        const expired = signInExpired(a, w);
         const said = [toolIfShown(w, FRONT, a.tool), a.plan].filter(Boolean);
         return {
           id: a.id,
@@ -196,11 +212,7 @@ export function accountsPage(w: World) {
           label: a.label,
           description: said.length ? said.join(", ") : null,
           inUse,
-          button: inUse
-            ? null
-            : expired
-              ? { title: signInAsking(FRONT), spoken: signInAgain(FRONT) }
-              : { title: SWITCH, spoken: switchSpoken(a) },
+          button: inUse ? null : headerButton(a, w),
           menu: accountMenu(a, w),
           limits: a.limits.map((l) => {
             const row = limitRow(l, w);
@@ -278,7 +290,7 @@ export function atLimitNote(
     : p.atLimit === "switch"
       ? watched
         ? "Once its window is closed, the watch service goes on switching it."
-        : "Once its window is closed, nothing switches it unless Watch in the Background is on."
+        : `Once its window is closed, nothing switches it unless ${WATCH_IN_THE_BACKGROUND} is on.`
       : !watched
         ? null
         : p.atLimit === "notify"
@@ -312,7 +324,7 @@ export const prefs = {
     share: { label: shareLabel, range: shareRange, at: share },
     terms,
     warm: {
-      title: WARM_UP_LABEL,
+      title: warm.title.gnome,
       note: (statusItem: boolean, watched = false) =>
         `Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, ${statusItem ? "while it’s open" : watched ? "and the watch service goes on once its window is closed" : "while its window is open"}.`,
       from: warmUp.from,
@@ -321,9 +333,9 @@ export const prefs = {
     },
   },
   advanced: {
-    renew: "Keep Saved Sign-Ins Fresh",
+    renew: renew.gnome,
     renewAbout: renewalAbout(FRONT),
-    watch: "Watch in the Background",
+    watch: WATCH_IN_THE_BACKGROUND,
     watchAbout,
     commandLine: "Command Line",
     path: "Path",
@@ -348,7 +360,7 @@ export const prefs = {
     message:
       "Pitboard’s saved sign-ins and settings are deleted. Remove the app and its command line with this command in a terminal.",
     command: "sudo dnf remove pitboard-app pitboard",
-    copy: "Copy",
+    copy: COPY_COMMAND,
     quit: "Quit",
   },
 };
@@ -373,7 +385,7 @@ export const openLink = {
   none: {
     title: "No Link to Open",
     detail: "Paste a claude.ai or chatgpt.com link, or drop one here, to open it in your browser.",
-    paste: "Paste Link",
+    paste: PASTE_LINK,
   },
   link: {
     title: "Open in Your Browser",
@@ -391,9 +403,10 @@ export const acceleratorLabel = (accelerator: string) =>
     .replace(/<Alt>/g, "Alt+")
     .replace(/(?<=\+|^)(\w+)$/, (k) => keyNames[k] ?? k.toUpperCase());
 
-// About Pitboard, libadwaita's dialog from the metainfo: its rows are libadwaita's own words
-// (adw-about-dialog.ui).
+// About Pitboard, libadwaita's dialog from the metainfo: its title, which its header bar does not
+// show, and its rows are libadwaita's own words (adw-about-dialog.ui).
 export const about = {
+  title: "About",
   name: "Pitboard",
   developer: "Pitboard",
   rows: [["Details"], ["Support Questions", "Report an Issue"], ["Legal"]],

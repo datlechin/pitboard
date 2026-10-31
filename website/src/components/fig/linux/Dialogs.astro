@@ -162,7 +162,7 @@ const toggle =
    app's icon at 128, its name in title-1, its developer and its version, a button on the accent at
    10%; then, 18 further and 18 apart, the rows the metainfo gives, Details and Legal leading on, the
    links off the page */}
-<Dialog id={id("about")} width={360}>
+<Dialog id={id("about")} width={360} label={about.title}>
   <div class="flex flex-col gap-6 p-12 text-center">
     <svg class="mx-auto size-128" aria-hidden="true"><use href="#pb-linux-app"></use></svg>
     <span class="adw-title-1">{about.name}</span>

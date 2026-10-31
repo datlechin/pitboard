@@ -2,7 +2,7 @@
 // which it says on both desktops, and its own. linux.test.ts finds each in the file that says it.
 import { listed, isInUse, menuTitle, settings, toolsOn, barTip } from "../lib/words.ts";
 import type { State } from "../lib/model.ts";
-import { ADD_HELP, REFRESH_HELP, addAccountAsks, needsAttention } from "./window.ts";
+import { ADD_HELP, REFRESH_HELP, addAccountAsks, issuesOf, needsAttention } from "./window.ts";
 import type { Tool, World } from "./world.ts";
 
 export const app = "Pitboard";
@@ -46,29 +46,31 @@ export const shortcuts = {
   ] as [accelerator: string, title: string][],
 };
 
-// The words only the Linux app says (app_words.rs `gnome_words`): Open Link's buttons, Preferences'
-// switch for watching once the window is closed, and the button beside each command Remove the App
-// gives.
+// The words only the Linux app says that the page draws (app_words.rs `gnome_words`): Open Link's
+// button, Preferences' switch for watching once the window is closed, and the button beside each
+// command Remove the App gives.
 export const PASTE_LINK = "Paste Link";
-export const DROP_LINK = "Drop Link to Open";
 export const WATCH_IN_THE_BACKGROUND = "Watch in the Background";
 export const COPY_COMMAND = "Copy";
 
 // An entry of the tray's menu: a command under the id presence.rs gives its item, a tool's name
 // over its accounts, or an account as a radio entry, the one in use chosen.
-export type TrayCommand = "open" | "add-account" | "refresh" | "preferences" | "help" | "quit";
+export type TrayCommand =
+  "open" | "issues" | "add-account" | "refresh" | "preferences" | "help" | "quit";
+export type TrayItem = { command: string; does: TrayCommand };
 export type TrayEntry =
-  | { command: string; does: TrayCommand }
+  | TrayItem
   | { heading: string; tool: Tool }
   | { account: string; label: string; tool: Tool; checked: boolean };
 
-// The tray's menu, groups between separators (presence.rs `tray`): Open Pitboard, each tool's
-// accounts, under its name while two tools have accounts (accounts.rs `sections`), Add Account…
-// and Refresh, Preferences and Help, then Quit. A group with nothing in it goes.
-export function trayMenu(w: World): TrayEntry[][] {
+// The tray's menu, groups between separators (presence.rs `tray`): Open Pitboard, its notices,
+// each tool's accounts, under its name while two tools have accounts (accounts.rs `sections`), Add
+// Account… and Refresh, Preferences and Help, then Quit. A group with nothing in it goes.
+export function trayMenu(w: World, notices: TrayEntry[] = []): TrayEntry[][] {
   const shown = toolsOn("linux").filter(([tool]) => listed(w, tool).length > 0);
   const groups: TrayEntry[][] = [
     [{ command: "Open Pitboard", does: "open" }],
+    notices,
     shown.flatMap(([tool, name]): TrayEntry[] => [
       ...(shown.length > 1 ? [{ heading: name, tool }] : []),
       ...listed(w, tool).map((a) => ({
@@ -89,6 +91,14 @@ export function trayMenu(w: World): TrayEntry[][] {
     [{ command: "Quit", does: "quit" }],
   ];
   return groups.filter((group) => group.length > 0);
+}
+
+// The tray's notices, each its title alone (present/notices.rs `menu_notices`): of those the page
+// makes, the pressing notices no switch of theirs answers, counted in one entry that opens the
+// window.
+export function trayNotices(s: State): TrayItem[] {
+  const issues = issuesOf(s, "gnome");
+  return issues ? [{ command: issues.title, does: "issues" }] : [];
 }
 
 // The tray's tooltip, its first line its title and the rest its text (presence.rs `face`).

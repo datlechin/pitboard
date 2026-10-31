@@ -6,6 +6,7 @@
 // settings.test.ts finds each in its source.
 
 import type { Front } from "../lib/platform.ts";
+import { eachFront, titled } from "../lib/words.ts";
 
 export type MenuBarShows = "nameAndUsage" | "usage" | "icon";
 
@@ -59,8 +60,10 @@ export const winAdvanced = {
 export const named = (version: string) => (version ? `Pitboard ${version}` : "Pitboard");
 export const isBeta = (version: string) => version.includes("-beta.");
 
-// AdvancedSettings.swift's and SettingsPage.xaml's switch, in each system's case
-export const renew = { macos: "Keep Saved Sign-Ins Fresh", windows: "Keep saved sign-ins fresh" };
+// AdvancedSettings.swift's, SettingsPage.xaml's and Advanced's switch, in each front's case
+export const renew = eachFront((front) =>
+  titled(front, "Keep Saved Sign-Ins Fresh", "Keep saved sign-ins fresh"),
+);
 
 // present/words/machine.rs `renewal_about`, its machine as each front names it, with Claude
 // Desktop enrolled on macOS, the one system it runs on

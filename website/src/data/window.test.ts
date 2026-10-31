@@ -225,6 +225,33 @@ test("a switch Pitboard made by itself offers Switch Back on its notice, while t
   assert.ok(notices.includes("|| notice.actions.iter().any(|action| action.switches)"));
 });
 
+test("a warning no Switch Back answers offers Learn More, to the warning codes the docs list", () => {
+  reset();
+  use("codex", "spare", "app");
+  const learn = {
+    title: "Learn More",
+    link: "https://docs.usepitboard.com/reference/errors#warning-codes",
+  };
+  assert.deepEqual(w.noticeOf(model.get(), "codex", "macos")?.learn, learn);
+  assert.deepEqual(w.noticeOf(model.get(), "codex", "gnome")?.learn, learn);
+  assert.equal(w.noticeOf(model.get(), "codex", "windows")?.learn?.title, "Learn more");
+  // an information, and a warning with Switch Back, offer none
+  reset();
+  use("claude", "work", "app");
+  assert.equal(w.noticeOf(model.get(), "claude", "macos")!.learn, null);
+  const back = { from: "main", to: "spare", at: 0, followsAt: null, back: { resetsAt: null } };
+  const s = { ...after, now: 0, lastSwitch: { codex: back }, newLogin: {} };
+  assert.equal(w.noticeOf(s, "codex", "macos")!.severity, "warning");
+  assert.equal(w.noticeOf(s, "codex", "macos")!.learn, null);
+  const notices = present("notices.rs");
+  assert.ok(notices.includes("learn: (severity != Severity::Info && last.back.is_none())"));
+  assert.ok(notices.includes(".then(|| super::next::of_warning(seen.front)),"));
+  const next = present("next.rs");
+  assert.ok(next.includes('learn_more(front, Some("warning-codes"))'));
+  assert.ok(next.includes('const ERRORS: &str = "https://docs.usepitboard.com/reference/errors";'));
+  assert.ok(words.includes('titled(front, "Learn More", "Learn more")'));
+});
+
 test("Activity names each change and its end as present/words/machine.rs does", () => {
   const arms = (fn: string) => {
     const body = words.slice(words.indexOf(`fn ${fn}(`)).split("\n}\n")[0];

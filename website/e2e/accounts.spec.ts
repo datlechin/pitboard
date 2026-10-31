@@ -675,7 +675,11 @@ for (const system of ["gnome", "kde"] as const)
       await expect(group("work")).toContainText("Claude Code, Max 20x");
       await expect(group("work").locator('[data-part="in-use"]')).toHaveText("In Use");
       await expect(group("work").getByRole("button", { name: /^Switch/ })).toBeHidden();
-      const personal = group("personal").getByRole("button", { name: "Switch to personal" });
+      // named for the account with its tool, as two tools are listed
+      const personal = group("personal").getByRole("button", {
+        name: "Switch to personal (Claude Code)",
+        exact: true,
+      });
       await expect(personal).toHaveText("Switch");
       await expect(
         group("work").locator('[data-part="limit"] [data-part="spoken"]').first(),
@@ -756,11 +760,43 @@ for (const system of ["gnome", "kde"] as const)
       const { fig, group } = await window(page, system);
       await group("personal").getByRole("button", { name: "Switch to personal" }).click();
       await expect(group("personal").getByRole("img", { name: "Switching" })).toBeVisible();
-      await expect(group("spare").getByRole("button", { name: "Switch to spare" })).toBeDisabled();
+      // while it runs, no other header offers its button
+      await expect(group("spare").locator('[data-part="action"]')).toBeHidden();
       await expect(group("personal").locator('[data-part="in-use"]')).toBeVisible();
       await expect(fig.locator("[data-notice]:not([hidden])")).toContainText(
         "Switched Claude Code to personal",
       );
+    });
+
+    test("a switch of Codex warns with Learn More, and once one account is left the tip asks for a second", async ({
+      page,
+    }) => {
+      const { fig, group, menu, dialog } = await window(page, system);
+      await group("spare").getByRole("button", { name: "Switch to spare" }).click();
+      await expect(group("spare").locator('[data-part="in-use"]')).toBeVisible();
+      const notice = fig.locator('[data-notice="codex"]');
+      await expect(notice.locator('[data-part="title"]').first()).toHaveText(
+        "Switched Codex to spare",
+      );
+      await expect(notice.getByRole("link", { name: "Learn More" })).toHaveAttribute(
+        "href",
+        "https://docs.usepitboard.com/reference/errors#warning-codes",
+      );
+      const tip = fig.locator('[data-part="setup"]');
+      await expect(tip).toBeHidden();
+      await group("main").getByRole("button", { name: "Account" }).click();
+      await menu.getByRole("menuitem", { name: "Remove Account…" }).click();
+      await expect(dialog("remove").getByRole("button", { name: "Remove" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(group("main")).toBeHidden();
+      await expect(tip).toBeVisible();
+      await expect(tip.locator('[data-part="title"]')).toHaveText("Add a second Codex account");
+      await expect(tip.locator('[data-part="detail"]')).toHaveText(
+        "spare is your only Codex account. Add another to switch between them.",
+      );
+      expect(await axe(page, ["#usage-linux"])).toEqual([]);
+      await tip.getByRole("button", { name: "Not Now" }).click();
+      await expect(tip).toBeHidden();
     });
 
     test("F10 opens the main menu, its items cycle, and each opens what it names", async ({
@@ -856,8 +892,11 @@ for (const system of ["gnome", "kde"] as const)
       await page.keyboard.press("Enter");
       await expect(remove).toBeHidden();
       await expect(group("personal")).toBeHidden();
+      // the header bar's, as the tip that asks for a second account offers one too
       await expect(
-        page.locator("#usage-linux").getByRole("button", { name: "Add Account…" }),
+        page
+          .locator('#usage-linux [data-part="header-bar"]')
+          .getByRole("button", { name: "Add Account…" }),
       ).toBeFocused();
     });
 

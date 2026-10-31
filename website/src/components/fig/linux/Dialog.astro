@@ -14,11 +14,13 @@ interface Props {
   id: string;
   width: keyof typeof widths;
   title?: string;
+  // the dialog's own title where its header bar shows none, as About's
+  label?: string;
   // Cancel and the step's button in the header bar, in place of Close
   actions?: boolean;
   class?: string;
 }
-const { id, width, title, actions = false, class: extra } = Astro.props;
+const { id, width, title, label, actions = false, class: extra } = Astro.props;
 ---
 
 <dialog
@@ -29,6 +31,7 @@ const { id, width, title, actions = false, class: extra } = Astro.props;
   ]}
   id={id}
   aria-labelledby={title ? `${id}-title` : undefined}
+  aria-label={title ? undefined : label}
 >
   <form class="flex flex-col adw-type" method="dialog">
     <HeaderBar title={title} titleId={`${id}-title`} controls={actions ? "none" : "dialog"}>

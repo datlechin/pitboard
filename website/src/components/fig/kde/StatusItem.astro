@@ -5,7 +5,8 @@
 // The icon is 22 pixels in a cell 8 wider, as tall as the tray (systemtray's main.qml), in the
 // Plasma style's text colour, as KIconLoader recolours it. Plasma names the item by its title and
 // describes it by its tooltip's text. With `levels` every icon is drawn, those not shown hidden,
-// and `was` over them before the demo's switch.
+// and `was` over them before the demo's switch. With `menu`, the item says that Shift+F10 opens
+// that menu, which a right click opens too, and whether it is open, as drawn while `open`.
 import { breeze } from "../../../lib/breeze.ts";
 import type { level } from "../../../lib/words.ts";
 
@@ -17,6 +18,8 @@ interface Props {
   levels?: boolean;
   id: string;
   describedby?: string;
+  menu?: string;
+  open?: boolean;
   class?: string;
 }
 const {
@@ -26,6 +29,8 @@ const {
   levels = false,
   id,
   describedby,
+  menu,
+  open = false,
   class: extra,
 } = Astro.props;
 const files = import.meta.glob<string>(
@@ -56,6 +61,9 @@ const shown = (l: Level, a: boolean) => (l === now && a === attention ? {} : { h
   id={id}
   aria-label="Pitboard"
   aria-describedby={describedby}
+  aria-controls={menu}
+  aria-expanded={menu ? (open ? "true" : "false") : undefined}
+  aria-keyshortcuts={menu ? "Shift+F10" : undefined}
   data-attention={String(attention)}
 >
   <span

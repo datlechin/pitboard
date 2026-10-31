@@ -26,11 +26,13 @@ import {
   TOOL,
   WARM_UP_LABEL,
   WARM_UP_OFF,
+  WARNING_CODES,
   addAccountAsks,
   copyEmail,
   copyLink,
   inUse,
   keysOf,
+  learnMore,
   notNow,
   openSite,
   removeAccount,
@@ -171,6 +173,15 @@ const insButton =
           data-part="countdown"
           hidden={tool !== "claude"}
           >{sessionsFollowIn(name)} 0:21</span
+        >
+        <a
+          class="mt-2 block w-fit text-u-12/15 text-mac-window-link no-underline hover:text-mac-window-link focus-mac"
+          href={WARNING_CODES}
+          target="_blank"
+          rel="noopener"
+          data-part="learn"
+          hidden
+          >{learnMore("macos")}</a
         >
       </span>
       {/* a switch Pitboard made by itself offers Switch Back */}

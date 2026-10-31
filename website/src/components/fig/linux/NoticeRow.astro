@@ -2,11 +2,12 @@
 // A notice (data/ui/notice-row.ui, window/notices.rs): its severity's icon, its title over what it
 // says and the countdown under that, the model's buttons, then the flat round Dismiss. A tool's
 // last switch says it was switched and counts down to its open sessions following; a switch made
-// by itself offers Switch Back.
+// by itself offers Switch Back, and a warning with none Learn More.
 import Button from "./Button.astro";
 import Row from "./Row.astro";
 import Symbolic from "./Symbolic.astro";
 import { group, switchNotice } from "../../../data/linux-window.ts";
+import { WARNING_CODES, learnMore } from "../../../data/window.ts";
 
 interface Props {
   tool: string;
@@ -32,6 +33,9 @@ const { tool, title, countdown, shown } = Astro.props;
   <span slot="suffix" class="flex items-center gap-6">
     <span data-part="actions" hidden>
       <Button data-does="switch-back">{switchNotice.switchBack}</Button>
+    </span>
+    <span class="flex" data-part="learn" hidden>
+      <Button href={WARNING_CODES}>{learnMore("gnome")}</Button>
     </span>
     <Button
       look="flat"

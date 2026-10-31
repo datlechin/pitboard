@@ -115,6 +115,8 @@ for (const system of ["macos", "windows", "gnome", "kde"] as const) {
     test("goes by itself after the system's time, once nothing holds it", async ({ page }) => {
       const fig = await offer(page, system);
       const banner = fig.locator("[data-banner]");
+      // the clock moves only as the test moves it, so a slow browser takes none of the banner's time
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
       await fig.scrollIntoViewIfNeeded();
       await expect(banner).toBeVisible();
       await page.mouse.move(0, 0);
@@ -152,6 +154,8 @@ for (const system of ["gnome", "kde"] as const)
     page,
   }) => {
     const fig = await offer(page, system);
+    // the demo is over first: on the iPhone the press ended it, and the page moved under the pointer
+    await handedOver(page);
     const banner = fig.locator("[data-banner]");
     await fig.scrollIntoViewIfNeeded();
     await banner.locator("[data-body]").click();

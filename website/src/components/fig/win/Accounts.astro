@@ -24,9 +24,11 @@ import {
   RENAME_OFFER,
   TOOL,
   ACCOUNT,
+  WARNING_CODES,
   addAccountAsks,
   copyEmail,
   copyLink,
+  learnMore,
   notNow,
   removeAccount,
   signInAgain,
@@ -97,6 +99,16 @@ const radio =
         {/* a switch Pitboard made by itself offers Switch Back, under the message */}
         <span class="mt-12 flex gap-8" data-part="actions" hidden>
           <Button data-does="switch-back">{switchBack("windows")}</Button>
+        </span>
+        {/* a warning nothing in the app puts right links to the docs (NoticeBar.xaml's HyperlinkButton) */}
+        <span class="mt-12 flex" data-part="learn" hidden>
+          <a
+            class="rounded-u-4 px-11 pt-5 pb-6 text-win-accent-text no-underline focus-win live:hover:bg-win-subtle live:hover:text-win-accent-text"
+            href={WARNING_CODES}
+            target="_blank"
+            rel="noopener"
+            >{learnMore("windows")}</a
+          >
         </span>
       </InfoBar>
     </div>)}
