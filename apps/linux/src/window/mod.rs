@@ -14,7 +14,8 @@
 //!
 //! It answers each window request of the model's once: it comes forward, with the activation
 //! token what asked for it came with, and shows the place asked for, the accounts, Diagnostics
-//! or Activity pushed over them, Preferences on its page, or the first launch's welcome.
+//! or Activity pushed over them once the dialogs over the window have gone, Preferences on its
+//! page, or the first launch's welcome.
 
 mod account_group;
 mod accounts;
@@ -43,6 +44,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::data_folder::DataFolder;
 use crate::dialogs::Dialogs;
+use crate::dialogs::welcome::Welcome;
 use crate::pages::{ActivityPage, DiagnosticsPage};
 use crate::platform::autostart::StartAtSignIn;
 use crate::platform::links;
@@ -334,8 +336,14 @@ impl Window {
             Some(Place::Accounts) => {
                 self.imp().navigation.pop_to_tag(ACCOUNTS);
             }
-            Some(Place::Checks) => self.show_page(DIAGNOSTICS),
-            Some(Place::Activity) => self.show_page(ACTIVITY),
+            Some(Place::Checks) => {
+                self.give_way();
+                self.show_page(DIAGNOSTICS);
+            }
+            Some(Place::Activity) => {
+                self.give_way();
+                self.show_page(ACTIVITY);
+            }
             Some(Place::Settings { section }) => {
                 if let Some(dialogs) = dialogs {
                     dialogs.show_preferences(Some(section));
@@ -420,6 +428,24 @@ impl Window {
         }
     }
 
+    // What stands over the window goes before a page is shown under it, as the macOS and Windows
+    // apps bring Diagnostics in front of their welcome (docs/facts/linux-app.md, The dialogs).
+    // Top first, up to one that cannot close by itself, as a sign-in under way, which closing
+    // would cancel. The welcome tells the model nothing, which shows the page now.
+    fn give_way(&self) {
+        while let Some(dialog) = self.visible_dialog().filter(|dialog| dialog.can_close()) {
+            match dialog.downcast_ref::<Welcome>() {
+                Some(welcome) => welcome.withdraw(),
+                None => {
+                    dialog.close();
+                }
+            }
+            if self.visible_dialog().as_ref() == Some(&dialog) {
+                break;
+            }
+        }
+    }
+
     // Top first, as Escape closes each: one that stays, as a sign-in under way does, keeps those
     // under it.
     fn close_dialogs(&self) {
@@ -436,17 +462,31 @@ impl Window {
 mod tests {
     use super::*;
 
-    struct Shows(DataFolder);
+    struct Shows {
+        data: DataFolder,
+        sent: std::cell::RefCell<Vec<Intent>>,
+    }
+
+    impl Shows {
+        fn at(folder: &std::path::Path) -> Shows {
+            Shows {
+                data: DataFolder::at(folder),
+                sent: Default::default(),
+            }
+        }
+    }
 
     impl Host for Shows {
-        fn send(&self, _: Intent) {}
+        fn send(&self, intent: Intent) {
+            self.sent.borrow_mut().push(intent);
+        }
         fn open(&self, _: &str, _: &gtk::Window) {}
         fn keeps_running(&self) -> bool {
             false
         }
         fn quit(&self) {}
         fn data(&self) -> &DataFolder {
-            &self.0
+            &self.data
         }
         fn token(&self) -> Option<String> {
             None
@@ -476,7 +516,7 @@ mod tests {
         let scratch = tempfile::tempdir().unwrap();
         let shown = Shown::new(crate::testing::snapshot(1));
 
-        let window = Window::new(None, &shown, Rc::new(Shows(DataFolder::at(scratch.path()))));
+        let window = Window::new(None, &shown, Rc::new(Shows::at(scratch.path())));
 
         let words = pitboard_model::app_words(Front::Gnome);
         let imp = window.imp();
@@ -488,7 +528,7 @@ mod tests {
             Some("status"),
             "nothing read yet"
         );
-        let host: Rc<dyn Host> = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let host: Rc<dyn Host> = Rc::new(Shows::at(scratch.path()));
         let _ = AccountGroup::new(host.clone());
         let _ = LimitRow::default();
         let _ = NoticeRow::new(host.clone());
@@ -497,7 +537,7 @@ mod tests {
         let _ = crate::dialogs::name::SheetDialog::stowing(host.clone());
         let _ = crate::dialogs::open_link::OpenLink::new(host.clone());
         let _ = crate::preferences::Preferences::new(host.clone(), &shown.snapshot());
-        let _ = crate::dialogs::welcome::Welcome::new(host);
+        let _ = Welcome::new(host);
         let _ = crate::dialogs::shortcuts::Shortcuts::default();
         let _ = crate::dialogs::about::about();
         window.destroy();
@@ -510,7 +550,7 @@ mod tests {
         crate::resources::register();
         let scratch = tempfile::tempdir().unwrap();
         let folder = scratch.path().join("data").join(crate::config::APP_ID);
-        let host = Rc::new(Shows(DataFolder::at(&folder)));
+        let host = Rc::new(Shows::at(&folder));
 
         let window = Window::new(None, &Shown::new(crate::testing::snapshot(1)), host);
 
@@ -526,7 +566,7 @@ mod tests {
         adw::init().unwrap();
         crate::resources::register();
         let scratch = tempfile::tempdir().unwrap();
-        let host = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let host = Rc::new(Shows::at(scratch.path()));
         let window = Window::new(None, &Shown::new(crate::testing::snapshot(1)), host);
         window.present();
         window
@@ -545,6 +585,273 @@ mod tests {
             !gtk::Window::list_toplevels().contains(&window),
             "the window up"
         );
+    }
+
+    fn iterate_until(what: &str, done: impl Fn() -> bool) {
+        let context = glib::MainContext::default();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !done() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "{what}: not within 30 s"
+            );
+            if !context.iteration(false) {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+    }
+
+    // A widget is laid out at a frame, so where it is shows only once one is drawn.
+    fn drawn(window: &Window) {
+        iterate_until("the window mapped", || window.is_mapped());
+        let clock = window.frame_clock().expect("a mapped window's clock");
+        for _ in 0..3 {
+            let next = clock.frame_counter() + 1;
+            window.queue_draw();
+            iterate_until("its frame drawn", || clock.frame_counter() >= next);
+        }
+    }
+
+    // Inside the view of the scrolled window it is in, which is all a dialog shows of it.
+    fn in_sight(widget: &impl IsA<gtk::Widget>) -> bool {
+        let widget = widget.upcast_ref::<gtk::Widget>();
+        let Some(scrolled) = widget
+            .ancestor(gtk::ScrolledWindow::static_type())
+            .and_downcast::<gtk::ScrolledWindow>()
+        else {
+            return false;
+        };
+        let Some(bounds) = widget.compute_bounds(&scrolled) else {
+            return false;
+        };
+        widget.is_mapped()
+            && bounds.y() >= 0.0
+            && bounds.y() + bounds.height() <= scrolled.height() as f32
+    }
+
+    fn sheet_tool(tool: pitboard_model::Tool, code: &str, name: &str) -> pitboard_model::SheetTool {
+        pitboard_model::SheetTool {
+            tool,
+            code: code.into(),
+            name: name.into(),
+            message: format!("Sign in to {name} in your browser. Pitboard adds the account."),
+            confirm: "Sign In…".into(),
+            missing: None,
+            steps: Vec::new(),
+        }
+    }
+
+    fn adding(revision: u64) -> pitboard_model::Snapshot {
+        use pitboard_model::{Sheet, SheetText, Tool};
+        let mut snapshot = crate::testing::snapshot(revision);
+        snapshot.sheet = Some(Sheet::Add {
+            tool: Some(Tool::Claude),
+        });
+        snapshot.sheet_text = Some(SheetText {
+            title: "Add Account".into(),
+            message: "Sign in to Claude Code in your browser. Pitboard adds the account.".into(),
+            tools: vec![
+                sheet_tool(Tool::Claude, "claude", "Claude Code"),
+                sheet_tool(Tool::Codex, "codex", "Codex"),
+            ],
+            tool: Tool::Claude,
+            account: None,
+            name: String::new(),
+            prompt: "Name".into(),
+            confirm: "Sign In…".into(),
+            saving: false,
+            progress: None,
+        });
+        snapshot
+    }
+
+    // An enrol refused after the browser's sign-in, as on Debian 13's first session
+    // (docs/facts/linux-app.md, The dialogs): the dialog was up before either was said.
+    #[gtk::test]
+    fn a_failure_said_after_a_sign_in_is_in_sight() {
+        use pitboard_model::{
+            Choice, FailureText, NextStep, RunningSignIn, SigningInText, Snapshot,
+        };
+        adw::init().unwrap();
+        crate::resources::register();
+        let scratch = tempfile::tempdir().unwrap();
+        let host = Rc::new(Shows::at(scratch.path()));
+        let shown = Shown::new(crate::testing::snapshot(1));
+        let window = Window::new(None, &shown, host);
+        window.present();
+        drawn(&window);
+        shown.take(adding(2));
+        drawn(&window);
+        let dialog = window.visible_dialog().expect("Add Account");
+
+        shown.take(Snapshot {
+            signing_in: Some(RunningSignIn {
+                id: 1,
+                url: Some("https://claude.ai/oauth/authorize?code=true".into()),
+                wants_code: true,
+            }),
+            signing_in_text: Some(SigningInText {
+                title: "Signing In to Claude Code".into(),
+                message: "Finish signing in in your browser.".into(),
+                code_note: "If the browser shows a code, paste it here.".into(),
+                refused: None,
+                waiting: "Waiting for the browser".into(),
+                offers_link: true,
+                cancel: Choice {
+                    title: "Cancel".into(),
+                    intent: Intent::CancelSignIn,
+                    enabled: true,
+                },
+                escape_cancels: true,
+                undo: None,
+                announce: None,
+                steps: Vec::new(),
+            }),
+            ..adding(3)
+        });
+        drawn(&window);
+        let code = descendants::<adw::EntryRow>(dialog.upcast_ref()).remove(0);
+        assert!(in_sight(&code), "the code's field under the dialog's fold");
+        let words = pitboard_model::app_words(Front::Gnome).sheet;
+        for label in [&words.copy_link, &words.open] {
+            let button = descendants::<gtk::Button>(dialog.upcast_ref())
+                .into_iter()
+                .find(|button| button.label().as_deref() == Some(label.as_str()))
+                .expect(label);
+            assert!(in_sight(&button), "{label} under the dialog's fold");
+        }
+
+        let next = Choice {
+            title: "Show Diagnostics".into(),
+            intent: Intent::Show {
+                place: Some(Place::Checks),
+            },
+            enabled: true,
+        };
+        let failure = FailureText {
+            id: 1,
+            title: "Couldn’t add the account".into(),
+            message: "The credential store could not be read: the Secret Service: Object does \
+                      not exist at path “/org/freedesktop/secrets/collection/login”."
+                .into(),
+            warnings: Vec::new(),
+            next: NextStep::Act {
+                choice: next.clone(),
+            },
+        };
+        shown.take(Snapshot {
+            sheet_failure: Some(failure.clone()),
+            ..adding(4)
+        });
+        drawn(&window);
+
+        let row = descendants::<adw::ActionRow>(dialog.upcast_ref())
+            .into_iter()
+            .find(|row| row.title() == failure.title.as_str())
+            .expect("the failure's row");
+        assert_eq!(row.subtitle().as_deref(), Some(failure.message.as_str()));
+        assert!(in_sight(&row), "the failure under the dialog's fold");
+        let button = descendants::<gtk::Button>(row.upcast_ref())
+            .into_iter()
+            .find(|button| button.label().as_deref() == Some(next.title.as_str()))
+            .expect("its next step");
+        assert!(in_sight(&button), "its next step under the dialog's fold");
+        window.destroy();
+    }
+
+    // The enrol refused over the welcome on Debian 13's first session, whose Show Diagnostics
+    // the model answers with a window request and nothing else.
+    #[gtk::test]
+    fn show_diagnostics_in_a_dialog_over_the_welcome_shows_diagnostics_in_front() {
+        use pitboard_model::{Choice, FailureText, NextStep, Snapshot};
+        adw::init().unwrap();
+        crate::resources::register();
+        let scratch = tempfile::tempdir().unwrap();
+        let host = Rc::new(Shows::at(scratch.path()));
+        let shown = Shown::new(crate::testing::snapshot(1));
+        let window = Window::new(None, &shown, host.clone());
+        window.present();
+        drawn(&window);
+        let asked = |serial, place| WindowRequest {
+            serial,
+            place: Some(place),
+        };
+        let welcomed = asked(1, Place::Welcome);
+        shown.take(Snapshot {
+            window_request: welcomed,
+            ..crate::testing::snapshot(2)
+        });
+        drawn(&window);
+        let welcome = window.visible_dialog().expect("the welcome");
+        shown.take(Snapshot {
+            window_request: welcomed,
+            ..adding(3)
+        });
+        drawn(&window);
+        let next = Choice {
+            title: "Show Diagnostics".into(),
+            intent: Intent::Show {
+                place: Some(Place::Checks),
+            },
+            enabled: true,
+        };
+        let failure = FailureText {
+            id: 1,
+            title: "Couldn’t add the account".into(),
+            message: "The credential store could not be read.".into(),
+            warnings: Vec::new(),
+            next: NextStep::Act {
+                choice: next.clone(),
+            },
+        };
+        shown.take(Snapshot {
+            window_request: welcomed,
+            sheet_failure: Some(failure.clone()),
+            ..adding(4)
+        });
+        drawn(&window);
+        let dialog = window.visible_dialog().expect("Add Account");
+        assert_ne!(dialog, welcome, "Add Account over the welcome");
+        let button = descendants::<gtk::Button>(dialog.upcast_ref())
+            .into_iter()
+            .find(|button| button.label().as_deref() == Some(next.title.as_str()))
+            .expect("Show Diagnostics");
+        host.sent.borrow_mut().clear();
+
+        button.emit_clicked();
+        assert_eq!(host.sent.take(), [next.intent]);
+        shown.take(Snapshot {
+            window_request: asked(2, Place::Checks),
+            sheet_failure: Some(failure),
+            ..adding(5)
+        });
+        drawn(&window);
+
+        assert_eq!(window.visible_dialog(), None);
+        let imp = window.imp();
+        assert_eq!(
+            imp.navigation.visible_page_tag().as_deref(),
+            Some(DIAGNOSTICS)
+        );
+        let sent = host.sent.take();
+        assert!(sent.contains(&Intent::CloseSheet), "the sheet up: {sent:?}");
+        assert!(
+            !sent
+                .iter()
+                .any(|intent| matches!(intent, Intent::Show { .. })),
+            "the welcome went on to the accounts: {sent:?}"
+        );
+        shown.take(Snapshot {
+            window_request: asked(2, Place::Checks),
+            ..crate::testing::snapshot(6)
+        });
+        drawn(&window);
+        assert_eq!(window.visible_dialog(), None);
+        assert_eq!(
+            imp.navigation.visible_page_tag().as_deref(),
+            Some(DIAGNOSTICS)
+        );
+        window.destroy();
     }
 
     fn descendants<T: IsA<gtk::Widget>>(widget: &gtk::Widget) -> Vec<T> {
@@ -594,12 +901,12 @@ mod tests {
             },
         });
         let scratch = tempfile::tempdir().unwrap();
-        let host: Rc<dyn Host> = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let host: Rc<dyn Host> = Rc::new(Shows::at(scratch.path()));
 
         let window = Window::new(None, &Shown::new(snapshot.clone()), host.clone());
         let open_link = crate::dialogs::open_link::OpenLink::new(host.clone());
         open_link.show(&snapshot.account_windows);
-        let welcome = crate::dialogs::welcome::Welcome::new(host);
+        let welcome = Welcome::new(host);
         welcome.show(&snapshot.welcome);
         // A dialog holds what it shows only once it is presented (`adw_dialog_present`).
         window.present();

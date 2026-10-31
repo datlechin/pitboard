@@ -14,3 +14,8 @@ In the app's account windows, you sign in to claude.ai or chatgpt.com on the sit
 pages. Pitboard never reads, copies or changes the session that results. The system's web
 engine, WebKit on macOS and WebView2 on Windows, keeps it on your computer in that
 account's website data, as a browser keeps its own.
+
+The Linux app carries symbolic icons from adwaita-icon-theme 51.0, by the GNOME Project
+(https://www.gnome.org), under either the GNU LGPL v3 or the Creative Commons
+Attribution-Share Alike 3.0 United States License
+(https://creativecommons.org/licenses/by-sa/3.0/).

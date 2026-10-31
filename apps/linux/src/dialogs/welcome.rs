@@ -2,7 +2,7 @@
 //! stays, each tool found with what adding its account takes, start at sign-in, and Continue.
 //! What a tool's Add starts, a sheet, a question or a failure, comes up over it, since the model
 //! asks for each over the welcome while it is shown and libadwaita puts each dialog over the
-//! ones before. However it closes, it goes on to the accounts.
+//! ones before. However the person closes it, it goes on to the accounts.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::rc::Rc;
@@ -41,6 +41,8 @@ mod imp {
         pub(super) tool_rows: RefCell<Vec<adw::ActionRow>>,
         // while what the model shows is drawn, so its switch sends nothing
         pub(super) drawing: Cell<bool>,
+        // the window shows another place, so closing goes on to none
+        pub(super) withdrawn: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -85,7 +87,9 @@ mod imp {
 
     impl AdwDialogImpl for Welcome {
         fn closed(&self) {
-            if let (Some(host), Some(shown)) = (self.host.get(), self.shown.borrow().as_ref()) {
+            if !self.withdrawn.get()
+                && let (Some(host), Some(shown)) = (self.host.get(), self.shown.borrow().as_ref())
+            {
                 host.send(shown.done.intent.clone());
             }
             self.parent_closed();
@@ -111,6 +115,12 @@ impl Welcome {
 
     fn host(&self) -> Rc<dyn Host> {
         Rc::clone(self.imp().host.get().expect("made with its host"))
+    }
+
+    /// The window shows another place: it closes, telling the model nothing.
+    pub fn withdraw(&self) {
+        self.imp().withdrawn.set(true);
+        self.force_close();
     }
 
     /// Shows what the model's welcome says.
@@ -141,6 +151,7 @@ impl Welcome {
         imp.done.set_sensitive(welcome.done.enabled);
         imp.shown.replace(Some(welcome.clone()));
         imp.drawing.set(false);
+        super::fit_height(self.upcast_ref());
     }
 
     // A row a tool, made again as the tools change: its name, the account it has, and its step.
@@ -219,5 +230,6 @@ impl Welcome {
             imp.start_at_sign_in.set_active(start.is_on());
             imp.drawing.set(false);
         }
+        super::fit_height(self.upcast_ref());
     }
 }

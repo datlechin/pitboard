@@ -12,7 +12,7 @@
 use super::Settled;
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::host::Vault;
+use crate::host::{Keyring, Vault};
 use crate::permit::Permit;
 use crate::state::{self, Leaving, ParkKind, State, VaultForm};
 use crate::warning::Warning;
@@ -31,6 +31,8 @@ pub struct Keeping {
     pub folder: Option<PathBuf>,
     /// Whether a Secret Service answers on this session's bus, where this system parks in one.
     pub secret_service: Option<bool>,
+    /// What answers for it, which the store is named for.
+    pub keyring: Option<Keyring>,
     /// The form a move cut short goes to, which the next change finishes.
     pub moving_to: Option<VaultForm>,
     /// How many parks a move left in the form it moved from, which the next change deletes.
@@ -66,6 +68,11 @@ pub(crate) fn keeping(ctx: &Context) -> Result<Keeping> {
             .vault_forms()
             .contains(&VaultForm::SecretService)
             .then(|| host.answers(ctx, VaultForm::SecretService)),
+        // After `answers`, whose question starts a keyring D-Bus can start.
+        keyring: host
+            .vault_forms()
+            .contains(&VaultForm::SecretService)
+            .then(|| host.keyring(ctx)),
         moving_to: recorded.and_then(|vault| vault.moving_to),
         leaving: recorded
             .and_then(|vault| vault.leaving.as_ref())
@@ -351,6 +358,7 @@ mod tests {
                 shared: true,
                 folder: None,
                 secret_service: None,
+                keyring: None,
                 moving_to: None,
                 leaving: None,
             }
@@ -364,6 +372,7 @@ mod tests {
                 shared: false,
                 folder: Some(folder),
                 secret_service: None,
+                keyring: None,
                 moving_to: None,
                 leaving: None,
             }
@@ -377,6 +386,7 @@ mod tests {
                 shared: true,
                 folder: Some(folder),
                 secret_service: Some(true),
+                keyring: Some(Keyring::Login),
                 moving_to: None,
                 leaving: None,
             }
@@ -392,6 +402,7 @@ mod tests {
                 shared: false,
                 folder: Some(folder),
                 secret_service: Some(false),
+                keyring: Some(Keyring::Login),
                 moving_to: None,
                 leaving: None,
             }

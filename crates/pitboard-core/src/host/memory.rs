@@ -4,8 +4,8 @@
 //! real one, Claude Code's own slot hashing on the sign-in path included.
 
 use super::{
-    Administered, Cookie, Elevation, Floor, Host, Jar, JarError, Listed, Process, Scheduler,
-    SecretStore, WindowsSettings,
+    Administered, Cookie, Elevation, Floor, Host, Jar, JarError, Keyring, Listed, Process,
+    Scheduler, SecretStore, WindowsSettings,
 };
 use crate::context::Context;
 use crate::permit::Permit;
@@ -131,6 +131,8 @@ pub struct MemoryHost {
     by_form: bool,
     // Whether the Secret Service answers on this machine's bus.
     secret_service_answers: AtomicBool,
+    // Whether KWallet answers for it, as on KDE Plasma.
+    kwallet: AtomicBool,
     /// This system's scheduler, writing in the test's own home.
     scheduler: Option<Box<dyn Scheduler>>,
     /// Whether the scheduler refuses the next schedule it is asked to start.
@@ -228,6 +230,7 @@ impl MemoryHost {
             shared_vault: AtomicBool::new(shared),
             by_form: false,
             secret_service_answers: AtomicBool::new(true),
+            kwallet: AtomicBool::new(false),
             scheduler: super::os::pretend_scheduler(Arc::clone(&refuse_start)),
             refuse_start,
             unscheduled: AtomicBool::new(false),
@@ -304,6 +307,11 @@ impl MemoryHost {
     /// SSH or in a container.
     pub fn secret_service_answers(&self, answers: bool) {
         self.secret_service_answers.store(answers, Ordering::SeqCst);
+    }
+
+    /// From now on KWallet answers for the Secret Service, as on KDE Plasma.
+    pub fn answered_by_kwallet(&self) {
+        self.kwallet.store(true, Ordering::SeqCst);
     }
 
     /// The files a home keeps its parks in where it recorded that form, by that home's vault.
@@ -557,6 +565,14 @@ impl Host for MemoryHost {
                 VaultForm::SecretService => self.secret_service_answers.load(Ordering::SeqCst),
                 VaultForm::Files => true,
             }
+    }
+
+    fn keyring(&self, _ctx: &Context) -> Keyring {
+        if self.kwallet.load(Ordering::SeqCst) {
+            Keyring::KWallet
+        } else {
+            Keyring::Login
+        }
     }
 
     fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {

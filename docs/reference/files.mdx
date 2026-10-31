@@ -74,6 +74,8 @@ On macOS, a keychain item's account is the one Claude Code's own item uses, from
 
 On Linux, a Secret Service item is labelled `Pitboard parked login`, with the attribute `xdg:schema` set to `com.usepitboard.Pitboard.Park` and `service` to its name.
 
+On KDE Plasma, KWallet answers for the Secret Service, and its default wallet is the default collection. There `pitboard doctor` and `pitboard vault` say KWallet in place of the login keyring.
+
 On Linux, `state.json` records how a Pitboard directory keeps its parked logins, as `vault`:
 
 | `form` | Parked logins are | Recorded |

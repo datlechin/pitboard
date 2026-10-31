@@ -464,6 +464,7 @@ fn site_machine(os: Os) -> Vec<Check> {
                     shared: true,
                     folder: Some(home(".pitboard/vault")),
                     secret_service: Some(true),
+                    keyring: Some(crate::host::Keyring::Login),
                     moving_to: None,
                     leaving: None,
                 },

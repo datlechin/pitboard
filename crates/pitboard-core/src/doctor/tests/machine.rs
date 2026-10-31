@@ -292,6 +292,10 @@ fn parks_left_to_delete_or_resolve_are_waited_on_as_their_vault_keeps_them() {
         ..State::default()
     });
     f.pending_parks = vec!["pitboard-park-y-1".into()];
+    let in_the_keyring = (
+        words::deleted_once_the_keyring_opens(LOGIN),
+        words::run_any_command_in_the_desktop_session(LOGIN),
+    );
     for (vault, discarded, pending) in [
         (
             store::Backend::Keychain,
@@ -310,8 +314,8 @@ fn parks_left_to_delete_or_resolve_are_waited_on_as_their_vault_keeps_them() {
         ),
         (
             store::Backend::SecretService,
-            words::DELETED_ONCE_THE_LOGIN_KEYRING_OPENS,
-            words::RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION,
+            in_the_keyring.0.as_str(),
+            in_the_keyring.1.as_str(),
         ),
     ] {
         f.vault = vault;

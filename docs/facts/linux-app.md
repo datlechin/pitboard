@@ -852,6 +852,26 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
   `without_a_tray_ctrl_w_with_a_dialog_up_closes_the_dialog_then_the_window`). A dialog that
   stays, as a sign-in under way does, stays in the window. Escape is the sheet's and never asks
   the window, so it still closes only the dialog.
+- An `AdwDialog` measures its content's height once, as it is rooted, and keeps it:
+  `adw_dialog_root` calls `set_content_size` (`src/adw-dialog.c:815` at 1.7.0, `:806` at
+  1.9.4), which makes it the natural height of the dialog's breakpoint bin
+  (`src/adw-breakpoint-bin.c:366`, `:387`). What a dialog shows once it is up goes under the
+  fold of its scrolled content. On Debian 13 on 30 October 2026 the sign-in dialog showed its
+  form and none of the refused enrol under it
+  ([The Linux session machines](linux-session.md#sign-in-and-the-secret-service)).
+  `follows-content-size` would drop `content-width` too (`update_natural_size`), so each dialog
+  that follows the model sets `content-height` to -1 once it has shown what changed, which
+  measures it again (`a_failure_said_after_a_sign_in_is_in_sight`,
+  `a_failure_stays_in_the_dialog`).
+- The model answers Show Diagnostics with a window request for Diagnostics and nothing else
+  (`Intent::Show`). The macOS app opens Diagnostics as a window of its own, in front of the
+  welcome and the sheet on it (`PlaceWindow.swift`), and the Windows app brings its main window
+  forward on the Diagnostics page, the welcome being a window of its own (`Follow` in
+  `App.xaml.cs`). Here the welcome and the sheet over it are dialogs in the window, so the page
+  came up under both, and the welcome's Continue then went back to the accounts. Before it pushes
+  Diagnostics or Activity, the window closes its dialogs top first, up to one whose `can-close`
+  is off, and the welcome goes telling the model nothing
+  (`show_diagnostics_in_a_dialog_over_the_welcome_shows_diagnostics_in_front`).
 - `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
   `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
   same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its
@@ -940,3 +960,21 @@ application to do, so the pictures add it.
   and `fill="currentColor"`, as the Windows icon's drawings are inked.
 - GtkIconTheme finds a GResource's icons only in the folders the hicolor theme defines
   (`gtk/gtkicontheme.c:1560-1576`).
+- GTK 4.22.4 looks an icon up in the desktop's theme and the themes it inherits, then in hicolor,
+  which a resource path's hicolor folders join, and draws `image-missing` where none has it
+  (`gtk/gtkicontheme.c:1868-1872,2133-2146,3234-3256`). So Adwaita draws the app's icons only
+  where it is the theme. On Fedora 44 with Plasma the theme is Breeze 6.31.0, which inherits
+  hicolor alone, and `linux-facts.yml` run 41107324579 read `battery-level-50-symbolic`,
+  `package-x-generic-symbolic` and `web-browser-symbolic` there as Breeze's `image-missing` on
+  31 October 2026.
+- adwaita-icon-theme 51.0's README calls it a "Private UI icon set for GNOME core apps", and
+  GNOME's HIG (UI Icons) gives apps GTK's own icons and the Icon Development Kit's to copy in. Of
+  the 19 symbolic names the app shows, GTK 4.18.6 and 4.22.4 carry 11 in their resources
+  (`gtk/icons`) and libadwaita `adw-external-link-symbolic`. The app carries the other 7 in its
+  own, under `icons/scalable/actions`. A theme comes before hicolor, so Adwaita and Breeze still
+  draw their own where they have the name
+  (`every_icon_the_app_names_is_found_in_adwaita_and_in_hicolor_alone`).
+- The 7 are adwaita-icon-theme 51.0's, under the LGPL 3.0 or CC BY-SA 3.0 US
+  (`data/icons/AdwaitaIconTheme-LICENSE.txt`). The Icon Development Kit's, CC0, read at
+  `3136fc59` on 31 October 2026, are in GTK's newer format and drawn with strokes, and GTK
+  4.18.6's stylesheet recolours fills alone (above).

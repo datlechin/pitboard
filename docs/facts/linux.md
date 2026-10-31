@@ -333,6 +333,20 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
   that flag only where a call asks for `MethodFlags::NoAutoStart`, and secret-service asks for
   none. So the question can start gnome-keyring where the session has its service file. It
   unlocks nothing.
+- Read on 31 October 2026 in kwallet 6.31.0's and 6.13.0's sources from download.kde.org and
+  gnome-keyring 48.0's from download.gnome.org: KDE's daemon takes `org.freedesktop.secrets` on
+  the one connection it takes names of its own on. At 6.31.0 that is ksecretd, beside
+  `org.kde.ksecretd` and `org.kde.secretservicecompat` (`ksecretd.cpp`,
+  `kwalletfreedesktopservice.cpp`), and kwalletd6 is its client. At 6.13.0 it is kwalletd6, beside
+  `org.kde.kwalletd6` and `org.kde.kwalletd5` (`kwalletd.cpp`). `GetNameOwner` names each owner
+  without starting anything, so where the owner of `org.freedesktop.secrets` owns one of those
+  four, doctor and `pitboard vault` call the collection KWallet, and the login keyring otherwise
+  (`the_keyring_is_named_for_what_owns_the_secret_service`,
+  `vault_and_doctor_say_kwallet_where_ksecretd_answers_for_the_secret_service`).
+- A collection's label names no kind of store. gnome-keyring labels the login keyring
+  `_("Login")`, translated, as it makes it (`daemon/login/gkd-login.c:162`). ksecretd's is the
+  wallet's name, `kdewallet` by default, and setting it renames the wallet
+  (`KWalletFreedesktopCollection::label` and `setLabel`, `kwalletfreedesktopcollection.cpp`).
 - secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
   which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
   application that controls which store it uses not to link it, and whose `Entry` hides the

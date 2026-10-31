@@ -626,7 +626,8 @@ fn a_run_that_could_not_open_the_store_is_said_with_when() {
                     &words::runs_daily("/usr/local/bin/pitboard"),
                     33_120,
                     Some(crate::host::Vault::SecretService),
-                    true
+                    true,
+                    LOGIN
                 )
                 .as_str(),
                 words::runs_again(os)
@@ -684,7 +685,8 @@ fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when
                     &words::runs_from_sign_in(Some(at(90)), program),
                     600,
                     Some(crate::host::Vault::SecretService),
-                    true
+                    true,
+                    LOGIN
                 )
                 .as_str(),
                 words::TRIES_AGAIN_AT_ITS_NEXT_SWITCH

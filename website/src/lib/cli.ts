@@ -538,10 +538,6 @@ function log(m: Machine, s: State, n: number): Report {
   };
 }
 
-// warm.rs `warmers`: Linux has no app.
-const warmers = (platform: Platform) =>
-  platform === "linux" ? "`pitboard watch`" : "the app or `pitboard watch`";
-
 const periodEnds = (started: number) => started - (started % START_STEP) + PERIOD;
 
 // warm.rs `standing_json`
@@ -559,7 +555,7 @@ function standingJson(w: WarmStanding): Record<string, unknown> {
 }
 
 // `pitboard warm`: the span, and each Claude Code account with where it stands.
-function warmOverview(m: Machine, s: State): Report {
+function warmOverview(s: State): Report {
   const claude = s.accounts.filter((a) => a.tool === "claude");
   const data = {
     range: { from: clock(s.warm.from), to: clock(s.warm.to) },
@@ -579,7 +575,9 @@ function warmOverview(m: Machine, s: State): Report {
   const width = Math.max(...claude.map((a) => [...a.label].length));
   const said = (w: WarmStanding) => warmSaid(w, (at) => moment(at, s.now));
   const out = [
-    plain(`Pitboard warms up these accounts from ${span(s)}, while ${warmers(m.platform)} runs.`),
+    plain(
+      `Pitboard warms up these accounts from ${span(s)}, while the app or \`pitboard watch\` runs.`,
+    ),
   ];
   for (const a of claude) {
     const name = b(a.label + " ".repeat(width - [...a.label].length));
@@ -1025,7 +1023,7 @@ export async function run(m: Machine, words: string[]): Promise<Step> {
     case "log":
       return out(log(m, s, Number(value(leaf, "lines"))));
     case "warm":
-      return out(warmOverview(m, s));
+      return out(warmOverview(s));
     case "warm now":
       return out(warmNow(m, s, value(leaf, "label")));
     case "warm on":

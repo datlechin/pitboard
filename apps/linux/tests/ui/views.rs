@@ -320,6 +320,40 @@ pub(crate) fn every<T: IsA<gtk::Widget>>(root: &impl IsA<gtk::Widget>) -> Vec<T>
     found
 }
 
+// A widget is laid out at a frame, so where it is shows only once one is drawn.
+pub(crate) fn drawn(widget: &impl IsA<gtk::Widget>) {
+    let clock = widget
+        .as_ref()
+        .frame_clock()
+        .expect("a mapped widget's clock");
+    let context = glib::MainContext::default();
+    let deadline = Instant::now() + PATIENCE;
+    for _ in 0..3 {
+        let next = clock.frame_counter() + 1;
+        widget.as_ref().queue_draw();
+        while clock.frame_counter() < next {
+            assert!(Instant::now() < deadline, "no frame within {PATIENCE:?}");
+            if !context.iteration(false) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    }
+}
+
+pub(crate) fn in_sight(widget: &impl IsA<gtk::Widget>) -> bool {
+    let widget = widget.as_ref();
+    let Some(scrolled) = widget
+        .ancestor(gtk::ScrolledWindow::static_type())
+        .and_downcast::<gtk::ScrolledWindow>()
+    else {
+        return false;
+    };
+    widget.is_mapped()
+        && widget.compute_bounds(&scrolled).is_some_and(|bounds| {
+            bounds.y() >= 0.0 && bounds.y() + bounds.height() <= scrolled.height() as f32
+        })
+}
+
 /// The button under `root` labelled `label`, which a click on presses.
 pub(crate) fn button(root: &impl IsA<gtk::Widget>, label: &str) -> gtk::Button {
     (every::<gtk::Button>(root).into_iter())

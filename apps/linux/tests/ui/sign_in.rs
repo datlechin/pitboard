@@ -1,6 +1,6 @@
 //! Add Account and Sign In Again in their dialog, and Name and Rename in theirs: signing in with
 //! the code the browser shows and naming the account added, Escape while signing in and on
-//! Rename, and a failure said inside the sheet it happened in.
+//! Rename, and a failure said inside the sheet it happened in, in sight.
 
 use adw::prelude::*;
 use pitboard_linux::dialogs::name::SheetDialog;
@@ -8,7 +8,7 @@ use pitboard_linux::dialogs::sign_in::SignIn;
 use pitboard_linux::window::AccountGroup;
 use pitboard_model::{Intent, RowEnd};
 
-use super::views::{Viewed, button, escape, every};
+use super::views::{Viewed, button, drawn, escape, every, in_sight};
 
 /// The code a Claude Code sign-in in a fixture takes, as its browser page shows one.
 const CODE: &str = "fixture-code#state";
@@ -170,9 +170,10 @@ fn a_failure_stays_in_the_dialog() {
     button(&alert, &save).emit_clicked();
 
     viewed.until("refused", |shown| shown.sheet_failure.is_some());
+    drawn(&alert);
     let failure = viewed.shown.snapshot().sheet_failure.clone().expect("said");
     let said: Vec<String> = (every::<gtk::Label>(&alert).iter())
-        .filter(|label| label.is_visible())
+        .filter(|label| in_sight(*label))
         .map(|label| label.label().to_string())
         .collect();
     assert!(

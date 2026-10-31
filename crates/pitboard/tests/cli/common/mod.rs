@@ -204,6 +204,17 @@ impl Env {
         env
     }
 
+    /// [`Env::with_secret_service`], with KDE's ksecretd standing in for gnome-keyring, its
+    /// wallet closed.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn with_ksecretd(name: &str) -> Env {
+        let mut env = Env::new(name);
+        let started = pitboard_core::testing::SecretService::ksecretd(&env.root.join("keyring"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+        env.secret_service = Some(started);
+        env
+    }
+
     #[cfg(target_os = "linux")]
     pub(crate) fn secret_service(&self) -> &pitboard_core::testing::SecretService {
         self.secret_service

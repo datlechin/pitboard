@@ -193,9 +193,11 @@ pub(super) fn judge_discarded(facts: &Facts) -> Option<Check> {
         .count();
     let vault = state.discarded.len() - folders;
     let advice = match (vault, facts.vault) {
-        (1.., store::Backend::Keychain) => words::DELETED_ONCE_THE_KEYCHAIN_OPENS,
-        (1.., store::Backend::SecretService) => words::DELETED_ONCE_THE_LOGIN_KEYRING_OPENS,
-        _ => words::DELETED_ON_THE_NEXT_CHANGE,
+        (1.., store::Backend::Keychain) => words::DELETED_ONCE_THE_KEYCHAIN_OPENS.into(),
+        (1.., store::Backend::SecretService) => {
+            words::deleted_once_the_keyring_opens(super::parks::keyring(facts))
+        }
+        _ => words::DELETED_ON_THE_NEXT_CHANGE.into(),
     };
     Some(warn(
         "discarded",
@@ -296,13 +298,15 @@ pub(super) fn judge_pending(facts: &Facts) -> Check {
             "parks being reclaimed",
             words::could_not_be_read_this_time(n),
             match facts.vault {
-                store::Backend::Keychain => words::UNLOCK_AND_RUN_ANY_COMMAND,
-                store::Backend::SecretService => words::RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION,
+                store::Backend::Keychain => words::UNLOCK_AND_RUN_ANY_COMMAND.into(),
+                store::Backend::SecretService => {
+                    words::run_any_command_in_the_desktop_session(super::parks::keyring(facts))
+                }
                 store::Backend::File
                 | store::Backend::SealedFile
                 | store::Backend::CredentialManager
                 | store::Backend::Absent
-                | store::Backend::Unknown => words::RUN_ANY_COMMAND,
+                | store::Backend::Unknown => words::RUN_ANY_COMMAND.to_string(),
             },
         ),
     }

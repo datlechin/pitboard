@@ -128,6 +128,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
                 facts.now - refused.at,
                 refused.vault,
                 refused.locked(),
+                super::parks::keyring(facts),
             ),
             words::runs_again(facts.os),
         ));
@@ -200,6 +201,7 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
                 facts.now - refused.at,
                 refused.vault,
                 refused.locked(),
+                super::parks::keyring(facts),
             ),
             words::TRIES_AGAIN_AT_ITS_NEXT_SWITCH,
         ));

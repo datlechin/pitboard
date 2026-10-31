@@ -136,6 +136,16 @@ impl Vault {
     }
 }
 
+/// What answers for the Secret Service on Linux, which the store parked logins are kept in is
+/// named for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keyring {
+    /// gnome-keyring's login keyring, and whatever else answers, or nothing.
+    Login,
+    /// KDE's KWallet, through ksecretd or the kwalletd before it.
+    KWallet,
+}
+
 /// The only program trusted to read Claude Code's keychain item. Named here so the backend
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";
@@ -930,6 +940,12 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// locked or not. Nothing is unlocked to tell.
     fn answers(&self, _ctx: &Context, _form: VaultForm) -> bool {
         false
+    }
+
+    /// What answers for the Secret Service on this session's bus, where this system parks in
+    /// one. Nothing is started or unlocked to tell.
+    fn keyring(&self, _ctx: &Context) -> Keyring {
+        Keyring::Login
     }
 
     /// Where Pitboard's own parked logins go: the system's store of secrets where there is

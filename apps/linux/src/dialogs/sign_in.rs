@@ -254,6 +254,7 @@ impl SignIn {
         imp.page.replace(Some(page));
         self.show_failure(snapshot.sheet_failure.as_ref());
         self.enable();
+        super::fit_height(self.upcast_ref());
         // Asked for once the tool wants it, with the code on the clipboard to paste.
         if asked {
             imp.code.grab_focus();
@@ -444,6 +445,7 @@ impl SignIn {
         }
         self.show_form(&text, running);
         self.enable();
+        super::fit_height(self.upcast_ref());
     }
 
     // What the step's button sends, where it can be pressed now.

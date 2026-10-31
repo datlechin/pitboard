@@ -5,6 +5,9 @@
 //! variable of this process's but `PATH`, so neither reaches the person's session, and a build
 //! for tests reaches no other bus (`host/linux/bus.rs`).
 //!
+//! In place of gnome-keyring it can put a stand-in for KDE's ksecretd, under the names ksecretd
+//! takes and with its wallet closed, which needs `dbus-daemon` alone.
+//!
 //! It refuses where either program is not installed, naming the package, as the stand-in
 //! refuses where it is not built. Each method panics on what a test's own bus should never do.
 
@@ -29,6 +32,7 @@ pub struct SecretService {
     folder: PathBuf,
     bus: Child,
     keyring: Option<Child>,
+    ksecretd: Option<zbus::blocking::Connection>,
     asked: Arc<Mutex<Vec<String>>>,
 }
 
@@ -67,6 +71,14 @@ impl SecretService {
         let mut service = SecretService::without_a_provider(scratch)?;
         service.keyring = Some(service.keyring()?);
         service.wait_for_the_default_collection();
+        Ok(service)
+    }
+
+    /// A bus in `scratch` with a stand-in for ksecretd on it, as KDE Plasma runs it, its default
+    /// collection the `kdewallet` wallet, closed.
+    pub fn ksecretd(scratch: &Path) -> Result<SecretService, Missing> {
+        let mut service = SecretService::without_a_provider(scratch)?;
+        service.ksecretd = Some(ksecretd::serve(&service.address));
         Ok(service)
     }
 
@@ -110,6 +122,7 @@ impl SecretService {
             folder,
             bus,
             keyring: None,
+            ksecretd: None,
             asked,
         })
     }
@@ -130,6 +143,7 @@ impl SecretService {
 
     /// Takes the provider off the bus, as a keyring that stopped does.
     pub fn stop(&mut self) {
+        drop(self.ksecretd.take());
         if let Some(mut keyring) = self.keyring.take() {
             let _ = keyring.kill();
             let _ = keyring.wait();
@@ -313,6 +327,7 @@ impl SecretService {
 
 impl Drop for SecretService {
     fn drop(&mut self) {
+        drop(self.ksecretd.take());
         for child in self
             .keyring
             .iter_mut()
@@ -321,6 +336,73 @@ impl Drop for SecretService {
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+}
+
+// ksecretd as Pitboard meets it with its wallet closed: the names it takes on its one connection,
+// a session, the `default` alias, and the wallet's label and lock, as kwallet 6.31.0's
+// `ksecretd.cpp`, `kwalletfreedesktopservice.cpp` and `kwalletfreedesktopcollection.cpp` answer
+// them (docs/facts/linux.md, The Secret Service).
+mod ksecretd {
+    use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+
+    const NAMES: [&str; 3] = [
+        "org.kde.ksecretd",
+        "org.kde.secretservicecompat",
+        super::SECRETS,
+    ];
+    const WALLET: &str = "/org/freedesktop/secrets/collection/kdewallet";
+
+    struct Service;
+
+    #[zbus::interface(name = "org.freedesktop.Secret.Service")]
+    impl Service {
+        // Any public key does: nothing a closed wallet holds is sent under it.
+        fn open_session(
+            &self,
+            _algorithm: &str,
+            _input: OwnedValue,
+        ) -> zbus::fdo::Result<(OwnedValue, OwnedObjectPath)> {
+            let key = OwnedValue::try_from(Value::from(vec![2_u8]))
+                .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+            Ok((key, path("/org/freedesktop/secrets/session/1")))
+        }
+
+        fn read_alias(&self, name: &str) -> OwnedObjectPath {
+            path(if name == "default" { WALLET } else { "/" })
+        }
+    }
+
+    struct Wallet;
+
+    #[zbus::interface(name = "org.freedesktop.Secret.Collection")]
+    impl Wallet {
+        #[zbus(property)]
+        fn label(&self) -> String {
+            "kdewallet".into()
+        }
+
+        #[zbus(property)]
+        fn locked(&self) -> bool {
+            true
+        }
+    }
+
+    fn path(path: &str) -> OwnedObjectPath {
+        OwnedObjectPath::try_from(path).expect("an object path")
+    }
+
+    pub(super) fn serve(bus: &str) -> zbus::blocking::Connection {
+        let mut builder = zbus::blocking::connection::Builder::address(bus)
+            .and_then(|builder| builder.serve_at("/org/freedesktop/secrets", Service))
+            .and_then(|builder| builder.serve_at(WALLET, Wallet))
+            .expect("the stand-in's objects");
+        for name in NAMES {
+            builder = builder.name(name).expect("a bus name");
+        }
+        builder
+            .build()
+            .expect("the stand-in for ksecretd on the test's bus")
     }
 }
 

@@ -148,7 +148,7 @@ fn a_build_is_set_beside_the_one_read_for_this_system() {
             version: Some(codex.into()),
             ..with_codex()
         };
-        let checks = judge_codex(os, None, &installed, &[], NOW, &time::moment);
+        let checks = judge_codex(os, None, &installed, &[], NOW, LOGIN, &time::moment);
         assert_eq!(
             check(&checks, "codex_version").detail,
             words::build_as_read(codex),

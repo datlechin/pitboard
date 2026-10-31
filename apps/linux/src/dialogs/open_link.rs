@@ -229,6 +229,7 @@ impl OpenLink {
             None
         };
         self.set_default_widget(default);
+        super::fit_height(self.upcast_ref());
     }
 
     fn waiting(&self) -> Option<LinkPicker> {
