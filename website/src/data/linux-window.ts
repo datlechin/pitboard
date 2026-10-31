@@ -62,18 +62,12 @@ import type { Desktop } from "../lib/platform.ts";
 
 const FRONT = "gnome";
 
-// local_time.rs: GNOME's own English forms on the 24-hour clock the page draws, "Nov 9" and
-// "Oct 13, 2026, 20:49", in the world's zone.
+// local_time.rs: GNOME's own English form of a day, "Nov 9", in the world's zone.
 const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 const local = (epoch: number) => new Date((epoch + 7 * HOUR) * 1000);
-const two = (n: number) => String(n).padStart(2, "0");
 export const date = (epoch: number) => {
   const d = local(epoch);
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
-};
-export const dateAndTime = (epoch: number) => {
-  const d = local(epoch);
-  return `${date(epoch)}, ${d.getUTCFullYear()}, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
 };
 
 // The icon each desktop's theme gives a name the window asks for, as the KDE portal read found
@@ -239,14 +233,13 @@ export const diagnostics = {
     "Copy the checks for a bug report, with email addresses and account identifiers hidden",
 };
 
-const shownLog = logged.filter((e) => !e.on || e.on.includes("linux")).reverse();
 // Activity's columns, the date numeric and By always quieter, Result where the change was done
 // (pages/activity.rs `columns`), newest first.
 export const activityPage = {
   title: "Activity",
   refreshHelp: "Read the log again",
   columns: ["Date", "Change", "Account", "Result", "By"],
-  rows: activity(logged, "linux").map((r, i) => ({ ...r, date: dateAndTime(shownLog[i].at) })),
+  rows: activity(logged, "linux"),
 };
 
 // What a desktop with no status item says, and one with one does not (present/words/setup.rs,

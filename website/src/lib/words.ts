@@ -699,13 +699,15 @@ const verbs: Record<string, string> = {
 const outcomes: Record<string, string> = { ok: "Done" };
 const callers = { app: "Pitboard app", cli: "Command line" };
 
-// As each app dates a change: "13 Oct 2026 at 20:49" on macOS, and in the en-GB regional format's
-// "g" on Windows, "13/10/2026 20:49".
+// As each app dates a change: "13 Oct 2026 at 20:49" on macOS, in the en-GB regional format's "g"
+// on Windows, "13/10/2026 20:49", and on Linux as local_time.rs gives GNOME's English form on the
+// 24-hour clock, "Oct 13, 2026, 20:49".
 const dated = (at: number, platform: Platform) => {
   const d = local(at);
-  return platform === "windows"
-    ? `${shortDate(at)} ${hm(at)}`
-    : `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} at ${hm(at)}`;
+  if (platform === "windows") return `${shortDate(at)} ${hm(at)}`;
+  if (platform === "linux")
+    return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${hm(at)}`;
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} at ${hm(at)}`;
 };
 
 export const activity = (log: Logged[], platform: Platform) =>

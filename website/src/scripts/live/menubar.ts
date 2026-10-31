@@ -37,7 +37,7 @@ class MenuBarDesk extends LiveFigure {
     this.#item = this.querySelector<HTMLButtonElement>(`#${this.id}-item`)!;
     const item = this.#item;
     this.#menu = new Menu(this.querySelector<HTMLElement>(`#${this.id}-menu`)!, {
-      system: "macos",
+      toolkit: "appkit",
       desk: this,
       choose: (chosen) => this.#choose(chosen),
       shown: (open, refocus) => {

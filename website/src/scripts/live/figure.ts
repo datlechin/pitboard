@@ -15,6 +15,13 @@ export abstract class LiveFigure extends HTMLElement {
     this.menuBar?.close();
     this.restart();
   };
+  // a figure another system's or surface's choice hides draws nothing until it shows again
+  // (plan 3.5), but for one that keeps every state, as a terminal's running program does
+  protected drawsHidden = false;
+  #behind = false;
+  #shown = () => {
+    if (this.#behind && this.offsetParent !== null) this.#draw(model.get());
+  };
   protected menuBar: AppMenus | null = null;
 
   connectedCallback() {
@@ -22,7 +29,7 @@ export abstract class LiveFigure extends HTMLElement {
     this.menuBar = appMenus(this, {
       menus: () => this.windowMenus(),
       choose: (does, item) => {
-        if (!this.fromMenuBar(does, item)) fromApp(does, item, this);
+        if (!this.fromMenuBar(does, item)) fromMenuBar(does, item, this);
       },
     });
     const figure = this.closest("figure");
@@ -49,26 +56,31 @@ export abstract class LiveFigure extends HTMLElement {
         shown?.querySelector<HTMLElement>('[tabindex="0"], button:not(:disabled)')?.focus();
       };
     this.#stop = model.subscribe((state) => {
-      this.render(state);
-      if (this.menuBar) {
-        // the app's menus leave the menu bar once it has quit
-        shown(this.menuBar.bar, state.running);
-        if (!state.running) this.menuBar.close();
-        this.menuBar.render(state);
-        text(
-          this.menuBar.bar.parentElement!.querySelector("[data-clock]"),
-          menuBarClock(state.now),
-        );
-      }
       if (again) again.hidden = !state.changed;
+      this.#behind = !this.drawsHidden && this.offsetParent === null;
+      if (!this.#behind) this.#draw(state);
     });
     document.addEventListener(RESET, this.#restart);
+    document.addEventListener("choice", this.#shown);
     run();
+  }
+
+  #draw(state: State) {
+    this.#behind = false;
+    this.render(state);
+    if (this.menuBar) {
+      // the app's menus leave the menu bar once it has quit
+      shown(this.menuBar.bar, state.running);
+      if (!state.running) this.menuBar.close();
+      this.menuBar.render(state);
+      text(this.menuBar.bar.parentElement!.querySelector("[data-clock]"), menuBarClock(state.now));
+    }
   }
 
   disconnectedCallback() {
     this.#stop?.();
     document.removeEventListener(RESET, this.#restart);
+    document.removeEventListener("choice", this.#shown);
   }
 
   protected abstract render(state: State): void;
@@ -87,8 +99,9 @@ export abstract class LiveFigure extends HTMLElement {
   }
 }
 
-// What the app does for an item of the menu bar whichever of its windows is in front, on `desk`.
-function fromApp(does: string, item: HTMLElement, desk: HTMLElement) {
+// What the app does for an item of macOS's menu bar, the one system whose figures draw one,
+// whichever of its windows is in front, on `desk`.
+function fromMenuBar(does: string, item: HTMLElement, desk: HTMLElement) {
   const s = model.get();
   switch (does) {
     case "settings":

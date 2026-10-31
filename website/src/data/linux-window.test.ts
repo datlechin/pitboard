@@ -9,7 +9,6 @@ import {
   activityPage,
   atLimitNote,
   date,
-  dateAndTime,
   diagnostics,
   group,
   iconOf,
@@ -20,7 +19,7 @@ import {
   type Icon,
 } from "./linux-window.ts";
 import { shortcuts } from "./linux.ts";
-import { account, accounts, clock, moments } from "./world.ts";
+import { account, accounts, moments } from "./world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const linux = (file: string) => repo(`apps/linux/${file}`);
@@ -33,7 +32,6 @@ test("dates read as local_time.rs formats them", () => {
   assert.ok(linux("src/local_time.rs").includes('formatted(&local(epoch)?, "%b %-e")'));
   assert.ok(linux("src/local_time.rs").includes('&format!("%b %-e, %Y, {}", self.time())'));
   assert.equal(date(account("work").refreshExpiresAt!), "Nov 9");
-  assert.equal(dateAndTime(clock.switched), "Oct 13, 2026, 20:49");
 });
 
 // What linux-facts.yml's KDE probe resolved each name to under Breeze on Fedora 44 (run

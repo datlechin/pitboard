@@ -35,7 +35,7 @@ const selected = underOf(pane) ?? pane;
 const id = (p: Pane, part: string) => `${prefix}-${p}-${part}`;
 ---
 
-<pb-accounts
+<pb-win-window
   id={prefix}
   class:list={[
     "desk [anchor-name:var(--desk)] desk-px-720",
@@ -141,8 +141,8 @@ const id = (p: Pane, part: string) => `${prefix}-${p}-${part}`;
       <template data-part="account-window"><AccountWindow /></template>
     </>
   )}
-</pb-accounts>
+</pb-win-window>
 
 <script>
-  import "../../../scripts/live/accounts.ts";
+  import "../../../scripts/live/win-window.ts";
 </script>

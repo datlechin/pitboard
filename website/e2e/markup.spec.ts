@@ -76,14 +76,17 @@ test.describe("with JavaScript", () => {
       expect(Object.keys(now)).toEqual(Object.keys(astro));
       for (const [id, html] of Object.entries(now))
         if (!before.includes(id)) expect(html, id).toBe(astro[id]);
-      // the window #usage draws before the switch: back on personal, it is that markup again
+      // the window #usage draws before the switch: back on personal, it is that markup again, in
+      // the window the platform shows, a hidden one drawing nothing until it shows
       await page
         .locator('#switch-mac [data-account="personal"] [data-does="use"]')
         .dispatchEvent("click");
-      await expect(page.locator('#usage-mac [data-account="personal"]')).toHaveAttribute(
-        "aria-keyshortcuts",
-        "Meta+C",
-      );
+      const inUse = {
+        macos: ['#usage-mac [data-account="personal"]', "Meta+C"],
+        windows: ['#usage-win [data-account="personal"] [data-does="expand"]', "F2 Control+C"],
+      }[platform as string];
+      if (inUse)
+        await expect(page.locator(inUse[0])).toHaveAttribute("aria-keyshortcuts", inUse[1]);
       const back = await drawn(page);
       for (const id of before) expect(back[id], id).toBe(astro[id]);
       // a figure whose element is not defined stays the drawing, inert

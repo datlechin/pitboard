@@ -157,7 +157,7 @@ export class AppMenus {
     }
     this.o.desk.append(...parts);
     const menu = new Menu(el, {
-      system: "macos",
+      toolkit: "appkit",
       desk: this.o.desk,
       choose: (item) => this.#chosen(item),
       shown: (open, refocus) => {

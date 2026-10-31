@@ -30,7 +30,7 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
 const tool = "flex w-34.5 justify-center live:cursor-default live:disabled:opacity-35";
 ---
 
-<pb-accounts
+<pb-mac-accounts
   id={prefix}
   class:list={[
     "desk [anchor-name:var(--desk)] [--units:880]",
@@ -102,8 +102,8 @@ const tool = "flex w-34.5 justify-center live:cursor-default live:disabled:opaci
       <template data-part="account-window"><AccountWindow /></template>
     </>
   )}
-</pb-accounts>
+</pb-mac-accounts>
 
 <script>
-  import "../../../scripts/live/accounts.ts";
+  import "../../../scripts/live/mac-accounts.ts";
 </script>

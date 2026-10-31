@@ -1,5 +1,6 @@
 // The Remove alert, the Rename sheet, which names an account just added too, and the sign-in sheet
-// of each system, drawn once and opened over whichever window asks.
+// of each system, drawn once and opened over whichever window asks: macOS's and Windows' here,
+// the Linux app's dialogs in linux-sheets.ts.
 import { combobox, type Combobox } from "./combobox.ts";
 import { closeDialog, isOpen, openDialog, type Cancelled } from "./dialog.ts";
 import { attr, shown, text } from "./draw.ts";
@@ -45,20 +46,30 @@ import {
   LATER,
   WAITING_FOR_BROWSER,
 } from "../../data/window.ts";
-import { frontOf, type Front, type System } from "../../lib/platform.ts";
+import { frontOf, platformOf, type Front, type Platform, type System } from "../../lib/platform.ts";
 import { tools, type Account, type Tool } from "../../data/world.ts";
 
-// the window a sheet opens over: its element is the desk, and Remove hands it back the list
+// the window a sheet opens over and its desk, which Remove hands the list back to
 export interface SheetOwner extends HTMLElement {
   window: HTMLElement;
+  desk: HTMLElement;
   forgotten(): void;
+}
+
+// what a window asks of its system's sheets
+export interface Sheets {
+  close(): void;
+  forget(from: SheetOwner, a: Account): void;
+  rename(from: SheetOwner, a: Account, added?: boolean): void;
+  signIn(from: SheetOwner, tool: Tool | null, again: Account | null): void;
+  render(s: State): void;
 }
 
 const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
   in_.querySelector<T>(`[data-part="${name}"]`);
 
-class Sheets {
+class AppSheets implements Sheets {
   // the account the Rename sheet names, and whether it was just added rather than renamed
   #renaming: { a: Account; added: boolean } | null = null;
   #signing: { tool: Tool; again: Account | null; started: boolean; from: SheetOwner } | null = null;
@@ -93,7 +104,7 @@ class Sheets {
     },
   ) {
     this.#dismiss();
-    openDialog(dialog, { system: this.system, window: from.window, desk: from, ...o });
+    openDialog(dialog, { system: this.system, window: from.window, desk: from.desk, ...o });
   }
 
   #dismiss() {
@@ -344,14 +355,21 @@ class Sheets {
   }
 }
 
-const made = new Map<System, Sheets | null>();
+// Each system's sheets, by the ids its top view's window draws them under, which both of Linux's
+// desktops share.
+const drawnAs: Record<Platform, string> = {
+  macos: "mac-accounts",
+  windows: "win-accounts",
+  linux: "linux-accounts",
+};
+const made = new Map<Platform, Sheets | null>();
 export function sheets(system: System): Sheets | null {
-  if (!made.has(system)) {
-    const id = system === "windows" ? "win-accounts" : "mac-accounts";
+  const platform = platformOf(system);
+  if (!made.has(platform)) {
     const get = (name: string) =>
-      document.getElementById(`${id}-${name}`) as HTMLDialogElement | null;
+      document.getElementById(`${drawnAs[platform]}-${name}`) as HTMLDialogElement | null;
     const [f, r, i] = [get("forget"), get("rename"), get("sign-in")];
-    made.set(system, f && r && i ? new Sheets(system, f, r, i) : null);
+    made.set(platform, platform !== "linux" && f && r && i ? new AppSheets(system, f, r, i) : null);
   }
-  return made.get(system)!;
+  return made.get(platform)!;
 }

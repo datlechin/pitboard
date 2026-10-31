@@ -1,5 +1,5 @@
-// A menu as NSMenu and WinUI's MenuFlyout run one, in WAI-ARIA's menu pattern, with each system's
-// keys (docs/facts/site.md).
+// A menu as NSMenu, WinUI's MenuFlyout, GTK's GtkPopoverMenu and Qt's QMenu run one, in WAI-ARIA's
+// menu pattern, with each one's keys (docs/facts/site.md).
 import { keyed, shown, text } from "./draw.ts";
 import type { State } from "../../lib/model.ts";
 import type { System } from "../../lib/platform.ts";
@@ -8,6 +8,83 @@ import { sites } from "../../data/windows.ts";
 
 export type How = "pointer" | "keyboard";
 export type Focus = "first" | "last" | "menu" | "keep";
+
+// What draws a menu: AppKit on macOS, WinUI on Windows, GTK in the Linux app's window on either
+// desktop, and Qt for a status item's menu on KDE Plasma (dbusmenuimporter.cpp).
+export type Toolkit = "appkit" | "winui" | "gtk" | "qt";
+export const toolkitOf = (system: System): Toolkit =>
+  system === "macos" ? "appkit" : system === "windows" ? "winui" : "gtk";
+
+interface Kind {
+  // the mouse buttons whose release over an item chooses it
+  buttons: number[];
+  // the pointer moves the highlight, which is focus, and takes it away as it leaves
+  follows: boolean;
+  // Down from the last item goes to the first, and Up from the first to the last
+  wraps: boolean;
+  home: boolean;
+  // typing goes to the item whose title it begins
+  types: boolean;
+  // Tab closes the menu, stays in it, or moves on as Down does
+  tab: "closes" | "stays" | "moves";
+  space: boolean;
+  // Return chooses as it comes up, not as it goes down
+  onKeyUp: boolean;
+  // a chosen item blinks and the menu fades before it acts
+  blinks: boolean;
+}
+
+// gtkmodelbutton.c chooses on the primary button's release and moves focus with the pointer,
+// gtkpopovermenu.c cycles focus with the arrows and Tab and binds no Home or End; qmenu.cpp
+// chooses on any button's release off Windows, wraps as Breeze leaves SH_Menu_SelectionWrap,
+// moves to the first and last items with Home and End in Breeze's scrollable menus, takes Tab
+// for Down, and leaves Space alone (SH_Menu_SpaceActivatesItem)
+const kinds: Record<Toolkit, Kind> = {
+  appkit: {
+    buttons: [0],
+    follows: true,
+    wraps: false,
+    home: true,
+    types: true,
+    tab: "closes",
+    space: true,
+    onKeyUp: false,
+    blinks: true,
+  },
+  winui: {
+    buttons: [0, 2],
+    follows: false,
+    wraps: true,
+    home: false,
+    types: false,
+    tab: "stays",
+    space: true,
+    onKeyUp: true,
+    blinks: false,
+  },
+  gtk: {
+    buttons: [0],
+    follows: true,
+    wraps: true,
+    home: false,
+    types: false,
+    tab: "moves",
+    space: true,
+    onKeyUp: false,
+    blinks: false,
+  },
+  qt: {
+    buttons: [0, 2],
+    follows: true,
+    wraps: true,
+    home: true,
+    types: false,
+    tab: "moves",
+    space: false,
+    onKeyUp: false,
+    blinks: false,
+  },
+};
 
 const ITEMS = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]';
 // WinUI's MenuShowDelay. NSMenu opened a submenu 16 ms after the pointer reached its item, and
@@ -22,7 +99,7 @@ const FADE_MS = 200;
 export const INSET = 5;
 
 export interface MenuOptions {
-  system: System;
+  toolkit: Toolkit;
   // the desk the menu stays inside
   desk: HTMLElement;
   // what an item does, once the menu has closed
@@ -43,6 +120,7 @@ export class Menu {
   #typedAt = 0;
   #pressed: HTMLElement | null = null;
   #choosing = false;
+  readonly #kind: Kind;
 
   constructor(
     readonly el: HTMLElement,
@@ -50,6 +128,7 @@ export class Menu {
     readonly parent: Menu | null = null,
     readonly opener: HTMLElement | null = null,
   ) {
+    this.#kind = kinds[o.toolkit];
     for (const item of this.#own('[aria-haspopup="menu"]')) {
       const sub = document.getElementById(item.getAttribute("aria-controls") ?? "");
       if (sub) this.subs.set(item, new Menu(sub, o, this, item));
@@ -175,10 +254,10 @@ export class Menu {
       if (e.pointerType !== "touch" && !this.top.contains(e.relatedTarget as Node | null))
         this.top.#left();
     });
-    // a mouse chooses as its button comes up, after a press and drag too; WinUI chooses with
-    // either button; a touch chooses with its tap
+    // a mouse chooses as its button comes up, after a press and drag too; a touch chooses with
+    // its tap
     el.addEventListener("pointerup", (e) => {
-      const button = e.button === 0 || (this.o.system === "windows" && e.button === 2);
+      const button = this.#kind.buttons.includes(e.button);
       if (e.pointerType !== "touch" && button && this.#mine(e)) this.#release(e.target);
     });
     let touched = false;
@@ -196,24 +275,24 @@ export class Menu {
     if (this.parent) clearTimeout(this.parent.#rest);
     if (item === this.#over) return;
     this.#over = item;
-    if (this.o.system === "macos") {
+    if (this.#kind.follows) {
       if (item && usable(item)) item.focus({ preventScroll: true });
       else if (this.el.contains(document.activeElement)) this.el.focus({ preventScroll: true });
     }
     clearTimeout(this.#rest);
     const sub = item && usable(item) ? this.subs.get(item) : undefined;
     const open = [...this.subs.values()].find((s) => s.open);
-    if (sub && !sub.open && this.o.system === "macos" && !open) this.#openSub(sub, "pointer");
+    if (sub && !sub.open && this.o.toolkit === "appkit" && !open) this.#openSub(sub, "pointer");
     else if (sub && !sub.open)
       this.#rest = window.setTimeout(() => this.#openSub(sub, "pointer"), SUBMENU_MS);
     else if (open && item !== open.opener)
       this.#rest = window.setTimeout(() => open.close(), SUBMENU_MS);
   }
 
-  // the pointer left the menu: macOS takes the highlight away, unless it is on an item whose
-  // submenu is open
+  // the pointer left the menu: the highlight goes where the pointer moves it, unless it is on an
+  // item whose submenu is open
   #left() {
-    if (this.o.system !== "macos") return;
+    if (!this.#kind.follows) return;
     const find = (m: Menu): Menu | null => {
       for (const sub of m.subs.values()) {
         const found = sub.open ? find(sub) : null;
@@ -245,7 +324,7 @@ export class Menu {
       this.closeAll(true);
       this.o.choose(item);
     };
-    if (this.o.system === "windows") return done();
+    if (!this.#kind.blinks) return done();
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     item.focus({ preventScroll: true });
     item.dataset.state = "blink";
@@ -260,7 +339,7 @@ export class Menu {
   }
 
   #key(e: KeyboardEvent) {
-    const mac = this.o.system === "macos";
+    const kind = this.#kind;
     const items = this.items().filter(usable);
     const at = document.activeElement as HTMLElement | null;
     const i = at ? items.indexOf(at) : -1;
@@ -271,9 +350,11 @@ export class Menu {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     switch (e.key) {
       case "ArrowDown":
-        return go(i < 0 ? items[0] : i < items.length - 1 ? items[i + 1] : mac ? at! : items[0]);
+        return go(
+          i < 0 ? items[0] : i < items.length - 1 ? items[i + 1] : kind.wraps ? items[0] : at!,
+        );
       case "ArrowUp":
-        return go(i < 0 ? items.at(-1) : i > 0 ? items[i - 1] : mac ? at! : items.at(-1));
+        return go(i < 0 ? items.at(-1) : i > 0 ? items[i - 1] : kind.wraps ? items.at(-1) : at!);
       case "ArrowRight": {
         const sub = at && i >= 0 ? this.subs.get(at) : undefined;
         if (sub) {
@@ -304,33 +385,37 @@ export class Menu {
         return;
       case " ":
         // a space within a name being typed is part of it
-        if (mac && performance.now() - this.#typedAt <= TYPED_MS) {
+        if (kind.types && performance.now() - this.#typedAt <= TYPED_MS) {
           e.preventDefault();
           return this.#typeSelect(e.key, items);
         }
+        if (!kind.space) return e.preventDefault();
       // falls through: Space chooses as Return does
       case "Enter": {
         e.preventDefault();
         if (!at || i < 0 || e.repeat || at.hasAttribute("data-more")) return;
         const sub = this.subs.get(at);
         if (sub) this.#openSub(sub, "keyboard");
-        else if (mac) this.#chosen(at);
-        else this.#pressed = at;
+        else if (kind.onKeyUp) this.#pressed = at;
+        else this.#chosen(at);
         return;
       }
       case "Tab":
-        // macOS closes the menu and Tab goes on from what opened it; WinUI keeps focus in it
-        if (mac) this.closeAll(true);
-        else e.preventDefault();
-        return;
+        // macOS closes the menu and Tab goes on from what opened it; WinUI keeps focus in it; GTK
+        // and Qt move as the arrows do
+        if (kind.tab === "closes") return this.closeAll(true);
+        e.preventDefault();
+        if (kind.tab !== "moves") return;
+        if (i < 0) return go(e.shiftKey ? items.at(-1) : items[0]);
+        return go(items[(i + (e.shiftKey ? items.length - 1 : 1)) % items.length]);
       case "Home":
       case "PageUp":
-        return mac ? go(items[0]) : e.preventDefault();
+        return kind.home ? go(items[0]) : e.preventDefault();
       case "End":
       case "PageDown":
-        return mac ? go(items.at(-1)) : e.preventDefault();
+        return kind.home ? go(items.at(-1)) : e.preventDefault();
     }
-    if (mac && e.key.length === 1) {
+    if (kind.types && e.key.length === 1) {
       e.preventDefault();
       this.#typeSelect(e.key, items);
     }

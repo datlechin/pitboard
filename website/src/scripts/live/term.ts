@@ -35,6 +35,8 @@ const load = () =>
   ));
 
 class Term extends LiveFigure {
+  // a program left running prints what each state brings, shown or not
+  protected drawsHidden = true;
   private shell!: Shell;
   private platform!: Platform;
   private log!: HTMLElement;

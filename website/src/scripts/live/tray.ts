@@ -39,7 +39,7 @@ class TrayDesk extends LiveFigure {
     this.#icon = this.querySelector<HTMLButtonElement>(`#${this.id}-icon`)!;
     const icon = this.#icon;
     this.#menu = new Menu(this.querySelector<HTMLElement>(`#${this.id}-menu`)!, {
-      system: "windows",
+      toolkit: "winui",
       desk: this,
       choose: (chosen) => this.#choose(chosen),
       shown: (open, refocus) => {

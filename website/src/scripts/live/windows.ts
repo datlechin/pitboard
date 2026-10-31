@@ -10,6 +10,12 @@ import type { Account } from "../../data/world.ts";
 const XAML_TITLE_MS = 73;
 // how far down and right each window opens from the one before it, as AppKit cascades them
 const CASCADE = 22;
+// what each system's desk keeps of its screen above and below a window: the menu bar on macOS,
+// the taskbar on Windows; the Linux app opens no account window (account_group.rs)
+const EDGES: Partial<Record<System, [top: number, bottom: number]>> = {
+  macos: [24, 0],
+  windows: [0, 48],
+};
 
 // A template's clone, its `tpl-` ids made the desk's own.
 function made(system: System, name: string, desk: HTMLElement, key: string): HTMLElement {
@@ -69,11 +75,12 @@ export function showAccountWindow(desk: HTMLElement, system: System, a: Account)
     const open = desk.querySelectorAll(':scope > div[data-part="account-window"]').length;
     w = made(system, "account-window", desk, `window-${a.id}`);
     w.dataset.account = a.id;
-    // its default size and place, each kept within what the desk leaves of its screen: under the
-    // menu bar on macOS, over the taskbar on Windows
+    // its default size and place, each kept within what the desk leaves of its screen
+    const edges = EDGES[system];
+    if (!edges) throw new Error(`no ${system} figure opens an account's window`);
     const u = unit(desk);
     const [deskW, deskH] = [desk.clientWidth / u, desk.clientHeight / u];
-    const [top, bottom] = system === "macos" ? [24, 0] : [0, 48];
+    const [top, bottom] = edges;
     const width = Math.min(1100, deskW);
     const height = Math.min(800, deskH - top - bottom);
     const x = Math.min(40 + open * CASCADE, deskW - width);
@@ -98,7 +105,7 @@ export function showAccountWindow(desk: HTMLElement, system: System, a: Account)
 
 function titled(w: HTMLElement, system: System, a: Account, opening = false) {
   const title = w.querySelector('[data-part="title"]');
-  if (system === "macos") {
+  if (system !== "windows") {
     text(title, a.label);
     text(w.querySelector('[data-part="site"]'), siteOf(a.tool) ?? "");
   } else if (opening) setTimeout(() => text(title, a.label), XAML_TITLE_MS);

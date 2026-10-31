@@ -1,5 +1,5 @@
-// A sheet, an alert or a ContentDialog as HTML's modal dialog (answer 15), placed and dimmed as
-// docs/facts/site.md reads each system's.
+// A sheet, an alert, a ContentDialog or an AdwDialog as HTML's modal dialog (answer 15), placed and
+// dimmed as docs/facts/site.md reads each system's.
 // departs from the apps: A sheet, an alert or a ContentDialog blocks the whole page
 import type { System } from "../../lib/platform.ts";
 
@@ -21,14 +21,24 @@ export interface DialogOptions {
 const wired = new WeakSet<HTMLDialogElement>();
 const open = new WeakMap<HTMLDialogElement, DialogOptions>();
 
-// Each window and desk names itself after its desk, so no two share an anchor.
+// What a dialog opens over: a sheet hangs from its window's title bar on macOS, a ContentDialog
+// centres on the desk, and an AdwDialog centres on its window where the desk shows all of it, or
+// on the desk that cuts it.
+function overWindow(o: DialogOptions) {
+  if (o.system === "macos") return true;
+  if (o.system === "windows") return false;
+  const w = o.window.getBoundingClientRect();
+  const d = o.desk.getBoundingClientRect();
+  return w.top >= d.top && w.bottom <= d.bottom && w.left >= d.left && w.right <= d.right;
+}
+
+// Each window and desk names itself after its desk, or the window after itself where its desk has
+// no id, so no two share an anchor.
 function anchor(o: DialogOptions, dialog: HTMLDialogElement) {
-  o.window.style.setProperty("--window", `--window-${o.desk.id}`);
-  o.desk.style.setProperty("--desk", `--desk-${o.desk.id}`);
-  dialog.style.setProperty(
-    "--over",
-    o.system === "macos" ? `--window-${o.desk.id}` : `--desk-${o.desk.id}`,
-  );
+  const key = o.desk.id || o.window.id;
+  o.window.style.setProperty("--window", `--window-${key}`);
+  o.desk.style.setProperty("--desk", `--desk-${key}`);
+  dialog.style.setProperty("--over", overWindow(o) ? `--window-${key}` : `--desk-${key}`);
 }
 
 function wire(dialog: HTMLDialogElement) {
@@ -112,8 +122,14 @@ function release(dialog: HTMLDialogElement, o: DialogOptions) {
 
 export const isOpen = (dialog: HTMLDialogElement | null) => !!dialog && open.has(dialog);
 
+// the window's smoke, or libadwaita's dimming, which a window drawn dimmed keeps
+const drawnDim = new WeakMap<HTMLElement, boolean>();
 function dim(o: DialogOptions, on: boolean) {
   o.window.toggleAttribute("data-modal", on);
-  const smoke = o.window.querySelector<HTMLElement>(':scope > [data-part="smoke"]');
-  if (smoke) smoke.hidden = !on;
+  const smoke = o.window.querySelector<HTMLElement>(
+    ':scope > :is([data-part="smoke"], [data-part="dimming"])',
+  );
+  if (!smoke) return;
+  if (!drawnDim.has(smoke)) drawnDim.set(smoke, !smoke.hidden);
+  smoke.hidden = !on && !drawnDim.get(smoke);
 }

@@ -104,15 +104,14 @@ export async function defined(page: Page): Promise<string[]> {
 }
 
 // The hero's opening demo has handed over, and so made its switch to work: under reduced motion
-// at once, once the hero is mostly in view (src/scripts/live/demo.ts).
+// at once, once the hero is mostly in view (src/scripts/live/demo.ts), which then takes the root's
+// frame away.
 export async function handedOver(page: Page) {
   await page
     .locator("figure:has([data-demo-desk])")
     .evaluate((hero) => hero.scrollIntoView({ block: "center" }));
   // the demo runs 3.8 s once it starts
-  await expect(page.locator("#hero-mac-item")).toHaveAttribute("aria-label", /\bwork\b/, {
-    timeout: 10_000,
-  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo", /./, { timeout: 10_000 });
 }
 
 // The attributes a live figure changes (plan 2.4, rule 2), and a style that only sets custom
@@ -146,7 +145,7 @@ export async function astroDrew(browser: Browser, baseURL: string, problems: str
 
 // The figures whose words are the model's at its own clock, which runs a minute on from the moment
 // Astro says them at: their markup is compared without its text, which rule 2 lets them write.
-const timed = ["pb-accounts"];
+const timed = ["pb-mac-accounts", "pb-win-window", "pb-linux-window"];
 
 // Each figure's markup by its root's id, without the attributes its live code changes.
 export function drawn(page: Page): Promise<Record<string, string>> {
