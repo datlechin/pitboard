@@ -32,8 +32,10 @@ import {
   copyEmail,
   inUse as inUseSaid,
   removeAccount,
+  nameOf,
   signInAgain,
   signInAsking,
+  signInToAgain,
   switchOffer,
   toolIfShown,
   warmUpNow,
@@ -57,7 +59,6 @@ import {
   listed,
   settings,
   signInExpired,
-  switchSpoken,
   thisMachine,
   titled,
   toolsOn,
@@ -125,7 +126,7 @@ export const levelOf = { g: "plenty", y: "low", r: "out" } as const;
 // removing it (present/accounts.rs `actions`): Switch while the header offers it, Sign In Again
 // while no sign-in runs, Warm Up Now while a warm-up is due, and Remove for an account not in use.
 // `now` says what holds them back; none of the page's drawn moments is switching, signing in or
-// due a warm-up.
+// due a warm-up. While any switch runs, no header offers a button (present/accounts.rs `action`).
 export interface Offer {
   title: string;
   offer: "use" | "sign-in-again" | "rename" | "warm" | "copy" | "forget";
@@ -137,7 +138,7 @@ export interface Holding {
   warmDue: boolean;
 }
 export const headerOffer = (a: Account, w: World, switching: string | null = null) =>
-  isInUse(a, w) || switching === a.id ? null : signInExpired(a, w) ? "sign-in-again" : "use";
+  isInUse(a, w) || switching !== null ? null : signInExpired(a, w) ? "sign-in-again" : "use";
 export function accountMenu(
   a: Account,
   w: World,
@@ -159,6 +160,15 @@ export function accountMenu(
     a.email ? [{ title: copyEmail(FRONT), offer: "copy", enabled: true }] : [],
     [{ title: removeAccount(FRONT), offer: "forget", enabled: !inUse }],
   ];
+}
+
+// The header's button: Switch, or Sign In… for a sign-in that expired, each named for the account
+// with its tool where two tools are listed (present/accounts.rs `action`, from `name_of`).
+export function headerButton(a: Account, w: World): { title: string; spoken: string } {
+  const name = nameOf(a, w, FRONT);
+  return signInExpired(a, w)
+    ? { title: signInAsking(FRONT), spoken: `${signInToAgain(FRONT, name)}…` }
+    : { title: SWITCH, spoken: switchOffer(name) };
 }
 
 export interface Group {
@@ -195,7 +205,6 @@ export function accountsPage(w: World) {
     groups: toolsOn("linux").flatMap(([tool]) =>
       listed(w, tool).map((a): Group => {
         const inUse = isInUse(a, w);
-        const expired = signInExpired(a, w);
         const said = [toolIfShown(w, FRONT, a.tool), a.plan].filter(Boolean);
         return {
           id: a.id,
@@ -203,11 +212,7 @@ export function accountsPage(w: World) {
           label: a.label,
           description: said.length ? said.join(", ") : null,
           inUse,
-          button: inUse
-            ? null
-            : expired
-              ? { title: signInAsking(FRONT), spoken: signInAgain(FRONT) }
-              : { title: SWITCH, spoken: switchSpoken(a) },
+          button: inUse ? null : headerButton(a, w),
           menu: accountMenu(a, w),
           limits: a.limits.map((l) => {
             const row = limitRow(l, w);

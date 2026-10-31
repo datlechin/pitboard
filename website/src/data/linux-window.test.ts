@@ -11,6 +11,8 @@ import {
   date,
   diagnostics,
   group,
+  headerButton,
+  headerOffer,
   iconOf,
   openLink,
   prefs,
@@ -114,6 +116,26 @@ test("each group says what account_group.rs sets from the model", () => {
     ],
   );
   says(present("words/accounts.rs"), 'said.join(", ")');
+  // each button is named for its account with its tool, while two tools are listed
+  assert.deepEqual(
+    page.groups.map((g) => g.button?.spoken ?? null),
+    [null, "Switch to personal (Claude Code)", null, "Switch to spare (Codex)"],
+  );
+  const expired = { ...moments.after, now: account("personal").refreshExpiresAt! + 1 };
+  assert.deepEqual(headerButton(account("personal"), expired), {
+    title: "Sign In…",
+    spoken: "Sign In to personal (Claude Code) Again…",
+  });
+  const accounts = present("accounts.rs");
+  says(accounts, "let spoken_name = seen.name_of(account);");
+  says(accounts, "spoken: words::switch_account(Some(spoken)),");
+  says(accounts, "spoken: words::sign_in_to_again(front, spoken, true),");
+  says(present("words/sheets.rs"), '&format!("Sign In to {label} Again{more}"),');
+  // while any switch runs, no header offers a button, its own spinner aside
+  says(accounts, "state.switch_under_way(),");
+  says(accounts, "if account.unplaced || switching {\n        return None;");
+  assert.equal(headerOffer(account("spare", "codex"), moments.after, account("personal").id), null);
+  assert.equal(headerOffer(account("spare", "codex"), moments.after), "use");
   const personal = accountsPage(moments.before).groups[0];
   assert.deepEqual(
     personal.limits.map((l) => [l.title, l.resets, l.figure, l.fill]),

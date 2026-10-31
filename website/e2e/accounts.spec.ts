@@ -675,7 +675,11 @@ for (const system of ["gnome", "kde"] as const)
       await expect(group("work")).toContainText("Claude Code, Max 20x");
       await expect(group("work").locator('[data-part="in-use"]')).toHaveText("In Use");
       await expect(group("work").getByRole("button", { name: /^Switch/ })).toBeHidden();
-      const personal = group("personal").getByRole("button", { name: "Switch to personal" });
+      // named for the account with its tool, as two tools are listed
+      const personal = group("personal").getByRole("button", {
+        name: "Switch to personal (Claude Code)",
+        exact: true,
+      });
       await expect(personal).toHaveText("Switch");
       await expect(
         group("work").locator('[data-part="limit"] [data-part="spoken"]').first(),
@@ -756,7 +760,8 @@ for (const system of ["gnome", "kde"] as const)
       const { fig, group } = await window(page, system);
       await group("personal").getByRole("button", { name: "Switch to personal" }).click();
       await expect(group("personal").getByRole("img", { name: "Switching" })).toBeVisible();
-      await expect(group("spare").getByRole("button", { name: "Switch to spare" })).toBeDisabled();
+      // while it runs, no other header offers its button
+      await expect(group("spare").locator('[data-part="action"]')).toBeHidden();
       await expect(group("personal").locator('[data-part="in-use"]')).toBeVisible();
       await expect(fig.locator("[data-notice]:not([hidden])")).toContainText(
         "Switched Claude Code to personal",

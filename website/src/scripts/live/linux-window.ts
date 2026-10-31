@@ -25,13 +25,17 @@ import {
   limitRow,
   limitTitle,
   listed,
-  signInExpired,
-  switchSpoken,
   toolsOn,
   updated,
 } from "../../lib/words.ts";
-import { SWITCH, WARM_UP_OFF, signInAgain, signInAsking, toolIfShown } from "../../data/window.ts";
-import { accountMenu, headerOffer, levelOf, signInOf } from "../../data/linux-window.ts";
+import { WARM_UP_OFF, toolIfShown } from "../../data/window.ts";
+import {
+  accountMenu,
+  headerButton,
+  headerOffer,
+  levelOf,
+  signInOf,
+} from "../../data/linux-window.ts";
 import type { Account } from "../../data/world.ts";
 
 const FRONT = "gnome";
@@ -383,14 +387,9 @@ class LinuxWindow extends AccountsFigure {
     const header = headerOffer(a, s, s.switching?.id ?? null);
     shown(part(group, "action"), header !== null);
     const button = group.querySelector<HTMLButtonElement>('[data-does="use"]')!;
-    const again = signInExpired(a, s);
-    text(button, again ? signInAsking(FRONT) : SWITCH);
-    attr(
-      button,
-      "aria-label",
-      header === null ? null : again ? signInAgain(FRONT) : switchSpoken(a),
-    );
-    attr(button, "disabled", s.switching ? "" : null);
+    const offered = header === null ? null : headerButton(a, s);
+    if (offered) text(button, offered.title);
+    attr(button, "aria-label", offered?.spoken ?? null);
     const rows = part(group, "rows")!;
     attr(rows, "aria-label", a.label);
     this.#limits(s, rows, a);
