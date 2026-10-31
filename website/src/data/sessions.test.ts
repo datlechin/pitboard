@@ -182,13 +182,13 @@ test("warm-ups run on every system, and Claude Desktop switches on macOS alone",
   assert.ok(!repo("crates/pitboard-core/src/duty/warm/mod.rs").includes("Unbuilt"));
   assert.ok(!("on" in sessions.warm));
   const warm = (p: (typeof platforms)[number]) => text(printed(sessions.warm, p));
-  assert.deepEqual(warm("windows"), warm("macos"));
+  for (const p of platforms) assert.deepEqual(warm(p), warm("macos"), p);
   assert.match(warm("macos")[0], /, while the app or `pitboard watch` runs\.$/);
-  assert.match(warm("linux")[0], /, while `pitboard watch` runs\.$/);
-  assert.deepEqual(warm("linux").slice(1), warm("macos").slice(1));
-  const source = repo("crates/pitboard/src/warm.rs");
-  assert.ok(source.includes('Os::Linux => "`pitboard watch`"'));
-  assert.ok(source.includes('Os::MacOs | Os::Windows => "the app or `pitboard watch`"'));
+  assert.ok(
+    repo("crates/pitboard/src/warm.rs").includes(
+      'pub(crate) const WARMERS: &str = "the app or `pitboard watch`";',
+    ),
+  );
   assert.deepEqual(sessions.useDesktop.on, ["macos"]);
   assert.throws(() => printed(sessions.useDesktop, "linux"));
 });
