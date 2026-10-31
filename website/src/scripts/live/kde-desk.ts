@@ -19,7 +19,7 @@ import { isInUse, listed, menuBarLevel, menuTitle, statusLine } from "../../lib/
 import { trayAttention, trayTip, type TrayCommand } from "../../data/linux.ts";
 import type { Tool } from "../../data/world.ts";
 
-// Plasma's ToolTipArea waits the tooltip delay plasmarc sets, 700 ms by default (approx)
+// Plasma's ToolTipArea waits plasmarc's tooltip Delay, 700 ms by default (tooltiparea.cpp)
 const TIP_MS = 700;
 
 class KdeDesk extends LiveFigure {

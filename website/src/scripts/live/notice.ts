@@ -24,7 +24,7 @@ import { trayAttention } from "../../data/linux.ts";
 
 // how long a banner stays: macOS's, until measured on macOS 27; Windows' default, which Settings >
 // Accessibility > Visual effects sets; GNOME Shell's NOTIFICATION_TIMEOUT (messageTray.js); and
-// Plasma's popup timeout (notifications' Globals.qml)
+// Plasma's PopupTimeout (libnotificationmanager's notificationsettings.kcfg)
 const SHOWN_MS: Record<System, number> = { macos: 5000, windows: 5000, gnome: 4000, kde: 5000 };
 const IN_VIEW = 0.6;
 
