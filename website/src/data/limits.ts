@@ -3,6 +3,7 @@
 // controls' names, the warm-up's hours, and the terms. limits.test.ts finds each in its source.
 import { DOCS } from "./site.ts";
 import type { AtLimit } from "../lib/model.ts";
+import { eachFront, titled } from "../lib/words.ts";
 
 export const section = "Before an account runs out";
 export const heading = "When a limit reaches";
@@ -37,4 +38,4 @@ export function warmHours(from: number, to: number): string {
 }
 
 // present/words/machine.rs `warm_up`
-export const warm = { title: { macos: "Warm-Up", windows: "Warm-up" } };
+export const warm = { title: eachFront((front) => titled(front, "Warm-Up", "Warm-up")) };

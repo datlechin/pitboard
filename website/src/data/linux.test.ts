@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   COPY_COMMAND,
-  DROP_LINK,
   PASTE_LINK,
   WATCH_IN_THE_BACKGROUND,
   app,
@@ -154,7 +153,6 @@ test("Keyboard Shortcuts lists the keys window/keys.rs binds, in its order and w
 test("the words only the Linux app says are app_words.rs's for it", () => {
   for (const [field, words] of [
     ["paste_link", PASTE_LINK],
-    ["drop_link", DROP_LINK],
     ["copy_command", COPY_COMMAND],
   ])
     assert.ok(appWords.includes(`${field}: "${words}".into(),`), words);

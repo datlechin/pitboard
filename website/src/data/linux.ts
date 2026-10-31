@@ -46,11 +46,10 @@ export const shortcuts = {
   ] as [accelerator: string, title: string][],
 };
 
-// The words only the Linux app says (app_words.rs `gnome_words`): Open Link's buttons, Preferences'
-// switch for watching once the window is closed, and the button beside each command Remove the App
-// gives.
+// The words only the Linux app says that the page draws (app_words.rs `gnome_words`): Open Link's
+// button, Preferences' switch for watching once the window is closed, and the button beside each
+// command Remove the App gives.
 export const PASTE_LINK = "Paste Link";
-export const DROP_LINK = "Drop Link to Open";
 export const WATCH_IN_THE_BACKGROUND = "Watch in the Background";
 export const COPY_COMMAND = "Copy";
 

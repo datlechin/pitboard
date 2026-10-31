@@ -18,8 +18,9 @@ import {
   shareLabel,
   shareRange,
   terms,
+  warm,
 } from "./limits.ts";
-import { renewalAbout } from "./settings.ts";
+import { renew, renewalAbout } from "./settings.ts";
 import {
   CANCEL,
   EMAIL,
@@ -37,7 +38,13 @@ import {
   toolIfShown,
   warmUpNow,
 } from "./window.ts";
-import { header, preferences as pages } from "./linux.ts";
+import {
+  COPY_COMMAND,
+  PASTE_LINK,
+  WATCH_IN_THE_BACKGROUND,
+  header,
+  preferences as pages,
+} from "./linux.ts";
 import {
   CLOSING_QUITS,
   SIGN_IN_EXPIRED,
@@ -278,7 +285,7 @@ export function atLimitNote(
     : p.atLimit === "switch"
       ? watched
         ? "Once its window is closed, the watch service goes on switching it."
-        : "Once its window is closed, nothing switches it unless Watch in the Background is on."
+        : `Once its window is closed, nothing switches it unless ${WATCH_IN_THE_BACKGROUND} is on.`
       : !watched
         ? null
         : p.atLimit === "notify"
@@ -312,7 +319,7 @@ export const prefs = {
     share: { label: shareLabel, range: shareRange, at: share },
     terms,
     warm: {
-      title: WARM_UP_LABEL,
+      title: warm.title.gnome,
       note: (statusItem: boolean, watched = false) =>
         `Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, ${statusItem ? "while it’s open" : watched ? "and the watch service goes on once its window is closed" : "while its window is open"}.`,
       from: warmUp.from,
@@ -321,9 +328,9 @@ export const prefs = {
     },
   },
   advanced: {
-    renew: "Keep Saved Sign-Ins Fresh",
+    renew: renew.gnome,
     renewAbout: renewalAbout(FRONT),
-    watch: "Watch in the Background",
+    watch: WATCH_IN_THE_BACKGROUND,
     watchAbout,
     commandLine: "Command Line",
     path: "Path",
@@ -348,7 +355,7 @@ export const prefs = {
     message:
       "Pitboard’s saved sign-ins and settings are deleted. Remove the app and its command line with this command in a terminal.",
     command: "sudo dnf remove pitboard-app pitboard",
-    copy: "Copy",
+    copy: COPY_COMMAND,
     quit: "Quit",
   },
 };
@@ -373,7 +380,7 @@ export const openLink = {
   none: {
     title: "No Link to Open",
     detail: "Paste a claude.ai or chatgpt.com link, or drop one here, to open it in your browser.",
-    paste: "Paste Link",
+    paste: PASTE_LINK,
   },
   link: {
     title: "Open in Your Browser",
