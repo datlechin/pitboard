@@ -1,0 +1,31 @@
+---
+// The 95% notification as GNOME Shell shows the Linux app's GNotification (js/ui/messageTray.js),
+// approx. Its banner drops in under the top bar in 200 milliseconds with an overshoot, stays 4
+// seconds and expands while held, then waits in the date menu, whose opening blocks banners
+// (panel.js). The desk is as tall as the menu, with JavaScript or without, so nothing moves as the
+// script loads.
+import DateMenu from "./DateMenu.astro";
+import Message from "./Message.astro";
+import TopBar from "./TopBar.astro";
+import { topBarClock } from "../../../data/gnome.ts";
+import { clock } from "../../../data/world.ts";
+
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
+---
+
+<pb-notice id={prefix} class="desk block h-680 desk-px-800" inert data-output>
+  <TopBar clock={topBarClock(clock.warned)} prefix={prefix} />
+  <Message
+    prefix={prefix}
+    banner
+    class="absolute top-36 left-1/2 z-3 w-499 -translate-x-1/2 live:transition-[translate,scale,opacity,visibility] live:duration-200 live:ease-[cubic-bezier(0.34,1.56,0.64,1)] live:not-data-[state]:invisible live:not-data-[state]:-translate-y-[calc(100%+var(--u)*36)] live:not-data-[state]:scale-90 live:not-data-[state]:opacity-0"
+  />
+  <DateMenu prefix={prefix} at={clock.warned} />
+</pb-notice>
+
+<script>
+  import "../../../scripts/live/notice.ts";
+</script>

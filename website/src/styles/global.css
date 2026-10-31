@@ -168,7 +168,7 @@
   --color-mac-window-scrim: light-dark(rgb(172 172 172 / 0.62), rgb(0 0 0 / 0.4));
   --color-mac-window-close-off: light-dark(#dcdcdc, #5a5a5a);
   --color-mac-window-focus: light-dark(rgb(0 122 255 / 0.5), rgb(10 132 255 / 0.5));
-  /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
+  /* Ptyxis 50.1's GNOME palette in a libadwaita 1.9 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
   --color-linux-bar-shade: light-dark(rgb(0 0 6 / 0.12), rgb(0 0 6 / 0.36));
@@ -402,6 +402,7 @@
   --inset-shadow-win-strong: inset 0 0 0 calc(1 * var(--u)) var(--color-win-strong);
 }
 @import "./adwaita.css";
+@import "./gnome.css";
 
 @font-face {
   font-family: "Inter";

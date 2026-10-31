@@ -1,0 +1,65 @@
+---
+// GNOME Shell's top bar (js/ui/panel.js, widgets/_panel.scss, _drawing.scss `panel_button`),
+// approx. Activities has a dot per workspace, and with one window open GNOME keeps an empty one
+// beside it. The clock is gnome-wall-clock.c's, its en space half an em between two spans, since the
+// font subsets have none. The indicators are panel.js's, in its order, for a wired desktop with no
+// battery; stock GNOME has no tray. With `prefix`, the clock opens the date menu of that prefix.
+interface Props {
+  clock: { date: string; time: string };
+  prefix?: string;
+  class?: string;
+}
+const { clock, prefix, class: extra } = Astro.props;
+// a button's fill sits inside its 3 pixel border
+const pill = "m-3 flex items-center rounded-full px-12";
+const icon = "mx-4 size-16 shrink-0";
+---
+
+<div
+  class:list={[
+    "absolute inset-x-0 top-0 z-2 grid h-32 grid-cols-[1fr_auto_1fr] bg-shell-panel shell-type font-bold whitespace-nowrap text-shell-text tabular-nums",
+    extra,
+  ]}
+>
+  <span class:list={[pill, "justify-self-start"]} aria-hidden="true">
+    <span class="flex items-center gap-5 px-3">
+      <span class="h-8 w-29 rounded-full bg-shell-text"></span>
+      <span class="size-8 scale-75 rounded-full bg-shell-text opacity-50"></span>
+    </span>
+  </span>
+  {prefix ? (
+    <button
+      class="group/clock flex items-stretch px-12 outline-none live:cursor-default"
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded="false"
+      aria-controls={`${prefix}-center`}
+      data-does="center"
+    >
+      <span
+        id={`${prefix}-clock`}
+        class:list={[
+          pill,
+          "group-hover/clock:bg-white/17 group-focus-visible/clock:bg-white/17 group-aria-expanded/clock:bg-white/28 group-aria-expanded/clock:group-hover/clock:bg-white/32",
+        ]}
+      >
+        <span data-part="date">{clock.date}</span>
+        <span class="ml-[0.5em]" data-part="time">{clock.time}</span>
+      </span>
+    </button>
+  ) : (
+    <span class="flex items-stretch px-12">
+      <span class={pill}>
+        <span data-part="date">{clock.date}</span>
+        <span class="ml-[0.5em]" data-part="time">{clock.time}</span>
+      </span>
+    </span>
+  )}
+  <span class:list={[pill, "justify-self-end"]} aria-hidden="true">
+    <span class="flex gap-4">
+      <svg class={icon}><use href="#adwaita-network-wired" /></svg>
+      <svg class={icon}><use href="#adwaita-audio-volume-high" /></svg>
+      <svg class={icon}><use href="#adwaita-system-shutdown" /></svg>
+    </span>
+  </span>
+</div>
