@@ -203,11 +203,11 @@ def release_tree(root, widget=True):
     put(SEARCH, (DATA / f"{APP_ID}.search-provider.ini").read_text(encoding="utf-8"))
     put(RUNNER, (DATA / "krunner" / f"{APP_ID}.desktop").read_text(encoding="utf-8"))
     put(MANUAL, (DATA / "pitboard-app.1").read_text(encoding="utf-8"))
-    # The development build's icon is in the GResource alone.
+    # The development build's icon and the symbolic icons GTK lacks are in the GResource alone.
     for icon in sorted((DATA / "icons").rglob("*.svg")):
-        if ".Devel." not in icon.name:
-            path = Path("usr/share/icons/hicolor") / icon.relative_to(DATA / "icons")
-            put(path, icon.read_text(encoding="utf-8"))
+        shipped = icon.relative_to(DATA / "icons")
+        if ".Devel." not in icon.name and shipped.parts[:2] != ("scalable", "actions"):
+            put(Path("usr/share/icons/hicolor") / shipped, icon.read_text(encoding="utf-8"))
     # Meson's plasma_widget, which a package can leave off.
     if widget:
         for source in sorted(path for path in PLASMOID.rglob("*") if path.is_file()):

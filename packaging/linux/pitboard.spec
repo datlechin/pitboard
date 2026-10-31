@@ -47,6 +47,8 @@ fish completions.
 
 %package -n pitboard-app
 Summary: App that switches AI coding tools between your accounts
+# The program carries symbolic icons from adwaita-icon-theme 51.0.
+License: Apache-2.0 AND (LGPL-3.0-only OR CC-BY-SA-3.0)
 # Renewal and the watch service run the pitboard beside the app, with this version's options.
 Requires: pitboard = %{version}-%{release}
 # The floor. rpm's ELF generator requires GTK, libadwaita and GLib by soname alone, which any 4.x,

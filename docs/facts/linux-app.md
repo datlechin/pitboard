@@ -960,3 +960,21 @@ application to do, so the pictures add it.
   and `fill="currentColor"`, as the Windows icon's drawings are inked.
 - GtkIconTheme finds a GResource's icons only in the folders the hicolor theme defines
   (`gtk/gtkicontheme.c:1560-1576`).
+- GTK 4.22.4 looks an icon up in the desktop's theme and the themes it inherits, then in hicolor,
+  which a resource path's hicolor folders join, and draws `image-missing` where none has it
+  (`gtk/gtkicontheme.c:1868-1872,2133-2146,3234-3256`). So Adwaita draws the app's icons only
+  where it is the theme. On Fedora 44 with Plasma the theme is Breeze 6.31.0, which inherits
+  hicolor alone, and `linux-facts.yml` run 41107324579 read `battery-level-50-symbolic`,
+  `package-x-generic-symbolic` and `web-browser-symbolic` there as Breeze's `image-missing` on
+  31 October 2026.
+- adwaita-icon-theme 51.0's README calls it a "Private UI icon set for GNOME core apps", and
+  GNOME's HIG (UI Icons) gives apps GTK's own icons and the Icon Development Kit's to copy in. Of
+  the 19 symbolic names the app shows, GTK 4.18.6 and 4.22.4 carry 11 in their resources
+  (`gtk/icons`) and libadwaita `adw-external-link-symbolic`. The app carries the other 7 in its
+  own, under `icons/scalable/actions`. A theme comes before hicolor, so Adwaita and Breeze still
+  draw their own where they have the name
+  (`every_icon_the_app_names_is_found_in_adwaita_and_in_hicolor_alone`).
+- The 7 are adwaita-icon-theme 51.0's, under the LGPL 3.0 or CC BY-SA 3.0 US
+  (`data/icons/AdwaitaIconTheme-LICENSE.txt`). The Icon Development Kit's, CC0, read at
+  `3136fc59` on 31 October 2026, are in GTK's newer format and drawn with strokes, and GTK
+  4.18.6's stylesheet recolours fills alone (above).

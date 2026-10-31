@@ -211,7 +211,8 @@ The apps:
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
     the D-Bus interfaces the app serves, each written from its published definition but the
-    widget feed, Pitboard's own (`dbus/`), and the views' GtkBuilder templates (`ui/`).
+    widget feed, Pitboard's own (`dbus/`), the symbolic icons GTK and libadwaita lack
+    (`icons/scalable/actions`), and the views' GtkBuilder templates (`ui/`).
   - `plasmoid/`: the Plasma widget in QML, which Meson installs where `plasma_widget` is on,
     and its tests, which run it over a stand-in for the app on a private bus.
   - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display

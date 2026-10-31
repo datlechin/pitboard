@@ -4,6 +4,15 @@
     <file compressed="true">com.usepitboard.Pitboard.metainfo.xml</file>
     <file>icons/scalable/apps/com.usepitboard.Pitboard.svg</file>
     <file>icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg</file>
+    <!-- From adwaita-icon-theme 51.0, under icons/AdwaitaIconTheme-LICENSE.txt: the names the app
+         shows that GTK and libadwaita do not carry, for a theme that lacks them. -->
+    <file>icons/scalable/actions/battery-level-50-symbolic.svg</file>
+    <file>icons/scalable/actions/insert-link-symbolic.svg</file>
+    <file>icons/scalable/actions/package-x-generic-symbolic.svg</file>
+    <file>icons/scalable/actions/preferences-other-symbolic.svg</file>
+    <file>icons/scalable/actions/preferences-system-symbolic.svg</file>
+    <file>icons/scalable/actions/system-users-symbolic.svg</file>
+    <file>icons/scalable/actions/web-browser-symbolic.svg</file>
     <file>dbus/org.kde.StatusNotifierItem.xml</file>
     <file>dbus/com.canonical.dbusmenu.xml</file>
     <file>dbus/org.gnome.Shell.SearchProvider2.xml</file>
