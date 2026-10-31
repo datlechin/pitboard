@@ -30,8 +30,9 @@ offers another account with room left. Pitboard can also
 the app or from a background service that `pitboard watch install` sets up on macOS, Windows
 and Linux.
 
-The app also gives each Claude Code and Codex account its own
-[window on claude.ai or chatgpt.com](https://docs.usepitboard.com/guides/account-windows).
+On macOS and Windows, the app also gives each Claude Code and Codex account its own
+[window on claude.ai or chatgpt.com](https://docs.usepitboard.com/guides/account-windows). On
+Linux, it opens their links in your browser.
 
 Pitboard has no server of its own and no telemetry. It sends each login only to the service
 that issued it, and sends nothing for a Claude Desktop account.
@@ -39,16 +40,19 @@ that issued it, and sends nothing for a Claude Desktop account.
 lists every request.
 
 The command line runs on macOS, Windows and Linux. The app runs on macOS 14 or later, on
-Windows 11 24H2 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 or later and openSUSE
-Tumbleweed, and includes the command line. Pitboard for Windows is in beta, and
-its files are not signed. On Linux, Pitboard builds and passes its tests, its app for GNOME and
-KDE Plasma included, which is tested headless on Debian 13, Ubuntu 26.04 and Fedora 44. Both
-were run with real logins in desktop sessions of Fedora 44 with GNOME and with KDE Plasma, Ubuntu
-26.04 and Debian 13 ([what they measured](docs/facts/linux-session.md)).
+Windows 11 24H2 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE
+Tumbleweed, with GNOME or KDE Plasma, and includes the command line. Pitboard for Windows is not
+signed yet. [What you need](https://docs.usepitboard.com/install#what-you-need) says how far each
+system is tested.
 
 ## Install
 
-On macOS and Linux, install the command line with the script:
+On Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, install the app, or
+`pitboard` for the command line alone, from Pitboard's apt, dnf and zypper repository, as
+[Set up the Linux repository](https://docs.usepitboard.com/install/linux-repository) says.
+
+On macOS, or on a Linux distribution the repository does not cover, install the command line
+with the script:
 
 ```sh
 curl -fsSL https://usepitboard.com/install.sh | sh
@@ -57,13 +61,9 @@ curl -fsSL https://usepitboard.com/install.sh | sh
 Or with Homebrew:
 
 ```sh
-brew install datlechin/tap/pitboard              # the command line
+brew install datlechin/tap/pitboard              # the command line, on macOS or another Linux
 brew install --cask datlechin/tap/pitboard-app   # the app, on macOS
 ```
-
-On Debian 13, Ubuntu 26.04, Fedora 43 and later and openSUSE Tumbleweed, install the app from
-Pitboard's apt and dnf repository, as
-[Set up the Linux repository](https://docs.usepitboard.com/install/linux-repository) says.
 
 On Windows, download the installer from
 [Download Pitboard](https://usepitboard.com/download#windows). It installs the app and puts
@@ -89,7 +89,8 @@ pitboard use work               # switch Claude Code to work
 ```
 
 In the app, choose the account in Pitboard's menu, from its item in the menu bar on macOS or
-its icon in the notification area on Windows. The
+its icon in the notification area on Windows, or in the Pitboard window or its tray menu on
+Linux. The
 [Quickstart](https://docs.usepitboard.com/quickstart) shows each step and what it prints. For
 Codex, put `codex/` before each label, as
 [Use Pitboard with Codex](https://docs.usepitboard.com/guides/codex) explains. For Claude
