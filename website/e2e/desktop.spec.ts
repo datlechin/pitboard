@@ -1,7 +1,7 @@
 // The GNOME / KDE Plasma control beside the hero's platform tabs (plan 3.1): two pressed buttons in
 // a group, shown while Linux is chosen, the choice kept, one state under both desktops.
 import type { Page } from "@playwright/test";
-import { choose, expect, handedOver, test } from "./fixtures.ts";
+import { choose, expect, frames, handedOver, recordFrames, test } from "./fixtures.ts";
 
 const control = (page: Page) => page.locator('[role="group"][aria-label="Linux desktop"]');
 const button = (page: Page, name: "GNOME" | "KDE Plasma") =>
@@ -122,12 +122,13 @@ test.describe("with motion", () => {
   test("the demo plays once under GNOME, and KDE Plasma's desk shows where it ended", async ({
     page,
   }) => {
+    await recordFrames(page);
     await choose(page.context(), { system: "gnome" });
     await page.clock.install();
     await page.goto("/");
-    await expect(page.locator("html")).toHaveAttribute("data-demo", "move");
-    await page.clock.runFor(4000);
-    await expect(page.locator("html")).not.toHaveAttribute("data-demo");
+    // a slow browser may first look once the demo is over, so its frames are read as they were set
+    await expect(page.locator("html")).not.toHaveAttribute("data-demo", { timeout: 8000 });
+    expect((await frames(page)).map((frame) => frame.demo)).toContain("move");
     await expect(
       page.locator('#hero-gnome-window [data-account="work"] [data-part="in-use"]'),
     ).toBeVisible();
