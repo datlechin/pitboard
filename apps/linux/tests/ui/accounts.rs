@@ -196,7 +196,8 @@ fn a_notices_buttons_send_their_intents_asking_first_where_it_says() {
 // each sends what the model says.
 #[gtk::test]
 fn the_tip_shows_its_choices() {
-    let viewed = Viewed::of("onlyOne");
+    // The step waits on the preferences, which can be read after the accounts.
+    let viewed = Viewed::once("onlyOne", |shown| shown.setup.is_some());
     let step = viewed.shown.snapshot().setup.clone().expect("a setup step");
     let tip = (every::<NoticeRow>(&viewed.window).into_iter())
         .find(|row| row.title() == step.title)
