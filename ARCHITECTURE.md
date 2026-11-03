@@ -98,8 +98,8 @@ built with a `context::Context`:
 - `duty/`: what a front end does by itself: how often (`cadence.rs`), what it tried and said
   (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`), the warm-up (`warm/`), and when
   the account index or the readings were written (`written.rs`).
-- `usage/`: what is left: one reading per account (`readings.rs`), pace (`pace.rs`) and how
-  often Anthropic is asked (`budget.rs`).
+- `usage/`: what is left: one reading per account (`readings.rs`), the order an account is
+  picked in (`order.rs`), pace (`pace.rs`) and how often Anthropic is asked (`budget.rs`).
 - `status.rs`, `statusline.rs`, `sessions.rs`, `schedule.rs`, `watch_service.rs`: the commands
   of those names, each session's last run, daily renewal and the watch service.
 - `doctor/`: `pitboard doctor`, a module per concern, in the order `mod.rs` makes the checks,
