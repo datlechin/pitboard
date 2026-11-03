@@ -15,7 +15,7 @@ use crate::schedule::Job;
 use crate::state::renewal_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
-use crate::usage::{Window, whole};
+use crate::usage::{Order, Window, whole};
 use std::fmt::Write as _;
 
 /// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
@@ -85,11 +85,36 @@ pub fn auto_waiting(from: &str, used: &str, until: &str) -> String {
     format!("{}. Pitboard tries again at {until}.", has_used(from, used))
 }
 
-pub fn auto_switched(from: &str, to: &str, used: &str) -> String {
-    format!(
-        "Switched Claude Code from {from} to {to}: {}.",
-        has_used(from, used)
-    )
+// `because` is a clause from `has_used` or `resets_first`.
+pub fn auto_switched(from: &str, to: &str, because: &str) -> String {
+    format!("Switched Claude Code from {from} to {to}: {because}.")
+}
+
+/// Why a switch before the share went to `to` from `from`, as a clause: "soon's week resets
+/// before work's", or with the clock times `at` gives, "soon's week resets at Nov 4 21:00, before
+/// work's at Nov 8 18:00". Clock times come as each front end writes them.
+pub fn resets_before(to: &str, from: &str, at: Option<(&str, &str)>) -> String {
+    match at {
+        Some((to_at, from_at)) => {
+            format!("{to}'s week resets at {to_at}, before {from}'s at {from_at}")
+        }
+        None => format!("{to}'s week resets before {from}'s"),
+    }
+}
+
+/// Why a switch before the share went to `account`, which has no weekly limit for all models,
+/// as a clause.
+pub fn no_weekly_limit(account: &str) -> String {
+    format!("{account} has no weekly limit, so what it leaves unused is lost at each 5-hour reset")
+}
+
+/// What the automatic switch does under `order` beside switching at the share, as a clause
+/// after the share: ", or before then to the account whose week resets soonest", or nothing.
+pub fn first_by(order: Order) -> &'static str {
+    match order {
+        Order::MostLeft => "",
+        Order::ResetsSoonest => ", or before then to the account whose week resets soonest",
+    }
 }
 
 // `why` is a clause from `not_switching`.

@@ -1,8 +1,10 @@
 use super::*;
 
 fn at(percent: u8) -> crate::watch_service::Switching {
-    let at = crate::duty::autoswitch::Threshold::new(percent).expect("a share");
-    crate::watch_service::Switching::At(at)
+    crate::watch_service::Switching::At(crate::duty::autoswitch::Policy {
+        threshold: crate::duty::autoswitch::Threshold::new(percent).expect("a share"),
+        order: crate::usage::Order::MostLeft,
+    })
 }
 
 #[test]

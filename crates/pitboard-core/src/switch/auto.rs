@@ -11,13 +11,13 @@
 
 use super::{Settled, Switched, identify, switch_from};
 use crate::audit;
-use crate::duty::autoswitch::{self, Auto, Blind, Judged, Ledger, Threshold};
+use crate::duty::autoswitch::{self, Auto, Blind, Judged, Ledger, Policy};
 use crate::error::{Error, Result};
 use crate::provider::{self, ProviderId};
 use crate::warning::Warning;
 
-/// Switches Claude Code where a limit of the account in use has reached `threshold` and
-/// another account has room, as [`crate::duty::autoswitch`] says, and records what it came to.
+/// Switches Claude Code where `policy` and the readings say to, as [`crate::duty::autoswitch`]
+/// says, and records what it came to.
 ///
 /// Whose login Claude Code has stored is told first. Where it cannot be, nothing is judged
 /// from what Pitboard last knew, which may be another account's: that is recorded once, as
@@ -32,10 +32,7 @@ use crate::warning::Warning;
 /// the failure, as a decision records it, so the look a front end makes while it waits after
 /// the failure stands on that. A switch, and anything that stopped one, is recorded as
 /// `auto-switch`, with the account it went to, or none before there was one.
-pub(crate) fn automatically(
-    settled: Settled,
-    threshold: Threshold,
-) -> Result<(Auto, Vec<Warning>)> {
+pub(crate) fn automatically(settled: Settled, policy: Policy) -> Result<(Auto, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
@@ -89,17 +86,30 @@ pub(crate) fn automatically(
     };
     // Said where nothing is switched; a switch says it with its own.
     let lost: Vec<Warning> = outgoing.lock_warning(which).into_iter().collect();
-    let judged = match autoswitch::watched(&state, Some(&outgoing.owner)) {
-        Ok(account) => autoswitch::judge(ctx, &state, account, &ledger, threshold, now),
+    let (judged, id) = match autoswitch::watched(&state, Some(&outgoing.owner)) {
+        Ok(account) => (
+            autoswitch::judge(ctx, &state, account, &ledger, policy, now),
+            account.id.clone(),
+        ),
         Err(why) => return Ok((Auto::NotWatching { why }, lost)),
     };
+    let at_a_limit = match &judged {
+        Judged::Switch(plan) => plan.why.limit().is_some(),
+        Judged::Hold(_) => true,
+        Judged::Stands(_) => false,
+    };
+    // Saved with what follows; lost, it costs at most a move before the share not made once.
+    let met = at_a_limit && ledger.met_a_limit(&id);
     let plan = match judged {
         Judged::Switch(plan) => plan,
         Judged::Hold(hold) => {
-            if ledger.say(&hold, now) {
+            let said = ledger.say(&hold, now);
+            if said || met {
                 ledger
                     .save(ctx, permit)
                     .map_err(|error| stopped(unchosen, error))?;
+            }
+            if said {
                 audit::record(
                     ctx,
                     permit,
@@ -113,10 +123,6 @@ pub(crate) fn automatically(
         Judged::Stands(stands) => return Ok((stands, lost)),
     };
     let to = state.typed(&plan.to);
-    let to_id = state
-        .get(&plan.to)
-        .map(|account| account.id.clone())
-        .unwrap_or_default();
     let decided_from = state.clone();
     ledger.attempt(&plan, now);
     ledger
@@ -140,7 +146,7 @@ pub(crate) fn automatically(
                 Auto::Switched {
                     from,
                     to,
-                    limit: plan.limit,
+                    why: plan.why,
                     adoption,
                 },
                 warnings,
@@ -148,13 +154,13 @@ pub(crate) fn automatically(
         }
         Err(error) => {
             if over_the_account_switched_to(&error) {
-                ledger.pass_over(&plan, &to_id);
+                ledger.pass_over(&plan);
             } else if mended_by_waiting(&error) {
                 ledger.waited(&plan);
             }
             let error = stopped(&to, error);
             let judged = decided_from.get(&plan.from).map(|account| {
-                autoswitch::judge(ctx, &decided_from, account, &ledger, threshold, now)
+                autoswitch::judge(ctx, &decided_from, account, &ledger, policy, now)
             });
             let spent = match judged {
                 Some(Judged::Hold(hold)) => ledger.say(&hold, now).then_some(hold),
@@ -247,13 +253,16 @@ mod tests {
     };
     use super::super::*;
     use crate::api::scripted::Trouble;
-    use crate::duty::autoswitch::{Auto, Blind, Decision, Ledger, Look, Skip, Threshold, decide};
+    use crate::duty::autoswitch::{
+        Auto, Blind, Decision, Ledger, Look, Policy, SETTLING_SECONDS, Skip, Why, decide,
+    };
     use crate::duty::cadence::{ATTEMPTS, RETRY_SECONDS};
     use crate::permit::Permit;
     use crate::service::Pitboard;
     use crate::store::memory::Fault;
     use crate::time::{Clock, FixedClock};
-    use crate::usage::{LimitKind, Snapshot, Source, Window};
+    use crate::time::{DAY, HOUR};
+    use crate::usage::{LimitKind, Order, Snapshot, Source, Week, Window};
     use std::sync::Arc;
 
     /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
@@ -292,13 +301,13 @@ mod tests {
     }
 
     fn auto(m: &Rig) -> crate::service::Changing<Auto> {
-        Pitboard::new(m.ctx.clone()).auto_switch(Threshold::DEFAULT)
+        Pitboard::new(m.ctx.clone()).auto_switch(Policy::default())
     }
 
     /// What the look at the files alone comes to, where it ends there and takes no lock.
     fn stands(m: &Rig) -> Auto {
         let state = state::load(&m.ctx).expect("state");
-        match crate::duty::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT) {
+        match crate::duty::autoswitch::look(&m.ctx, &state, Policy::default()) {
             Look::Stands(stands) => *stands,
             Look::Act => panic!("the look goes on to the lock"),
         }
@@ -348,7 +357,7 @@ mod tests {
         assert_eq!(kept(), None, "by hand");
         clock.advance(RETRY_SECONDS);
         let refused = Pitboard::new(service.clone())
-            .auto_switch(Threshold::DEFAULT)
+            .auto_switch(Policy::default())
             .expect_err("locked");
         assert_eq!(refused.error.code(), "credential_store_locked");
         let record = kept().expect("kept for doctor");
@@ -361,11 +370,11 @@ mod tests {
             Auto::Switched { .. }
         ));
         assert_eq!(kept(), Some(record), "by hand");
-        clock.advance(crate::duty::autoswitch::SETTLING_SECONDS);
+        clock.advance(SETTLING_SECONDS);
         measured(&m, "there", 96.0, 20.0);
         measured(&m, "here", 10.0, 30.0);
         let switched = Pitboard::new(service)
-            .auto_switch(Threshold::DEFAULT)
+            .auto_switch(Policy::default())
             .expect("a switch");
         assert!(
             matches!(switched.value, Auto::Switched { .. }),
@@ -383,7 +392,7 @@ mod tests {
         let Auto::Switched {
             from,
             to,
-            limit,
+            why: Why::Limit(limit),
             adoption,
         } = done.value
         else {
@@ -691,7 +700,7 @@ mod tests {
         clock.advance(1);
         let state = state::load(&m.ctx).expect("state");
         assert!(matches!(
-            crate::duty::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT),
+            crate::duty::autoswitch::look(&m.ctx, &state, Policy::default()),
             Look::Act
         ));
         let looked = auto(&m).expect("a look").value;
@@ -719,7 +728,7 @@ mod tests {
         let (m, _) = nearly_out("auto-twice", 96.0);
         let state = state::load(&m.ctx).expect("state");
         for _ in 0..2 {
-            let looked = crate::duty::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT);
+            let looked = crate::duty::autoswitch::look(&m.ctx, &state, Policy::default());
             assert!(matches!(looked, Look::Act), "{looked:?}");
         }
         let rows = crate::status::gather_offline(&m.ctx, &state).rows;
@@ -728,7 +737,7 @@ mod tests {
             &m.key("here"),
             &rows,
             &Ledger::default(),
-            Threshold::DEFAULT,
+            Policy::default(),
             NOW,
         ) else {
             panic!("a switch decided");
@@ -740,7 +749,7 @@ mod tests {
                 .expect("settled")
                 .0;
             came_to.push(
-                automatically(settled, Threshold::DEFAULT)
+                automatically(settled, Policy::default())
                     .expect("no failure")
                     .0,
             );
@@ -883,7 +892,7 @@ mod tests {
             &m.key("here"),
             &rows,
             &Ledger::default(),
-            Threshold::DEFAULT,
+            Policy::default(),
             NOW,
         ) else {
             panic!("a switch decided");
@@ -931,7 +940,7 @@ mod tests {
         let spent = crate::duty::autoswitch::Hold {
             from: plan.from.clone(),
             from_id: plan.from_id.clone(),
-            limit: plan.limit.clone(),
+            limit: plan.why.limit().expect("a limit").clone(),
             why: Skip::GaveUp,
         };
         tried.say(&spent, spent_at);
@@ -1282,7 +1291,7 @@ mod tests {
         let died = fault::killing("switch.park_recorded", || switch(settled, &m.key("there")));
         assert_eq!(died.unwrap_err(), "switch.park_recorded");
         let state = state::load(&m.ctx).expect("state");
-        let look = || crate::duty::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT);
+        let look = || crate::duty::autoswitch::look(&m.ctx, &state, Policy::default());
         let lock = m.ctx_home().join(".pitboard/state.lock");
 
         let another_run = std::thread::scope(|scope| {
@@ -1333,7 +1342,7 @@ mod tests {
                 let (ctx, looked) = (m.ctx.clone(), Arc::clone(&looked));
                 move || {
                     let state = state::load(&ctx).expect("state");
-                    let look = crate::duty::autoswitch::look(&ctx, &state, Threshold::DEFAULT);
+                    let look = crate::duty::autoswitch::look(&ctx, &state, Policy::default());
                     *looked.lock().expect("kept") = Some(look);
                 }
             },
@@ -1642,5 +1651,124 @@ mod tests {
         assert_eq!(watching(&done.value), Some("there"), "{:?}", done.value);
         assert_eq!(config(), before);
         assert_eq!(live_refresh(&m).as_deref(), Some("there-again-refresh"));
+    }
+
+    const SOONEST: Policy = Policy {
+        threshold: crate::duty::autoswitch::Threshold::DEFAULT,
+        order: Order::ResetsSoonest,
+    };
+
+    /// What Anthropic has just answered of `uuid`: its five-hour limit `session` used, resetting
+    /// in an hour, and its week 40% used, resetting `days` after the test began, at the same time
+    /// whenever it is asked.
+    fn weeks(m: &Rig, uuid: &str, session: f64, days: i64) {
+        let mut reading = answer(m, session, 40.0);
+        reading.windows[0].resets_at = Some(m.ctx.now() + HOUR);
+        reading.windows[1].resets_at = Some(NOW + days * DAY);
+        crate::usage::readings::answered(
+            &m.ctx,
+            Permit::for_a_test(),
+            &[(uuid.to_owned(), reading)],
+        );
+    }
+
+    /// `here` in use, its week resetting in five days, and `there` parked with its week resetting
+    /// tomorrow and none of its five hours used.
+    fn there_resets_first(name: &str) -> (Rig, Arc<FixedClock>) {
+        let mut m = machine(name);
+        let clock = Arc::new(FixedClock::at(NOW));
+        m.ctx = m
+            .ctx
+            .clone()
+            .with_clock(Arc::clone(&clock) as Arc<dyn Clock>);
+        weeks(&m, "here", 30.0, 5);
+        weeks(&m, "there", 0.0, 1);
+        (m, clock)
+    }
+
+    fn soonest(m: &Rig) -> crate::service::Changing<Auto> {
+        Pitboard::new(m.ctx.clone()).auto_switch(SOONEST)
+    }
+
+    #[test]
+    fn under_resets_soonest_the_account_whose_week_resets_first_is_moved_to_before_the_share() {
+        let (m, _) = there_resets_first("auto-early");
+        assert!(
+            watching(&stands(&m)).is_some(),
+            "most left waits for the share"
+        );
+        let done = soonest(&m).expect("a move");
+        let Auto::Switched { from, to, why, .. } = done.value else {
+            panic!("a switch, not {:?}", done.value);
+        };
+        assert_eq!(
+            (from.as_str(), to.as_str(), why),
+            (
+                "here",
+                "there",
+                Why::ResetsFirst {
+                    to: Week::Resets(NOW + DAY),
+                    from: Week::Resets(NOW + 5 * DAY),
+                }
+            )
+        );
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+        assert_eq!(
+            logged(&m),
+            [(
+                "auto-switch".to_owned(),
+                "there".to_owned(),
+                "ok".to_owned()
+            )]
+        );
+    }
+
+    /// Put back in use, the account an early move left stays: nothing ran out, and somebody
+    /// chose it.
+    #[test]
+    fn a_person_who_switches_back_after_an_early_move_is_left_there() {
+        let (m, clock) = there_resets_first("auto-early-back");
+        soonest(&m).expect("a move");
+        clock.advance(SETTLING_SECONDS);
+        Pitboard::new(m.ctx.clone())
+            .switch_to("here")
+            .expect("switched back");
+        clock.advance(SETTLING_SECONDS);
+        weeks(&m, "here", 30.0, 5);
+        weeks(&m, "there", 0.0, 1);
+        let state = state::load(&m.ctx).expect("state");
+        let looked = crate::duty::autoswitch::look(&m.ctx, &state, SOONEST);
+        assert!(
+            matches!(&looked, Look::Stands(stands) if watching(stands) == Some("here")),
+            "{looked:?}"
+        );
+        assert!(matches!(
+            soonest(&m).expect("decided").value,
+            Auto::Watching { .. }
+        ));
+    }
+
+    /// The account whose week resets first is left at its five-hour limit, and moved back to once
+    /// that limit has reset, its week still the first to reset.
+    #[test]
+    fn an_account_left_at_a_limit_is_moved_back_to_before_the_share_once_it_resets() {
+        let (m, clock) = there_resets_first("auto-early-again");
+        soonest(&m).expect("a move");
+        clock.advance(SETTLING_SECONDS);
+        weeks(&m, "here", 10.0, 5);
+        weeks(&m, "there", 96.0, 1);
+        let left = soonest(&m).expect("a switch at the share").value;
+        assert!(
+            matches!(&left, Auto::Switched { to, why: Why::Limit(_), .. } if to == "here"),
+            "{left:?}"
+        );
+        clock.advance(SETTLING_SECONDS);
+        weeks(&m, "here", 20.0, 5);
+        weeks(&m, "there", 0.0, 1);
+        let back = soonest(&m).expect("a move back").value;
+        assert!(
+            matches!(&back, Auto::Switched { to, why: Why::ResetsFirst { .. }, .. } if to == "there"),
+            "{back:?}"
+        );
     }
 }

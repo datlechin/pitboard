@@ -2,7 +2,7 @@
 
 use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
-use crate::duty::autoswitch::{Auto, Look, Threshold};
+use crate::duty::autoswitch::{Auto, Look, Policy};
 use crate::error::{Error, Result};
 use crate::holder;
 use crate::host::Os;
@@ -202,19 +202,20 @@ impl Pitboard {
         })
     }
 
-    /// Switches Claude Code where a limit of the account in use has reached `threshold`. A run
-    /// of the watch service keeps what the store refused it ([`Pitboard::kept_for_doctor`]).
-    pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
+    /// Switches Claude Code where `policy` says to: a limit of the account in use has reached
+    /// its share, or another account comes first in its order. A run of the watch service keeps
+    /// what the store refused it ([`Pitboard::kept_for_doctor`]).
+    pub fn auto_switch(&self, policy: Policy) -> Changing<Auto> {
         let permit = self.permitted()?;
-        let switched = self.switching_by_itself(permit, threshold);
+        let switched = self.switching_by_itself(permit, policy);
         self.kept_for_doctor(permit, &switched, |value| {
             matches!(value, Auto::Switched { .. })
         });
         switched
     }
 
-    fn switching_by_itself(&self, permit: Permit, threshold: Threshold) -> Changing<Auto> {
-        let looked = self.auto_look(threshold).map_err(Failed::refused)?;
+    fn switching_by_itself(&self, permit: Permit, policy: Policy) -> Changing<Auto> {
+        let looked = self.auto_look(policy).map_err(Failed::refused)?;
         if let Look::Stands(value) = looked {
             return Ok(Done {
                 value: *value,
@@ -223,7 +224,7 @@ impl Pitboard {
         }
         let tool = ProviderId::Claude;
         let (settled, mut warnings) = self.settled_for(permit, "auto-switch", "", Some(tool))?;
-        match switch::automatically(settled, threshold) {
+        match switch::automatically(settled, policy) {
             Ok((value, more)) => {
                 warnings.extend(more);
                 Ok(Done { value, warnings })
@@ -233,9 +234,9 @@ impl Pitboard {
     }
 
     /// What switching by itself would come to now, from files alone and on no lock.
-    pub fn auto_look(&self, threshold: Threshold) -> Result<Look> {
+    pub fn auto_look(&self, policy: Policy) -> Result<Look> {
         let state = state::load(&self.ctx)?;
-        Ok(crate::duty::autoswitch::look(&self.ctx, &state, threshold))
+        Ok(crate::duty::autoswitch::look(&self.ctx, &state, policy))
     }
 
     // Here, so every command takes `codex/work` and a bare `work` on the same terms.
@@ -2948,9 +2949,7 @@ mod tests {
         ("uninstall_from_app", |p, _| {
             p.uninstall_from_app(&mut None).err()
         }),
-        ("auto_switch", |p, _| {
-            p.auto_switch(Threshold::DEFAULT).err()
-        }),
+        ("auto_switch", |p, _| p.auto_switch(Policy::default()).err()),
     ];
 
     /// Everything on a machine a change could leave different: every directory and file

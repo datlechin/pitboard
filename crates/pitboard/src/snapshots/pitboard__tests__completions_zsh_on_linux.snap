@@ -83,7 +83,8 @@ _arguments "${_arguments_options[@]}" : \
 (watch)
 _arguments "${_arguments_options[@]}" : \
 '--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
-'(--at)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
+'--order=[Which account to switch to first\: \`most-left\`, the one with the most room, or \`resets-soonest\`, the one whose week resets soonest, even before the share]:ORDER:(most-left resets-soonest)' \
+'(--at --order)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
 '(--no-switch)--once[Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up]' \
 '--json[Print JSON instead of text]' \
 '-h[Print help]' \
@@ -101,7 +102,8 @@ _arguments "${_arguments_options[@]}" : \
             (install)
 _arguments "${_arguments_options[@]}" : \
 '--at=[Switch once a limit of the account in use reaches this share, from 50 to 99]:PERCENT:_default' \
-'(--at)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
+'--order=[Which account to switch to first\: \`most-left\`, the one with the most room, or \`resets-soonest\`, the one whose week resets soonest, even before the share]:ORDER:(most-left resets-soonest)' \
+'(--at --order)--no-switch[Never switch, and only warm up the accounts \`pitboard warm on\` turned on]' \
 '--json[Print JSON instead of text]' \
 '-h[Print help]' \
 '--help[Print help]' \

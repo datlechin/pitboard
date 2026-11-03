@@ -22,7 +22,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
       "adoption": {
         "follows": "polling",
         "within_seconds": 33
-      }
+      },
+      "reason": "limit"
     },
     "warnings": [],
     "error": null

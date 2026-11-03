@@ -49,7 +49,7 @@ pub(crate) fn floor_for(reading: Option<&Snapshot>) -> i64 {
 const RATE_LIMITED_FIRST: i64 = 60;
 const RATE_LIMITED_MOST: i64 = 3600;
 const UNREACHABLE_FIRST: i64 = 30;
-const UNREACHABLE_MOST: i64 = 900;
+pub(super) const UNREACHABLE_MOST: i64 = 900;
 
 /// What is known about asking one account.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

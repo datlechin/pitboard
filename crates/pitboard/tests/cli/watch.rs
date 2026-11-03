@@ -118,6 +118,43 @@ fn an_account_at_the_share_is_switched_from_once() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
 }
 
+/// Under `--order resets-soonest`, an account whose week resets first is switched to before any
+/// limit of the one in use reaches the share; under the default order nothing moves.
+#[test]
+fn under_resets_soonest_an_account_is_switched_to_before_any_limit_reaches_the_share() {
+    let env = two_accounts("watch-resets-soonest");
+    env.an_hour_on();
+    env.measured(&[("alpha", 30.0, 20.0), ("beta", 10.0, 40.0)]);
+    let alpha = env.account_id("alpha");
+    env.edit_readings(|readings| {
+        let week = &mut readings[alpha.as_str()]["windows"][1]["resets_at"];
+        *week = json!(week.as_i64().expect("a reset") + 4 * 86_400);
+    });
+
+    let (out, err, code) = env.run(&["watch", "--once", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["event"], "idle", "{out}");
+
+    let (out, err, code) = env.run(&["watch", "--once", "--json", "--order", "resets-soonest"]);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(
+        (&data["event"], &data["reason"], &data["to"], &data["limit"]),
+        (
+            &json!("switched"),
+            &json!("resets_first"),
+            &json!("beta"),
+            &Value::Null
+        ),
+        "{out}"
+    );
+    assert!(
+        data["to_resets_at"].as_i64() < data["from_resets_at"].as_i64(),
+        "{out}"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+}
+
 /// The app with switching on and the watch service can decide at once from one reading, each
 /// in a process of its own. Pitboard's lock lets one switch through; each other decides again
 /// under it, finds the account switched to in use with room, and switches nothing.

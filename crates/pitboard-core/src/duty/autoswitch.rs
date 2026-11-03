@@ -47,7 +47,7 @@ use crate::state::{Account, Key, State};
 use crate::status::Row;
 use crate::switch::Holder;
 use crate::usage::budget;
-use crate::usage::{self, Snapshot, Window, same_reset};
+use crate::usage::{self, Order, Snapshot, Week, Window, same_reset};
 use crate::{home, in_use};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -92,6 +92,35 @@ impl Default for Threshold {
     }
 }
 
+/// How Pitboard switches by itself: at what share, and to which account first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Policy {
+    pub threshold: Threshold,
+    pub order: Order,
+}
+
+/// Why Pitboard switches by itself.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Why {
+    /// This limit of the account in use reached the share, as last read, of the window the
+    /// record of what was tried keeps it under.
+    Limit(Window),
+    /// Under [`Order::ResetsSoonest`], before any limit of the account in use reached the share,
+    /// the account switched to comes first by when what it has left is lost: `to` is its week,
+    /// and `from` the week of the account it left.
+    ResetsFirst { to: Week, from: Week },
+}
+
+impl Why {
+    /// The limit that reached the share, where one did.
+    pub fn limit(&self) -> Option<&Window> {
+        match self {
+            Why::Limit(limit) => Some(limit),
+            Why::ResetsFirst { .. } => None,
+        }
+    }
+}
+
 /// How long an account put in use is left alone, by anyone's switch: as long as the app
 /// waits between reads of every account, so the account switched to has been asked about
 /// once before anything could switch away from it again. A switch that turned out to land
@@ -105,11 +134,10 @@ pub(crate) struct Plan {
     /// The account in use, and its id, under which what was tried for its limits is kept.
     pub(crate) from: Key,
     pub(crate) from_id: String,
-    /// The account to switch to.
+    /// The account to switch to, and its id.
     pub(crate) to: Key,
-    /// The limit of `from` that reached the share, as last read, of the window the ledger
-    /// keeps it under.
-    pub(crate) limit: Window,
+    pub(crate) to_id: String,
+    pub(crate) why: Why,
 }
 
 /// A limit of the account in use at the share that Pitboard does not switch away from, and
@@ -177,12 +205,11 @@ pub enum Auto {
         limit: Window,
         until: i64,
     },
-    /// Claude Code switched from `from` to `to`, as each is typed, because `limit` of
-    /// `from` reached the share.
+    /// Claude Code switched from `from` to `to`, as each is typed, for `why`.
     Switched {
         from: String,
         to: String,
-        limit: Window,
+        why: Why,
         adoption: crate::provider::Adoption,
     },
     /// `limit` of `from` reached the share, and Pitboard will not switch, for `why`.
@@ -343,7 +370,7 @@ fn answered(row: &Row) -> Option<&Snapshot> {
 }
 
 /// What Pitboard would do about `current`, the Claude Code account in use, from `rows`, as
-/// `state` and `ledger` stand at `now`.
+/// `state` and `ledger` stand at `now`, under `policy`.
 ///
 /// Every limit at the share is judged, the furthest past it first. One already switched away
 /// from, or tried for as often as it is tried, leaves the next to be judged on its own: where
@@ -355,12 +382,15 @@ fn answered(row: &Row) -> Option<&Snapshot> {
 /// A limit is given with the reset the ledger keeps its window under, where it keeps one:
 /// answers can give one window's reset a second apart, and the front ends tell one window
 /// from the next by it, so they say once what was recorded once.
+///
+/// Where no limit is at the share, [`Order::ResetsSoonest`] moves to an account that comes
+/// first by its week, as [`early`] says.
 pub(crate) fn decide(
     state: &State,
     current: &Key,
     rows: &[Row],
     ledger: &Ledger,
-    threshold: Threshold,
+    policy: Policy,
     now: i64,
 ) -> Decision {
     let Some((row, reading)) = rows
@@ -370,22 +400,24 @@ pub(crate) fn decide(
     else {
         return Decision::NoReading;
     };
+    let share = policy.threshold.percent();
     let mut reached: Vec<&Window> = reading
         .windows
         .iter()
-        .filter(|window| window.reached(threshold.percent(), now))
+        .filter(|window| window.reached(share, now))
         .collect();
     reached.sort_by(|a, b| fuller(a, b, now));
     let Some(&furthest) = reached.first() else {
-        return Decision::Below {
-            nearest: reading
-                .windows
-                .iter()
-                .filter(|window| window.resets_at.is_none_or(|at| at > now))
-                .min_by(|a, b| fuller(a, b, now))
-                .cloned(),
-            as_of: reading.observed_at,
-        };
+        let early = (policy.order == Order::ResetsSoonest)
+            .then(|| early(state, current, row, reading, rows, ledger, share, now))
+            .flatten();
+        return early.map_or_else(
+            || Decision::Below {
+                nearest: nearest(reading, now),
+                as_of: reading.observed_at,
+            },
+            Decision::Switch,
+        );
     };
     let tried = |limit: &Window| ledger.tried(&row.id, limit);
     let as_kept =
@@ -413,17 +445,8 @@ pub(crate) fn decide(
             },
         );
     };
-    let put_in_use = state
-        .get(current)
-        .and_then(|account| account.last_used_at)
-        .filter(|at| (0..SETTLING_SECONDS).contains(&(now - at)));
-    if let Some(at) = put_in_use {
-        return hold(
-            limit,
-            Skip::Settling {
-                until: at + SETTLING_SECONDS,
-            },
-        );
+    if let Some(until) = settling(state, current, now) {
+        return hold(limit, Skip::Settling { until });
     }
     let waiting = reached
         .iter()
@@ -443,37 +466,28 @@ pub(crate) fn decide(
         .filter_map(tried)
         .flat_map(|tried| tried.passed_over.iter().map(String::as_str))
         .collect();
-    let goes = || {
-        rows.iter().filter(|row| {
-            row.provider == ProviderId::Claude
-                && row.key().is_some_and(|key| key != *current)
-                && row.switchable(now)
-                && !passed_over.contains(&row.id.as_str())
-        })
-    };
-    let best = usage::preferred(goes().filter_map(|row| {
-        let theirs = answered(row)?;
-        let room = usage::room(
-            &theirs.windows,
-            theirs.lists_every_limit,
-            &reading.windows,
-            limit,
-            threshold.percent(),
-            now,
-        )?;
-        Some((row, room))
-    }));
-    match best.and_then(|(row, _)| row.key()) {
-        Some(to) => Decision::Switch(Plan {
+    let candidates =
+        || goes(rows, current, now).filter(|row| !passed_over.contains(&row.id.as_str()));
+    let best = usage::preferred(
+        policy.order,
+        candidates().filter_map(|row| {
+            let theirs = answered(row)?;
+            let room = usage::room(theirs, &reading.windows, limit, share, now)?;
+            Some((row, room))
+        }),
+    );
+    match best.and_then(|(to, _)| Some((to, to.key()?))) {
+        Some((to_row, to)) => Decision::Switch(Plan {
             from: current.clone(),
             from_id: row.id.clone(),
             to,
-            limit: as_kept(limit),
+            to_id: to_row.id.clone(),
+            why: Why::Limit(as_kept(limit)),
         }),
         None => hold(
             limit,
             Skip::NoRoom {
-                unread: goes()
+                unread: candidates()
                     .filter(|row| answered(row).is_none())
                     .filter_map(Row::key)
                     .map(|key| state.typed(&key))
@@ -481,6 +495,73 @@ pub(crate) fn decide(
             },
         ),
     }
+}
+
+/// The move before the share, where there is one: to the first, in [`Order::ResetsSoonest`], of
+/// the accounts that come first by their week ([`usage::resets_first`]). None while the account
+/// in use settles, while a failed move waits, and to an account moved to before the share once
+/// already this week of it, as [`Ledger::open_early`] keeps them. Nothing of these is said:
+/// nothing ran out, and the account in use is still watched.
+#[allow(clippy::too_many_arguments)]
+fn early(
+    state: &State,
+    current: &Key,
+    row: &Row,
+    reading: &Snapshot,
+    rows: &[Row],
+    ledger: &Ledger,
+    share: u8,
+    now: i64,
+) -> Option<Plan> {
+    if settling(state, current, now).is_some() || ledger.early_waits(now) {
+        return None;
+    }
+    let (to_row, room) = usage::preferred(
+        Order::ResetsSoonest,
+        goes(rows, current, now).filter_map(|row| {
+            let room = usage::resets_first(answered(row)?, reading, share, now)?;
+            ledger.open_early(&row.id, room.week).then_some((row, room))
+        }),
+    )?;
+    Some(Plan {
+        from: current.clone(),
+        from_id: row.id.clone(),
+        to: to_row.key()?,
+        to_id: to_row.id.clone(),
+        why: Why::ResetsFirst {
+            to: room.week,
+            from: Week::of(reading, now),
+        },
+    })
+}
+
+/// The other Claude Code accounts that can be switched to at `now`.
+fn goes<'a>(rows: &'a [Row], current: &'a Key, now: i64) -> impl Iterator<Item = &'a Row> {
+    rows.iter().filter(move |row| {
+        row.provider == ProviderId::Claude
+            && row.key().is_some_and(|key| key != *current)
+            && row.switchable(now)
+    })
+}
+
+/// Until when the account `current` settles, where it was put in use less than
+/// `SETTLING_SECONDS` ago.
+fn settling(state: &State, current: &Key, now: i64) -> Option<i64> {
+    state
+        .get(current)
+        .and_then(|account| account.last_used_at)
+        .filter(|at| (0..SETTLING_SECONDS).contains(&(now - at)))
+        .map(|at| at + SETTLING_SECONDS)
+}
+
+/// The fullest of `reading`'s limits still running.
+fn nearest(reading: &Snapshot, now: i64) -> Option<Window> {
+    reading
+        .windows
+        .iter()
+        .filter(|window| window.resets_at.is_none_or(|at| at > now))
+        .min_by(|a, b| fuller(a, b, now))
+        .cloned()
 }
 
 /// What Pitboard has tried and said for each limit of each account that reached the share,
@@ -491,6 +572,10 @@ pub(crate) fn decide(
 #[serde(default)]
 pub(crate) struct Ledger {
     limits: BTreeMap<String, Tried>,
+    /// The moves before the share, by the id of the account moved to, each in the week of it
+    /// that resets at its `resets_at`, or 0 for an account without a weekly limit.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    early: BTreeMap<String, Tried>,
     #[serde(skip_serializing_if = "Option::is_none")]
     asked: Option<Asked>,
 }
@@ -534,6 +619,20 @@ impl Tried {
             || (self.resets_at == 0 && now - self.tries.last() < 7 * 86_400)
     }
 
+    /// What `kept` holds under `key`, begun afresh at `resets_at` where what it holds is of an
+    /// earlier window.
+    fn of(kept: &mut BTreeMap<String, Tried>, key: String, resets_at: Option<i64>) -> &mut Tried {
+        let resets_at = resets_at.unwrap_or(0);
+        let tried = kept.entry(key).or_default();
+        if !same_reset(tried.resets_at, resets_at) {
+            *tried = Tried {
+                resets_at,
+                ..Tried::default()
+            };
+        }
+        tried
+    }
+
     /// `limit` with the reset this window of it was first kept under.
     fn window(&self, limit: &Window) -> Window {
         Window {
@@ -561,16 +660,19 @@ impl Ledger {
     /// write would leave them out.
     pub(crate) fn load(ctx: &Context) -> Ledger {
         let mut ledger: Ledger = ledger::load(&path(ctx));
-        let now = ctx.now();
-        ledger.limits.retain(|_, tried| tried.kept(now));
+        ledger.drop_reset(ctx.now());
         ledger
     }
 
     /// Kept whole, without the windows that have reset.
     pub(crate) fn save(&mut self, ctx: &Context, permit: Permit) -> crate::error::Result<()> {
-        let now = ctx.now();
-        self.limits.retain(|_, tried| tried.kept(now));
+        self.drop_reset(ctx.now());
         ledger::save(permit, &path(ctx), self)
+    }
+
+    fn drop_reset(&mut self, now: i64) {
+        self.limits.retain(|_, tried| tried.kept(now));
+        self.early.retain(|_, tried| tried.kept(now));
     }
 
     /// What was tried for this window of `limit`, where anything was.
@@ -583,40 +685,78 @@ impl Ledger {
     /// What is kept of this window of `limit`, begun afresh where what is kept is of an
     /// earlier one.
     fn trying(&mut self, id: &str, limit: &Window) -> &mut Tried {
-        let resets_at = limit.resets_at.unwrap_or(0);
-        let tried = self.limits.entry(entry(id, limit)).or_default();
-        if !same_reset(tried.resets_at, resets_at) {
-            *tried = Tried {
-                resets_at,
-                ..Tried::default()
-            };
+        Tried::of(&mut self.limits, entry(id, limit), limit.resets_at)
+    }
+
+    /// What is kept for `plan`: of the window of the limit it switches away from, or of the
+    /// week of the account it moves to before the share.
+    fn trying_for(&mut self, plan: &Plan) -> &mut Tried {
+        match &plan.why {
+            Why::Limit(limit) => self.trying(&plan.from_id, limit),
+            Why::ResetsFirst { to, .. } => {
+                Tried::of(&mut self.early, plan.to_id.clone(), to.resets_at())
+            }
         }
-        tried
+    }
+
+    /// What was tried of moves before the share to the account `id` in `week` of it.
+    fn tried_early(&self, id: &str, week: Week) -> Option<&Tried> {
+        self.early
+            .get(id)
+            .filter(|tried| same_reset(tried.resets_at, week.resets_at().unwrap_or(0)))
+    }
+
+    /// Whether the account `id` may be moved to before the share in `week` of it: it was not
+    /// moved to before the share since it last met a limit at the share, nor tried for as
+    /// often as it is tried.
+    pub(crate) fn open_early(&self, id: &str, week: Week) -> bool {
+        self.tried_early(id, week)
+            .is_none_or(|tried| !tried.switched && !tried.tries.spent())
+    }
+
+    /// Whether a move before the share that came to nothing waits at `now`.
+    pub(crate) fn early_waits(&self, now: i64) -> bool {
+        self.early
+            .values()
+            .filter(|tried| !tried.switched && !tried.tries.spent())
+            .any(|tried| now < tried.tries.waits_until())
+    }
+
+    /// The account `id` met a limit at the share while in use, so it may be moved to before the
+    /// share again once it has room. Whether that changed what is kept.
+    pub(crate) fn met_a_limit(&mut self, id: &str) -> bool {
+        self.early.remove(id).is_some()
     }
 
     /// A switch for `plan` begins at `now`.
     pub(crate) fn attempt(&mut self, plan: &Plan, now: i64) {
-        self.trying(&plan.from_id, &plan.limit).tries.attempt(now);
+        self.trying_for(plan).tries.attempt(now);
     }
 
     /// The switch for `plan` failed for a reason trying again may mend: not one of the
     /// attempts, and the next waits longer.
     pub(crate) fn waited(&mut self, plan: &Plan) {
-        self.trying(&plan.from_id, &plan.limit).tries.waited();
+        self.trying_for(plan).tries.waited();
     }
 
     /// The switch for `plan` was made.
     pub(crate) fn switched(&mut self, plan: &Plan) {
-        self.trying(&plan.from_id, &plan.limit).switched = true;
+        self.trying_for(plan).switched = true;
     }
 
     /// The switch for `plan` was refused over the account it would have switched to, and
-    /// the next goes to another.
-    pub(crate) fn pass_over(&mut self, plan: &Plan, to_id: &str) {
-        let tried = self.trying(&plan.from_id, &plan.limit);
+    /// the next goes to another: one away from a limit passes it over until the limit resets,
+    /// and one before the share is not tried to it again.
+    pub(crate) fn pass_over(&mut self, plan: &Plan) {
+        let tried = self.trying_for(plan);
         tried.tries.waits = 0;
-        if !tried.passed_over.iter().any(|id| id == to_id) {
-            tried.passed_over.push(to_id.to_owned());
+        match plan.why {
+            Why::Limit(_) => {
+                if !tried.passed_over.contains(&plan.to_id) {
+                    tried.passed_over.push(plan.to_id.clone());
+                }
+            }
+            Why::ResetsFirst { .. } => tried.tries.spend(),
         }
     }
 
@@ -680,7 +820,7 @@ impl Ledger {
 }
 
 // From files alone, waiting on no lock: what only a decision under the lock can say is `Act`.
-pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
+pub(crate) fn look(ctx: &Context, state: &State, policy: Policy) -> Look {
     let unfinished = crate::switch::unfinished(ctx);
     if let Some(why) = blind(ctx, unfinished) {
         return Look::Stands(Box::new(Auto::NotWatching { why }));
@@ -704,7 +844,7 @@ pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
         Ok(account) => account,
         Err(why) => return Look::Stands(Box::new(Auto::NotWatching { why })),
     };
-    match judge(ctx, state, account, &ledger, threshold, now) {
+    match judge(ctx, state, account, &ledger, policy, now) {
         Judged::Hold(hold) if ledger.said(&hold) => Look::Stands(Box::new(hold.skipped(state))),
         Judged::Switch(_) | Judged::Hold(_) => Look::Act,
         Judged::Stands(Auto::Waiting { .. }) if matches!(others, Holder::Another) => Look::Act,
@@ -749,28 +889,30 @@ pub(crate) enum Judged {
 }
 
 /// What Pitboard would do about `account`, the Claude Code account in use, from the readings
-/// it holds, as `state` and `ledger` stand at `now`. Where Claude Code signs in another way, a
-/// switch would change nothing its sessions use.
+/// it holds, as `state` and `ledger` stand at `now`, under `policy`. Where Claude Code signs in
+/// another way, a switch would change nothing its sessions use: that is said of a limit at the
+/// share, and a move before the share is not made.
 pub(crate) fn judge(
     ctx: &Context,
     state: &State,
     account: &Account,
     ledger: &Ledger,
-    threshold: Threshold,
+    policy: Policy,
     now: i64,
 ) -> Judged {
     let rows = crate::status::gather_offline(ctx, state).rows;
     let key = account.key();
     let typed = state.typed(&key);
-    let plan = match decide(state, &key, &rows, ledger, threshold, now) {
-        Decision::Below { nearest, as_of } => {
-            return Judged::Stands(Auto::Watching {
-                account: typed,
-                nearest,
-                as_of,
-                held_until: budget::held_until(ctx, &account.id),
-            });
-        }
+    let watching = |nearest, as_of| {
+        Judged::Stands(Auto::Watching {
+            account: typed.clone(),
+            nearest,
+            as_of,
+            held_until: budget::held_until(ctx, &account.id),
+        })
+    };
+    let plan = match decide(state, &key, &rows, ledger, policy, now) {
+        Decision::Below { nearest, as_of } => return watching(nearest, as_of),
         Decision::NoReading => {
             return Judged::Stands(Auto::NotWatching {
                 why: Blind::NoReading { account: typed },
@@ -790,12 +932,24 @@ pub(crate) fn judge(
     if overridden.is_empty() {
         return Judged::Switch(plan);
     }
-    Judged::Hold(Hold {
-        from: plan.from,
-        from_id: plan.from_id,
-        limit: plan.limit,
-        why: Skip::Overridden(overridden),
-    })
+    match plan.why {
+        Why::Limit(limit) => Judged::Hold(Hold {
+            from: plan.from,
+            from_id: plan.from_id,
+            limit,
+            why: Skip::Overridden(overridden),
+        }),
+        Why::ResetsFirst { .. } => {
+            let reading = rows
+                .iter()
+                .find(|row| row.key().as_ref() == Some(&key))
+                .and_then(answered);
+            watching(
+                reading.and_then(|reading| nearest(reading, now)),
+                reading.and_then(|reading| reading.observed_at),
+            )
+        }
+    }
 }
 
 #[cfg(test)]
@@ -858,6 +1012,19 @@ mod tests {
         state
     }
 
+    impl Plan {
+        fn limit(&self) -> &Window {
+            self.why.limit().expect("a switch away from a limit")
+        }
+
+        fn limit_mut(&mut self) -> &mut Window {
+            match &mut self.why {
+                Why::Limit(limit) => limit,
+                Why::ResetsFirst { .. } => panic!("a move before the share"),
+            }
+        }
+    }
+
     /// What is decided about the account `rows` have in use.
     fn decided_with(
         state: &State,
@@ -866,12 +1033,32 @@ mod tests {
         threshold: Threshold,
         now: i64,
     ) -> Decision {
+        decided_by(
+            state,
+            rows,
+            ledger,
+            Policy {
+                threshold,
+                order: Order::MostLeft,
+            },
+            now,
+        )
+    }
+
+    /// What is decided about the account `rows` have in use, under `policy`.
+    fn decided_by(
+        state: &State,
+        rows: &[Row],
+        ledger: &Ledger,
+        policy: Policy,
+        now: i64,
+    ) -> Decision {
         let current = rows
             .iter()
             .find(|row| row.signed_in)
             .and_then(Row::key)
             .expect("an account in use");
-        decide(state, &current, rows, ledger, threshold, now)
+        decide(state, &current, rows, ledger, policy, now)
     }
 
     fn decided(rows: &[Row]) -> Decision {
@@ -989,7 +1176,7 @@ mod tests {
             (plan.from.label.as_str(), plan.from_id.as_str()),
             ("work", "work")
         );
-        assert_eq!(plan.limit.kind, LimitKind::Session);
+        assert_eq!(plan.limit().kind, LimitKind::Session);
     }
 
     /// The share is judged as the app, `pitboard status` and the status line show it: a
@@ -1043,7 +1230,7 @@ mod tests {
         let Decision::Switch(plan) = decided(&[work_at_both(), spare()]) else {
             panic!("a switch")
         };
-        assert_eq!(plan.limit.kind, LimitKind::WeeklyAll);
+        assert_eq!(plan.limit().kind, LimitKind::WeeklyAll);
     }
 
     /// A limit whose reset has passed counts as reset, and is not the one nearest the share.
@@ -1083,7 +1270,7 @@ mod tests {
             &Key::new(ProviderId::Claude, "home"),
             &rows,
             &Ledger::default(),
-            Threshold::DEFAULT,
+            Policy::default(),
             NOW,
         );
         assert!(matches!(decision, Decision::Below { .. }), "{decision:?}");
@@ -1439,7 +1626,7 @@ mod tests {
         ledger.attempt(&plan, NOW);
         let at = |now| decided_with(&state, &rows, &ledger, Threshold::DEFAULT, now);
         let waiting = Decision::Waiting {
-            limit: plan.limit.clone(),
+            limit: plan.limit().clone(),
             until: NOW + RETRY_SECONDS,
         };
         assert_eq!(at(NOW + RETRY_SECONDS - 1), waiting);
@@ -1465,7 +1652,7 @@ mod tests {
             assert_eq!(
                 decided(at + wait - 1),
                 Decision::Waiting {
-                    limit: plan.limit.clone(),
+                    limit: plan.limit().clone(),
                     until: at + wait
                 },
                 "within {wait} s"
@@ -1483,7 +1670,7 @@ mod tests {
         let plan = plan(&rows);
         assert_eq!(plan.to.label, "spare");
         ledger.attempt(&plan, NOW);
-        ledger.pass_over(&plan, "spare");
+        ledger.pass_over(&plan);
         assert_eq!(
             to(&decided_with(
                 &state,
@@ -1504,12 +1691,12 @@ mod tests {
         let state = state_of(&rows);
         let weekly = plan(&rows);
         assert_eq!(
-            (weekly.limit.kind.as_str(), weekly.to.label.as_str()),
+            (weekly.limit().kind.as_str(), weekly.to.label.as_str()),
             ("weekly_all", "spare")
         );
         let mut ledger = Ledger::default();
         ledger.attempt(&weekly, NOW);
-        ledger.pass_over(&weekly, "spare");
+        ledger.pass_over(&weekly);
         let after = NOW + RETRY_SECONDS;
         let next = |ledger: &Ledger| match decided_with(
             &state,
@@ -1523,14 +1710,14 @@ mod tests {
         };
         let again = next(&ledger);
         assert_eq!(
-            (again.limit.kind.as_str(), again.to.label.as_str()),
+            (again.limit().kind.as_str(), again.to.label.as_str()),
             ("weekly_all", "other")
         );
         ledger.attempt(&again, after);
         ledger.switched(&again);
         let session = next(&ledger);
         assert_eq!(
-            (session.limit.kind.as_str(), session.to.label.as_str()),
+            (session.limit().kind.as_str(), session.to.label.as_str()),
             ("session", "other"),
             "the account put back in use, its five-hour limit is not switched to spare either"
         );
@@ -1546,7 +1733,7 @@ mod tests {
         let state = state_of(&rows);
         let weekly = plan(&rows);
         let session = Plan {
-            limit: window("session", 96.0),
+            why: Why::Limit(window("session", 96.0)),
             ..weekly.clone()
         };
         let mut ledger = Ledger::default();
@@ -1554,7 +1741,7 @@ mod tests {
             ledger.attempt(&weekly, NOW);
         }
         let waiting = Decision::Waiting {
-            limit: session.limit.clone(),
+            limit: session.limit().clone(),
             until: NOW + RETRY_SECONDS,
         };
         let at =
@@ -1562,7 +1749,7 @@ mod tests {
         assert_eq!(at(&ledger, NOW + RETRY_SECONDS - 1), waiting);
         let decision = at(&ledger, NOW + RETRY_SECONDS);
         assert!(
-            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == LimitKind::Session),
+            matches!(&decision, Decision::Switch(plan) if plan.limit().kind == LimitKind::Session),
             "{decision:?}"
         );
 
@@ -1594,7 +1781,7 @@ mod tests {
                 NOW + 1
             ),
             Decision::Waiting {
-                limit: plan.limit.clone(),
+                limit: plan.limit().clone(),
                 until: NOW + RETRY_SECONDS
             }
         );
@@ -1608,13 +1795,13 @@ mod tests {
         let rows = [work_at_both(), spare()];
         let state = state_of(&rows);
         let weekly = plan(&rows);
-        assert_eq!(weekly.limit.kind, LimitKind::WeeklyAll);
+        assert_eq!(weekly.limit().kind, LimitKind::WeeklyAll);
         let mut ledger = Ledger::default();
         ledger.attempt(&weekly, NOW - 3600);
         ledger.switched(&weekly);
         let decision = decided_with(&state, &rows, &ledger, Threshold::DEFAULT, NOW);
         assert!(
-            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == LimitKind::Session),
+            matches!(&decision, Decision::Switch(plan) if plan.limit().kind == LimitKind::Session),
             "{decision:?}"
         );
     }
@@ -1634,7 +1821,7 @@ mod tests {
         put_in_use(&mut state, NOW - 10);
         assert_eq!(
             decided_with(&state, &rows, &ledger, Threshold::DEFAULT, NOW),
-            held(&plan.limit, Skip::AlreadyLeft)
+            held(plan.limit(), Skip::AlreadyLeft)
         );
     }
 
@@ -1654,7 +1841,7 @@ mod tests {
         }
         assert_eq!(
             at(&ledger, NOW + RETRY_SECONDS / 2),
-            held(&plan.limit, Skip::GaveUp)
+            held(plan.limit(), Skip::GaveUp)
         );
 
         let mut ledger = Ledger::default();
@@ -1667,7 +1854,7 @@ mod tests {
         }
         assert_eq!(
             at(&ledger, NOW + 300),
-            held(&plan.limit, Skip::GaveUp),
+            held(plan.limit(), Skip::GaveUp),
             "after failures that waiting may mend"
         );
     }
@@ -1836,16 +2023,16 @@ mod tests {
         let rows = [work_at(96.0), spare()];
         let mut ledger = Ledger::default();
         let mut plan = plan(&rows);
-        let resets = plan.limit.resets_at.unwrap();
-        plan.limit.resets_at = Some(resets + 59);
+        let resets = plan.limit().resets_at.unwrap();
+        plan.limit_mut().resets_at = Some(resets + 59);
         ledger.attempt(&plan, NOW - 3600);
         ledger.switched(&plan);
         let state = state_of(&rows);
         assert_eq!(
             decided_with(&state, &rows, &ledger, Threshold::DEFAULT, NOW),
-            held(&plan.limit, Skip::AlreadyLeft)
+            held(plan.limit(), Skip::AlreadyLeft)
         );
-        plan.limit.resets_at = Some(resets + 61);
+        plan.limit_mut().resets_at = Some(resets + 61);
         let mut ledger = Ledger::default();
         ledger.attempt(&plan, NOW - 3600);
         ledger.switched(&plan);
@@ -1870,7 +2057,7 @@ mod tests {
         let rows = [work_at(96.0), spare()];
         let state = state_of(&rows);
         let plan = plan(&rows);
-        let kept = plan.limit.resets_at.expect("a reset");
+        let kept = plan.limit().resets_at.expect("a reset");
         let mut m = crate::switch::harness::machine("autoswitch-kept-past-reset");
         let clock = std::sync::Arc::new(crate::time::FixedClock::at(NOW));
         m.ctx = m.ctx.clone().with_clock(clock.clone());
@@ -1891,7 +2078,7 @@ mod tests {
                 Threshold::DEFAULT,
                 kept
             ),
-            held(&plan.limit, Skip::AlreadyLeft)
+            held(plan.limit(), Skip::AlreadyLeft)
         );
         clock.advance(59);
         assert_eq!(
@@ -1924,5 +2111,263 @@ mod tests {
             )),
             Some("spare")
         );
+    }
+
+    const SOONEST: Policy = Policy {
+        threshold: Threshold::DEFAULT,
+        order: Order::ResetsSoonest,
+    };
+
+    /// A limit of every model's week, `percent` used, resetting `days` from now.
+    fn week(percent: f64, days: i64) -> Window {
+        Window {
+            resets_at: Some(NOW + days * crate::time::DAY),
+            ..window("weekly_all", percent)
+        }
+    }
+
+    /// `label`, parked or in use, with its five-hour limit at `session` and its week resetting
+    /// in `days`.
+    fn weekly(label: &str, signed_in: bool, session: f64, days: i64) -> Row {
+        row(
+            label,
+            signed_in,
+            vec![window("session", session), week(40.0, days)],
+        )
+    }
+
+    fn seat(label: &str, signed_in: bool, session: f64) -> Row {
+        row(
+            label,
+            signed_in,
+            vec![
+                window("session", session),
+                scoped("weekly_scoped", "Fable", 0.0),
+            ],
+        )
+    }
+
+    fn soonest(rows: &[Row], ledger: &Ledger, now: i64) -> Decision {
+        decided_by(&state_of(rows), rows, ledger, SOONEST, now)
+    }
+
+    fn early_plan(rows: &[Row]) -> Plan {
+        match soonest(rows, &Ledger::default(), NOW) {
+            Decision::Switch(plan) => plan,
+            other => panic!("a move before the share, not {other:?}"),
+        }
+    }
+
+    #[test]
+    fn under_resets_soonest_an_account_whose_week_resets_sooner_is_moved_to_below_the_share() {
+        let rows = [
+            weekly("work", true, 30.0, 5),
+            weekly("later", false, 0.0, 3),
+            weekly("soon", false, 10.0, 1),
+        ];
+        let plan = early_plan(&rows);
+        assert_eq!(
+            (plan.to.label.as_str(), plan.to_id.as_str(), &plan.why),
+            (
+                "soon",
+                "soon",
+                &Why::ResetsFirst {
+                    to: Week::Resets(NOW + crate::time::DAY),
+                    from: Week::Resets(NOW + 5 * crate::time::DAY),
+                }
+            )
+        );
+        assert!(
+            matches!(decided(&rows), Decision::Below { .. }),
+            "most left waits for the share"
+        );
+    }
+
+    #[test]
+    fn an_account_with_less_five_hour_room_is_passed_for_the_next_that_resets_first() {
+        let rows = [
+            weekly("work", true, 30.0, 5),
+            weekly("soon", false, 50.0, 1),
+            weekly("next", false, 0.0, 3),
+        ];
+        assert_eq!(early_plan(&rows).to.label, "next");
+        let only = [
+            weekly("work", true, 30.0, 5),
+            weekly("soon", false, 50.0, 1),
+        ];
+        assert!(matches!(
+            soonest(&only, &Ledger::default(), NOW),
+            Decision::Below { .. }
+        ));
+    }
+
+    #[test]
+    fn a_team_seat_is_moved_to_early_from_a_weekly_account_and_never_from_another_seat() {
+        let rows = [
+            weekly("work", true, 30.0, 1),
+            weekly("soon", false, 0.0, 0),
+            seat("seat", false, 20.0),
+        ];
+        let plan = early_plan(&rows);
+        assert_eq!(
+            (plan.to.label.as_str(), &plan.why),
+            (
+                "seat",
+                &Why::ResetsFirst {
+                    to: Week::Free,
+                    from: Week::Resets(NOW + crate::time::DAY),
+                }
+            )
+        );
+        let seats = [seat("work", true, 30.0), seat("other", false, 0.0)];
+        assert!(matches!(
+            soonest(&seats, &Ledger::default(), NOW),
+            Decision::Below { .. }
+        ));
+    }
+
+    #[test]
+    fn at_the_share_resets_soonest_chooses_the_week_that_resets_first() {
+        let rows = [
+            row("work", true, vec![window("session", 96.0), week(20.0, 5)]),
+            weekly("roomy", false, 0.0, 6),
+            weekly("soon", false, 60.0, 2),
+        ];
+        assert_eq!(to(&decided(&rows)), Some("roomy"));
+        let decision = soonest(&rows, &Ledger::default(), NOW);
+        assert!(
+            matches!(&decision, Decision::Switch(plan) if plan.to.label == "soon" && plan.why.limit().is_some()),
+            "{decision:?}"
+        );
+    }
+
+    #[test]
+    fn a_limit_at_the_share_held_back_is_no_move_before_it() {
+        let rows = [
+            row("work", true, vec![window("session", 96.0), week(20.0, 5)]),
+            weekly("soon", false, 0.0, 1),
+        ];
+        let state = state_of(&rows);
+        let Decision::Switch(plan) = decided(&rows) else {
+            panic!("a switch at the share");
+        };
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW - 600);
+        ledger.switched(&plan);
+        assert_eq!(
+            decided_by(&state, &rows, &ledger, SOONEST, NOW),
+            held(plan.limit(), Skip::AlreadyLeft)
+        );
+    }
+
+    #[test]
+    fn an_early_move_waits_while_the_account_in_use_settles() {
+        let rows = [weekly("work", true, 30.0, 5), weekly("soon", false, 0.0, 1)];
+        let mut state = state_of(&rows);
+        put_in_use(&mut state, NOW - 60);
+        let decision = decided_by(&state, &rows, &Ledger::default(), SOONEST, NOW);
+        assert!(matches!(decision, Decision::Below { .. }), "{decision:?}");
+        let later = decided_by(&state, &rows, &Ledger::default(), SOONEST, NOW + 240);
+        assert!(matches!(later, Decision::Switch(_)), "{later:?}");
+    }
+
+    #[test]
+    fn codex_is_never_moved_to_early() {
+        let mut codex = weekly("codex", false, 0.0, 1);
+        codex.provider = ProviderId::Codex;
+        let rows = [weekly("work", true, 30.0, 5), codex];
+        assert!(matches!(
+            soonest(&rows, &Ledger::default(), NOW),
+            Decision::Below { .. }
+        ));
+    }
+
+    /// Once moved to, an account is not moved to again before the share until it has met a
+    /// limit at the share, as Pitboard leaves it, or its week has reset: somebody who put the
+    /// account it left back in use meant to.
+    #[test]
+    fn an_account_moved_to_early_is_not_again_until_it_meets_a_limit_or_its_week_resets() {
+        let rows = [weekly("work", true, 30.0, 5), weekly("soon", false, 0.0, 1)];
+        let plan = early_plan(&rows);
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW - 600);
+        ledger.switched(&plan);
+        assert!(matches!(
+            soonest(&rows, &ledger, NOW),
+            Decision::Below { .. }
+        ));
+        let mut met = ledger.clone();
+        assert!(met.met_a_limit("soon"));
+        assert!(!met.met_a_limit("soon"), "once");
+        assert!(matches!(soonest(&rows, &met, NOW), Decision::Switch(_)));
+        let last_week = Plan {
+            why: Why::ResetsFirst {
+                to: Week::Resets(NOW - 6 * crate::time::DAY),
+                from: Week::Resets(NOW),
+            },
+            ..plan
+        };
+        let mut before = Ledger::default();
+        before.attempt(&last_week, NOW - 7 * crate::time::DAY);
+        before.switched(&last_week);
+        assert!(matches!(soonest(&rows, &before, NOW), Decision::Switch(_)));
+    }
+
+    #[test]
+    fn an_early_move_that_came_to_nothing_waits_and_is_tried_as_often_as_any() {
+        let rows = [weekly("work", true, 30.0, 5), weekly("soon", false, 0.0, 1)];
+        let plan = early_plan(&rows);
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW);
+        ledger.waited(&plan);
+        assert!(matches!(
+            soonest(&rows, &ledger, NOW + RETRY_SECONDS - 1),
+            Decision::Below { .. }
+        ));
+        assert!(matches!(
+            soonest(&rows, &ledger, NOW + RETRY_SECONDS),
+            Decision::Switch(_)
+        ));
+        let mut spent = Ledger::default();
+        for at in 0..i64::from(ATTEMPTS) {
+            spent.attempt(&plan, NOW - 3600 + at);
+        }
+        assert!(matches!(
+            soonest(&rows, &spent, NOW),
+            Decision::Below { .. }
+        ));
+    }
+
+    #[test]
+    fn an_early_move_refused_over_the_account_goes_to_the_next() {
+        let rows = [
+            weekly("work", true, 30.0, 5),
+            weekly("soon", false, 0.0, 1),
+            weekly("next", false, 0.0, 3),
+        ];
+        let plan = early_plan(&rows);
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW);
+        ledger.pass_over(&plan);
+        assert_eq!(to(&soonest(&rows, &ledger, NOW)), Some("next"));
+    }
+
+    #[test]
+    fn a_record_of_early_moves_reads_back_and_is_kept_until_the_week_resets() {
+        let mut m = crate::switch::harness::machine("autoswitch-early-kept");
+        let clock = std::sync::Arc::new(crate::time::FixedClock::at(NOW));
+        m.ctx = m.ctx.clone().with_clock(clock.clone());
+        let ctx = m.ctx.clone();
+        let rows = [weekly("work", true, 30.0, 5), weekly("soon", false, 0.0, 1)];
+        let plan = early_plan(&rows);
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW);
+        ledger.switched(&plan);
+        ledger.save(&ctx, Permit::for_a_test()).expect("saved");
+        assert_eq!(Ledger::load(&ctx), ledger);
+        let written = std::fs::read_to_string(path(&ctx)).expect("written");
+        assert!(written.contains(r#""early":{"soon":"#), "{written}");
+        clock.advance(crate::time::DAY + 61);
+        assert_eq!(Ledger::load(&ctx), Ledger::default());
     }
 }

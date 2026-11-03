@@ -68,11 +68,11 @@ pub(crate) struct Stub {
     /// What the core's look at whether to switch Claude Code by itself gives.
     pub look: Result<AutoLooked, Refusal>,
     /// The share each look was asked at, in order.
-    pub looked_at: Vec<u8>,
+    pub looked_at: Vec<pitboard_core::duty::autoswitch::Policy>,
     /// What switching Claude Code by itself gives.
     pub auto: Result<AutoSwitched, Refusal>,
     /// The share each switch by itself was asked at, in order.
-    pub auto_at: Vec<u8>,
+    pub auto_at: Vec<pitboard_core::duty::autoswitch::Policy>,
     /// What runs each tool with its login in memory, as the core's holder detection finds it
     /// in the process list.
     pub held: HashMap<ProviderId, Vec<Holding>>,
@@ -469,14 +469,14 @@ impl Stub {
                     done: self.switched.clone().map_err(|refused| refused.error()),
                 }
             }
-            Job::AutoLook { at } => {
-                self.looked_at.push(at);
+            Job::AutoLook { policy } => {
+                self.looked_at.push(policy);
                 Answer::AutoLooked {
                     looked: self.look.clone().map_err(|refused| refused.error()),
                 }
             }
-            Job::AutoSwitch { at } => {
-                self.auto_at.push(at);
+            Job::AutoSwitch { policy } => {
+                self.auto_at.push(policy);
                 Answer::AutoSwitched {
                     done: self.auto.clone().map_err(|refused| refused.error()),
                 }

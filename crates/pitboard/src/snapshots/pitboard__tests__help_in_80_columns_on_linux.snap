@@ -126,15 +126,19 @@ Commands:
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-      --at <PERCENT>  Switch once a limit of the account in use reaches this
-                      share, from 50 to 99 [default: 95]
-      --json          Print JSON instead of text
-      --no-switch     Never switch, and only warm up the accounts `pitboard warm
-                      on` turned on
-      --once          Decide once whether to switch, from the usage Pitboard
-                      last measured, asking no service for usage, and stop.
-                      Warms nothing up
-  -h, --help          Print help
+      --at <PERCENT>   Switch once a limit of the account in use reaches this
+                       share, from 50 to 99 [default: 95]
+      --json           Print JSON instead of text
+      --order <ORDER>  Which account to switch to first: `most-left`, the one
+                       with the most room, or `resets-soonest`, the one whose
+                       week resets soonest, even before the share [default:
+                       most-left]
+      --no-switch      Never switch, and only warm up the accounts `pitboard
+                       warm on` turned on
+      --once           Decide once whether to switch, from the usage Pitboard
+                       last measured, asking no service for usage, and stop.
+                       Warms nothing up
+  -h, --help           Print help
 
 Anthropic's terms may cover automatic switching and warm-ups:
 https://docs.usepitboard.com/concepts/limits#is-this-allowed
@@ -145,12 +149,16 @@ each sign-in
 Usage: pitboard watch install [OPTIONS]
 
 Options:
-      --at <PERCENT>  Switch once a limit of the account in use reaches this
-                      share, from 50 to 99 [default: 95]
-      --json          Print JSON instead of text
-      --no-switch     Never switch, and only warm up the accounts `pitboard warm
-                      on` turned on
-  -h, --help          Print help
+      --at <PERCENT>   Switch once a limit of the account in use reaches this
+                       share, from 50 to 99 [default: 95]
+      --json           Print JSON instead of text
+      --order <ORDER>  Which account to switch to first: `most-left`, the one
+                       with the most room, or `resets-soonest`, the one whose
+                       week resets soonest, even before the share [default:
+                       most-left]
+      --no-switch      Never switch, and only warm up the accounts `pitboard
+                       warm on` turned on
+  -h, --help           Print help
 $ pitboard watch status --help
 Say whether it is installed
 

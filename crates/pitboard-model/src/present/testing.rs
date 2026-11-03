@@ -4,7 +4,7 @@
 use super::{AccountItem, RowEnd};
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
-use crate::{Account, Awaiting, Front, Parked, Status, Usage, Warning};
+use crate::{Account, Awaiting, Front, Parked, Status, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
@@ -274,10 +274,12 @@ impl AccountMade {
                 .standing
                 .unwrap_or_else(|| standing_of(self.signed_in, self.label.is_some())),
             parked: self.parked,
-            usage: self.measured.then_some(Usage {
+            usage: self.measured.then_some(pitboard_core::usage::Snapshot {
                 observed_at: Some(self.read_at),
+                answered_at: Some(self.read_at),
                 windows: self.windows,
                 lists_every_limit: self.provider == ProviderId::Claude,
+                source: pitboard_core::usage::Source::Remembered,
             }),
             stale: None,
             stale_explanation: self.explanation,

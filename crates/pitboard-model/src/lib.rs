@@ -44,7 +44,7 @@ pub use model::{
     EarlierPreferences, EarlierWindowRecords, Intent, Listener, LocalTime, Notice, NoticeButton,
     NoticeButtonKind, NoticeButtonOffer, Notifier, OtherApps, OutsideAnswer, OutsideAsk, Pane,
     Part, PitboardModel, Place, PlatformError, ReadFailure, RunningSignIn, SettingsSection, Sheet,
-    Snapshot, Tip, WindowRequest,
+    Snapshot, SwitchOrder, Tip, WindowRequest,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -59,12 +59,12 @@ pub use present::{
     AtLimitChoice, AtLimitShown, CheckGroup, CheckLine, ChecksShown, Choice, CommandLineShown,
     DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer,
     LimitKind, LimitRow, LinkPicker, MachineShown, MenuEntry, MenuNotices, Missing, NameCheck,
-    NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
-    PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
-    SheetText, SheetTool, SigningInText, StatusItemShown, StoreDeletion, StowText, TermsShown,
-    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WatchServiceShown, WelcomeLogin,
-    WelcomeShown, WelcomeStep, WelcomeTool, WindowQuestion, WindowWaiting, check_name,
-    downloads_quit_question,
+    NextStep, NoteKind, NoticeAction, OpenWindow, OrderChoice, PageLoad, PanelNotice,
+    PickerAccount, PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink,
+    SetupStep, Severity, SheetText, SheetTool, SigningInText, StatusItemShown, StoreDeletion,
+    StowText, TermsShown, WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WatchServiceShown,
+    WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool, WindowQuestion, WindowWaiting,
+    check_name, downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
@@ -361,14 +361,6 @@ pub(crate) enum Schedule {
     Unsupported,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Usage {
-    pub observed_at: Option<i64>,
-    pub windows: Vec<usage::Window>,
-    // a limit `windows` leaves out is one the account does not have
-    pub lists_every_limit: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parked {
     pub refresh_expires_at: Option<i64>,
@@ -393,7 +385,7 @@ pub(crate) struct Account {
     pub signed_in: bool,
     pub standing: Standing,
     pub parked: Option<Parked>,
-    pub usage: Option<Usage>,
+    pub usage: Option<usage::Snapshot>,
     pub stale: Option<Stale>,
     pub stale_explanation: Option<String>,
     pub plan: Option<String>,

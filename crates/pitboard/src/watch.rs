@@ -15,7 +15,7 @@
 
 use crate::{Report, emit, followed, located, ui};
 use clap::Subcommand;
-use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
+use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Policy, Skip, Threshold, Why};
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals};
 use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
@@ -23,7 +23,7 @@ use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard};
 use pitboard_core::switch::warm::{WarmUp, told_apart};
-use pitboard_core::usage::Window;
+use pitboard_core::usage::{Order, Window};
 use pitboard_core::watch_service::Switching;
 use pitboard_core::words;
 use serde_json::{Value, json};
@@ -43,31 +43,56 @@ pub(crate) struct Share {
             .range(i64::from(Threshold::LOWEST)..=i64::from(Threshold::HIGHEST)),
     )]
     at: u8,
+    /// Which account to switch to first: `most-left`, the one with the most room, or
+    /// `resets-soonest`, the one whose week resets soonest, even before the share
+    #[arg(
+        long,
+        value_name = "ORDER",
+        value_enum,
+        default_value_t = First::MostLeft,
+        hide_possible_values = true
+    )]
+    order: First,
     /// Never switch, and only warm up the accounts `pitboard warm on` turned on
-    #[arg(long, conflicts_with = "at")]
+    #[arg(long, conflicts_with_all = ["at", "order"])]
     no_switch: bool,
+}
+
+/// [`Order`], as `--order` takes it.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum First {
+    MostLeft,
+    ResetsSoonest,
 }
 
 impl Share {
     // The parser takes only a share there can be.
-    pub(crate) fn threshold(&self) -> Threshold {
-        Threshold::new(self.at).unwrap_or_default()
+    pub(crate) fn policy(&self) -> Policy {
+        Policy {
+            threshold: Threshold::new(self.at).unwrap_or_default(),
+            order: match self.order {
+                First::MostLeft => Order::MostLeft,
+                First::ResetsSoonest => Order::ResetsSoonest,
+            },
+        }
     }
 
     pub(crate) fn switching(&self) -> Switching {
         if self.no_switch {
             Switching::Never
         } else {
-            Switching::At(self.threshold())
+            Switching::At(self.policy())
         }
     }
 }
 
-// What a line of `watch`'s JSON says it does at a limit: the share, or none, and whether it
-// switches, none where an installed service does not say.
+// What a line of `watch`'s JSON says it does at a limit: the share and the order, or none, and
+// whether it switches, none where an installed service does not say.
 fn switching_json(switching: Option<Switching>) -> Value {
+    let policy = switching.and_then(Switching::policy);
     json!({
-        "threshold": switching.and_then(Switching::at).map(Threshold::percent),
+        "threshold": policy.map(|policy| policy.threshold.percent()),
+        "order": policy.map(|policy| policy.order.code()),
         "switches": switching.map(|switching| switching != Switching::Never),
     })
 }
@@ -112,12 +137,13 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                         "watch",
                         located(json!(true), &location, switching_json(Some(switching))),
                         match switching {
-                            Switching::At(at) => format!(
+                            Switching::At(policy) => format!(
                                 "Pitboard watches Claude Code in the background from now on, and \
                                  at each sign-in. It switches once a limit of the account in use \
-                                 reaches {}%, and warms up the accounts `pitboard warm on` turned \
-                                 on.\n{}{location}\n\n{}\n",
-                                at.percent(),
+                                 reaches {}%{}, and warms up the accounts `pitboard warm on` \
+                                 turned on.\n{}{location}\n\n{}\n",
+                                policy.threshold.percent(),
+                                words::first_by(policy.order),
                                 linger,
                                 terms()
                             ),
@@ -143,9 +169,10 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                     format!(
                         "Pitboard watches Claude Code in the background{}.\n{location}\n{}",
                         match switching {
-                            Some(Switching::At(at)) => format!(
-                                ", and switches once a limit of the account in use reaches {}%",
-                                at.percent()
+                            Some(Switching::At(policy)) => format!(
+                                ", and switches once a limit of the account in use reaches {}%{}",
+                                policy.threshold.percent(),
+                                words::first_by(policy.order)
                             ),
                             Some(Switching::Never) => ", and never switches: it only warms up the \
                                                        accounts `pitboard warm on` turned on"
@@ -212,8 +239,8 @@ pub(crate) fn terms() -> String {
 /// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
 /// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
 /// stored, as a switch does.
-pub(crate) fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
-    said(pitboard.auto_switch(threshold), threshold, false)
+pub(crate) fn once(pitboard: &Pitboard, policy: Policy) -> Report {
+    said(pitboard.auto_switch(policy), policy.threshold, false)
 }
 
 /// Watches until it is stopped, saying the account it watches whenever its last line said
@@ -257,13 +284,13 @@ pub(crate) fn run(
         let due = refusals.due(instant(decided_at), every());
         if stamps != seen || instant(now) >= due || now < decided_at {
             (seen, decided_at) = (stamps, now);
-            let outcome = switching.at().and_then(|threshold| {
+            let outcome = switching.policy().and_then(|policy| {
                 decided(
                     refusals.waits(instant(now)),
-                    || pitboard.auto_look(threshold),
-                    || pitboard.auto_switch(threshold),
+                    || pitboard.auto_look(policy),
+                    || pitboard.auto_switch(policy),
                 )
-                .map(|outcome| (outcome, threshold))
+                .map(|outcome| (outcome, policy.threshold))
             });
             if let Some((outcome, threshold)) = outcome {
                 match &outcome {
@@ -313,10 +340,11 @@ fn started(switching: Switching, warming: Option<&Overview>, scheduled: bool) ->
         "Stop with Ctrl-C."
     };
     match switching {
-        Switching::At(at) => format!(
+        Switching::At(policy) => format!(
             "Watching Claude Code. Pitboard switches to another of your accounts once a \
-             limit of the one in use reaches {}%{}. {}\n",
-            at.percent(),
+             limit of the one in use reaches {}%{}{}. {}\n",
+            policy.threshold.percent(),
+            words::first_by(policy.order),
             warmed,
             stop
         ),
@@ -418,6 +446,7 @@ fn watching_json(switching: Switching, warming: Option<&Overview>) -> Value {
     let mut data = json!({
         "event": "watching",
         "threshold": switching.at().map(Threshold::percent),
+        "order": switching.policy().map(|policy| policy.order.code()),
         "switches": switching != Switching::Never,
     });
     if let Some(overview) = warming.filter(|overview| warms_any(overview)) {
@@ -616,26 +645,49 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
         Auto::Switched {
             from,
             to,
-            limit,
+            why,
             adoption,
         } => {
             let (_, follows, adoption_json) = followed(ProviderId::Claude, &adoption);
+            let (from_bold, to_bold) = (ui::paint(ui::BOLD, &from), ui::paint(ui::BOLD, &to));
+            let mut data = json!({
+                "event": "switched",
+                "threshold": percent,
+                "from": from,
+                "to": to,
+                "limit": why.limit().map(limit_json),
+                "adoption": adoption_json,
+            });
+            let because = match why {
+                Why::Limit(limit) => {
+                    data["reason"] = json!("limit");
+                    words::has_used(&from_bold, &words::share_of_limit(&limit))
+                }
+                Why::ResetsFirst {
+                    to: ahead,
+                    from: behind,
+                } => {
+                    data["reason"] = json!("resets_first");
+                    data["to_resets_at"] = json!(ahead.resets_at());
+                    data["from_resets_at"] = json!(behind.resets_at());
+                    match (ahead.resets_at(), behind.resets_at()) {
+                        (Some(to_at), from_at) => words::resets_before(
+                            &to_bold,
+                            &from_bold,
+                            from_at
+                                .map(|from_at| (moment(to_at), moment(from_at)))
+                                .as_ref()
+                                .map(|(to_at, from_at)| (to_at.as_str(), from_at.as_str())),
+                        ),
+                        (None, _) => words::no_weekly_limit(&to_bold),
+                    }
+                }
+            };
             (
-                json!({
-                    "event": "switched",
-                    "threshold": percent,
-                    "from": from,
-                    "to": to,
-                    "limit": limit_json(&limit),
-                    "adoption": adoption_json,
-                }),
+                data,
                 format!(
                     "{} {follows}",
-                    words::auto_switched(
-                        &ui::paint(ui::BOLD, &from),
-                        &ui::paint(ui::BOLD, &to),
-                        &words::share_of_limit(&limit)
-                    )
+                    words::auto_switched(&from_bold, &to_bold, &because)
                 ),
             )
         }
@@ -968,13 +1020,69 @@ mod tests {
     #[test]
     fn watch_starts_by_saying_whether_it_switches() {
         assert_eq!(
-            watching_json(Switching::At(Threshold::DEFAULT), None),
-            json!({"event": "watching", "threshold": 95, "switches": true})
+            watching_json(Switching::At(Policy::default()), None),
+            json!({"event": "watching", "threshold": 95, "order": "most-left", "switches": true})
+        );
+        let soonest = Policy {
+            order: Order::ResetsSoonest,
+            ..Policy::default()
+        };
+        assert_eq!(
+            watching_json(Switching::At(soonest), None)["order"],
+            json!("resets-soonest")
         );
         assert_eq!(
             watching_json(Switching::Never, None),
-            json!({"event": "watching", "threshold": null, "switches": false})
+            json!({"event": "watching", "threshold": null, "order": null, "switches": false})
         );
+    }
+
+    /// A switch made before the share names no limit, says why in `reason`, and gives when both
+    /// accounts' weeks reset; one at the share says `limit`.
+    #[test]
+    fn an_early_switch_has_no_limit_a_reason_and_both_resets() {
+        use pitboard_core::usage::Week;
+        let switched = |why| Auto::Switched {
+            from: "work".into(),
+            to: "soon".into(),
+            why,
+            adoption: Adoption::PollingWithin(33),
+        };
+        let (data, line) = event(
+            switched(Why::ResetsFirst {
+                to: Week::Resets(1_800_086_400),
+                from: Week::Resets(1_800_432_000),
+            }),
+            Threshold::DEFAULT,
+        );
+        assert_eq!(
+            (
+                &data["reason"],
+                &data["limit"],
+                &data["to_resets_at"],
+                &data["from_resets_at"]
+            ),
+            (
+                &json!("resets_first"),
+                &Value::Null,
+                &json!(1_800_086_400),
+                &json!(1_800_432_000)
+            )
+        );
+        let plain = |line: &str| anstream::adapter::strip_str(line).to_string();
+        assert!(plain(&line).contains("soon's week resets at "), "{line}");
+        let (seat, line) = event(
+            switched(Why::ResetsFirst {
+                to: Week::Free,
+                from: Week::Resets(1_800_432_000),
+            }),
+            Threshold::DEFAULT,
+        );
+        assert_eq!(seat["to_resets_at"], Value::Null);
+        assert!(plain(&line).contains("soon has no weekly limit"), "{line}");
+        let (at_the_share, _) = event(switched(Why::Limit(limit(9_000))), Threshold::DEFAULT);
+        assert_eq!(at_the_share["reason"], json!("limit"));
+        assert_eq!(at_the_share["limit"]["resets_at"], json!(9_000));
     }
 
     /// The loop waits until the next read or the next decision, whichever comes first, a write
@@ -1339,7 +1447,7 @@ mod tests {
             Auto::Switched {
                 from: "work".into(),
                 to: "personal".into(),
-                limit: limit(9_000),
+                why: Why::Limit(limit(9_000)),
                 adoption: Adoption::PollingWithin(33),
             },
             vec![fallback()],
@@ -1558,7 +1666,7 @@ mod tests {
             off.accounts[0].on = false;
             assert_eq!(warms(&off), "");
             assert_eq!(
-                watching_json(Switching::At(Threshold::DEFAULT), Some(&off)).get("warm"),
+                watching_json(Switching::At(Policy::default()), Some(&off)).get("warm"),
                 None
             );
             let on = overview(Some(Halt::ProgramMissing), None);
@@ -1583,7 +1691,7 @@ mod tests {
                 "Watching Claude Code. Pitboard never switches accounts. Stop with Ctrl-C.\n"
             );
             assert_eq!(
-                watching_json(Switching::At(Threshold::DEFAULT), Some(&on))["warm"]["accounts"],
+                watching_json(Switching::At(Policy::default()), Some(&on))["warm"]["accounts"],
                 json!(["work"])
             );
         }

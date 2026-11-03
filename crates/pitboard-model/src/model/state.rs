@@ -43,7 +43,7 @@
 //! A test hands `apply` answers in whatever order it likes, which is how the interleavings
 //! the Swift model's tests reached with gates are reached here without a thread.
 
-use super::advice::{Advice, HeadsUp, Told, rename_told};
+use super::advice::{Advice, First, HeadsUp, Told, rename_told};
 use super::lanes::Lane;
 use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
@@ -51,16 +51,16 @@ use super::windows::Windows;
 use super::{
     AtLimit, Back, Cause, Doing, Failure, Intent, LastSwitch, Notice, Opens, OutsideAsk, Pane,
     Place, QuitQuestion, ReadFailure, RestartNeeded, RunningSignIn, SettingsSection, Sheet,
-    SignedIn, Tip, WindowRequest,
+    SignedIn, SwitchOrder, Tip, WindowRequest,
 };
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Surfaces,
-    Switch, Switched, Uninstalled, Usage, WarmRefused, Warning, WatchService,
+    Switch, Switched, Uninstalled, WarmRefused, Warning, WatchService,
 };
-use pitboard_core::duty::autoswitch::Threshold;
+use pitboard_core::duty::autoswitch::{Policy, Threshold};
 use pitboard_core::duty::cadence::{
     DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
 };
@@ -184,14 +184,14 @@ pub(crate) enum Job {
     /// Put `account` in place of a login in use its service refuses for good, as the person
     /// agreed to.
     Replace { account: Key },
-    /// Ask the core's look whether to switch Claude Code by itself at `at`%, from its files
-    /// alone: what stands, or that only a decision under its lock can say. It claims nothing.
-    AutoLook { at: u8 },
-    /// Switch Claude Code by itself where a limit of the account in use has reached `at`%
-    /// and another account has room: asked once the look says only a decision under the
-    /// core's lock can say, which decides whether, and to which, from whose login Claude Code
-    /// has stored.
-    AutoSwitch { at: u8 },
+    /// Ask the core's look whether to switch Claude Code by itself under `policy`, from its
+    /// files alone: what stands, or that only a decision under its lock can say. It claims
+    /// nothing.
+    AutoLook { policy: Policy },
+    /// Switch Claude Code by itself where `policy` says to: asked once the look says only a
+    /// decision under the core's lock can say, which decides whether, and to which, from whose
+    /// login Claude Code has stored.
+    AutoSwitch { policy: Policy },
     /// Warm up the first account turned on that is due, as the core decides, on a lane of its
     /// own: the core looks at its files first, and a warm-up runs Claude Code for seconds.
     WarmUp,
@@ -1545,6 +1545,7 @@ impl State {
                 }
             }
             Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
+            Intent::SetOrder { order } => self.order_set(order, jobs),
             Intent::DeclineTip { tip } => self.put_away(tip, jobs),
             Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
             // Keeping the choice shown there writes nothing, and the tip has done its work.
@@ -2518,12 +2519,14 @@ impl State {
             return;
         }
         let tools = crate::tools_on(self.front.os());
-        let new = Advice::about(read, &tools, &self.told_this_launch);
+        let order = self.preferences.order();
+        let new = Advice::about(read, &tools, &self.told_this_launch, order);
         for advice in &new {
             self.told_this_launch
                 .insert(advice.key_of(), advice.window.resets_at.unwrap_or(0));
         }
         let mut kept = self.notify_at_limit(read, &tools, jobs);
+        kept |= self.tell_first(read, &tools, jobs);
         kept |= self.tell_unusable(read, jobs);
         if kept {
             jobs.push(Job::KeepTold {
@@ -2532,7 +2535,11 @@ impl State {
         }
         let standing: Vec<Advice> = new
             .into_iter()
-            .chain(self.advice.iter().filter_map(|advice| advice.renewed(read)))
+            .chain(
+                self.advice
+                    .iter()
+                    .filter_map(|advice| advice.renewed(read, order)),
+            )
             .collect();
         let providers: Vec<ProviderId> = standing.iter().map(|a| a.provider).collect();
         self.advice = crate::present::in_order(&providers, &tools)
@@ -2555,7 +2562,7 @@ impl State {
         }
         let at = self.preferences.threshold().percent();
         let mut kept = false;
-        for heads_up in HeadsUp::about(read, tools, &self.told, at) {
+        for heads_up in HeadsUp::about(read, tools, &self.told, at, self.preferences.order()) {
             if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude {
                 continue;
             }
@@ -2564,6 +2571,28 @@ impl State {
             kept = true;
             jobs.push(Job::Post {
                 notice: crate::present::at_limit_notice(self.front, &heads_up, read.now),
+            });
+        }
+        kept
+    }
+
+    // Under Resets Soonest, an account of a tool in use that comes first by its week, once for
+    // it and that week, under Notify and, for a tool Pitboard does not switch, under Switch.
+    fn tell_first(&mut self, read: &Status, tools: &[ProviderId], jobs: &mut Vec<Job>) -> bool {
+        let choice = self.preferences.at_limit();
+        if choice == AtLimit::Nothing {
+            return false;
+        }
+        let policy = self.preferences.policy();
+        let mut kept = false;
+        for first in First::about(read, tools, &self.told, policy) {
+            if choice == AtLimit::Switch && first.provider == ProviderId::Claude {
+                continue;
+            }
+            self.told.insert(first.key_of(), first.told_at());
+            kept = true;
+            jobs.push(Job::Post {
+                notice: crate::present::first_notice(self.front, &first),
             });
         }
         kept
@@ -2624,6 +2653,25 @@ impl State {
         self.watch_as_limits_says(jobs);
     }
 
+    // Taken as `at_limit_set` takes a choice. The offer and the notices follow it at once, and
+    // so do the automatic switch and the watch service.
+    fn order_set(&mut self, order: SwitchOrder, jobs: &mut Vec<Job>) {
+        if !self.preferences_read || self.preferences.order() == order.into() {
+            return;
+        }
+        self.preferences.set_order(order);
+        jobs.push(Job::KeepPreferences {
+            preferences: self.preferences.clone(),
+        });
+        if let Some(status) = self.status.clone()
+            && !self.standing_in
+        {
+            self.advise(&status, jobs);
+        }
+        self.look_to_switch(jobs);
+        self.watch_as_limits_says(jobs);
+    }
+
     // `pitboard watch` does at a limit what it was installed to, so the service is installed
     // again as Limits has it, switching at its share under Switch and never otherwise: once a
     // change to it under way has been read back, and not after one that failed, which says so
@@ -2662,7 +2710,7 @@ impl State {
         }
         self.decide = Timer::Running;
         jobs.push(Job::AutoLook {
-            at: self.preferences.threshold().percent(),
+            policy: self.preferences.policy(),
         });
     }
 
@@ -2716,7 +2764,7 @@ impl State {
         }
         self.switching = Some(Switching::Automatically);
         jobs.push(Job::AutoSwitch {
-            at: self.preferences.threshold().percent(),
+            policy: self.preferences.policy(),
         });
     }
 
@@ -2734,8 +2782,7 @@ impl State {
                 accounts,
                 adoption,
                 warnings,
-                used,
-                resets_at,
+                because,
             }) => {
                 jobs.push(Job::Post {
                     notice: crate::present::auto_switched_notice(
@@ -2743,7 +2790,7 @@ impl State {
                         &from,
                         &to,
                         &accounts,
-                        &used,
+                        &because,
                         &adoption,
                         now.epoch(),
                     ),
@@ -2754,7 +2801,7 @@ impl State {
                 let (left, put) = accounts.clone();
                 let back = Back {
                     from: left.clone(),
-                    resets_at,
+                    resets_at: because.resets_at(),
                 };
                 let switched = Switched {
                     outcome: Switch::Switched {
@@ -2771,8 +2818,7 @@ impl State {
                     accounts,
                     adoption,
                     warnings,
-                    used,
-                    resets_at,
+                    because,
                 }));
                 self.switched(&put, None, Ok(switched), now, jobs);
                 if let Some(last) =
@@ -4810,7 +4856,7 @@ fn answers_kept(mut read: Status, shown: &Status) -> Status {
 /// `shown` with each account's numbers as `read` has them, and everything else as it was. An
 /// account `read` has no numbers for keeps its own.
 fn numbers(read: &Status, shown: &Status) -> Status {
-    let mut measured: HashMap<&str, &Usage> = HashMap::new();
+    let mut measured: HashMap<&str, &pitboard_core::usage::Snapshot> = HashMap::new();
     for account in &read.accounts {
         if let Some(usage) = &account.usage {
             measured.entry(account.id.as_str()).or_insert(usage);

@@ -2,7 +2,7 @@ use crate::model::{AppId, Snapshot};
 use crate::present::testing::standing_of;
 use crate::{
     Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, Level,
-    PitboardError, Remedy, Status, Switch, Switched, Usage, Warning,
+    PitboardError, Remedy, Status, Switch, Switched, Warning,
 };
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -75,10 +75,12 @@ pub(crate) fn account(
         signed_in,
         standing: standing_of(signed_in, label.is_some()),
         parked: None,
-        usage: Some(Usage {
+        usage: Some(pitboard_core::usage::Snapshot {
             observed_at: Some(0),
+            answered_at: Some(0),
             windows,
             lists_every_limit: provider == ProviderId::Claude,
+            source: pitboard_core::usage::Source::Remembered,
         }),
         stale: None,
         stale_explanation: None,
