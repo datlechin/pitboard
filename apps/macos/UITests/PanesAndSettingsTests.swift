@@ -135,9 +135,15 @@ final class PanesAndSettingsTests: FixtureTestCase {
         typed.typeText("80\r")
         XCTAssertTrue(typed.wait(until: "value == '80%'", timeout: 5))
 
+        let order = app.popUpButtons["settings.atLimitOrder"]
+        XCTAssertTrue(order.exists, "which account goes first, under the share")
+        choose(Words.resetsSoonest, in: order)
+        XCTAssertTrue(order.wait(until: "value == '\(Words.resetsSoonest)'", timeout: 5))
+
         choose(Words.doNothing, in: choice)
         XCTAssertTrue(standing.waitForNonExistence(timeout: 5))
         XCTAssertTrue(share.waitForNonExistence(timeout: 5), "no share to reach")
+        XCTAssertTrue(order.waitForNonExistence(timeout: 5), "nothing to switch to first")
         XCTAssertFalse(typed.exists)
     }
 

@@ -46,6 +46,18 @@ struct LimitsSettings: View {
                         }
                     }
                     .disabled(!atLimit.shareEnabled)
+                    Picker(
+                        atLimit.orderLabel,
+                        selection: Binding(
+                            get: { atLimit.order },
+                            set: { model.send(.setOrder(order: $0)) })
+                    ) {
+                        ForEach(atLimit.orders, id: \.order) { order in
+                            Text(order.title).tag(order.order)
+                        }
+                    }
+                    .disabled(!atLimit.shareEnabled)
+                    .accessibilityIdentifier("settings.atLimitOrder")
                 }
                 if let standing = atLimit.standing {
                     Text(standing)
