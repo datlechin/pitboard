@@ -13,6 +13,8 @@ public sealed class SettingsViewModelTests
 
     private static readonly string[] AtLimitChoices = ["Do nothing", "Notify me", "Switch automatically"];
 
+    private static readonly string[] OrderChoices = ["Most left", "Resets soonest"];
+
     private static readonly WarmShown TwoWarmed = new(
         Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
@@ -268,7 +270,7 @@ public sealed class SettingsViewModelTests
         var (shown, model, _) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
         Assert.AreEqual("Use first", shown.OrderTitle);
-        CollectionAssert.AreEqual(new[] { "Most left", "Resets soonest" }, shown.OrderTitles);
+        CollectionAssert.AreEqual(OrderChoices, shown.OrderTitles);
         Assert.AreEqual(0, shown.OrderIndex);
 
         shown.ChooseOrder(0);
