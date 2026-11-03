@@ -132,6 +132,24 @@ export async function defined(page: Page): Promise<string[]> {
 // The hero's opening demo has made its switch to work: under reduced motion at once, once the hero
 // is mostly in view (src/scripts/live/demo.ts), and otherwise at its pick, past which the root's
 // frame moves on or goes, whichever system's desk is shown.
+// the frames the demo set on the root, with the menu bar item's name as each began
+export async function recordFrames(page: Page) {
+  await page.addInitScript(() => {
+    const seen: { demo: string | null; name: string | null }[] = [];
+    (window as unknown as { frames_: typeof seen }).frames_ = seen;
+    // the root is not made yet: head.js sets the first frame as it is parsed
+    new MutationObserver(() =>
+      seen.push({
+        demo: document.documentElement.getAttribute("data-demo"),
+        name: document.getElementById("hero-mac-item")?.getAttribute("aria-label") ?? null,
+      }),
+    ).observe(document, { subtree: true, attributeFilter: ["data-demo"] });
+  });
+}
+export type Frame = { demo: string | null; name: string | null };
+export const frames = (page: Page) =>
+  page.evaluate(() => (window as unknown as { frames_: Frame[] }).frames_);
+
 export async function handedOver(page: Page) {
   await page
     .locator("figure:has([data-demo-desk])")

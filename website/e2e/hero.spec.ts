@@ -3,7 +3,16 @@
 // shows no status item, and its status item's QMenu in KDE Plasma's tray (plan 3.1 to 3.3, section
 // 4).
 import type { Page } from "@playwright/test";
-import { axe, choose, expect, handedOver, test, type System } from "./fixtures.ts";
+import {
+  axe,
+  choose,
+  expect,
+  frames,
+  handedOver,
+  recordFrames,
+  test,
+  type System,
+} from "./fixtures.ts";
 
 const mac = {
   item: "#hero-mac-item",
@@ -45,23 +54,6 @@ async function hold(page: Page) {
   await page.clock.install();
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
 }
-
-// the frames the demo set on the root, with the menu bar item's name as each began
-async function recordFrames(page: Page) {
-  await page.addInitScript(() => {
-    const seen: { demo: string | null; name: string | null }[] = [];
-    (window as unknown as { frames_: typeof seen }).frames_ = seen;
-    // the root is not made yet: head.js sets the first frame as it is parsed
-    new MutationObserver(() =>
-      seen.push({
-        demo: document.documentElement.getAttribute("data-demo"),
-        name: document.getElementById("hero-mac-item")?.getAttribute("aria-label") ?? null,
-      }),
-    ).observe(document, { subtree: true, attributeFilter: ["data-demo"] });
-  });
-}
-const frames = (page: Page) =>
-  page.evaluate(() => (window as unknown as { frames_: unknown[] }).frames_);
 
 // the frames the demo set on the root, with what each began on of a desk's switch: GNOME's window,
 // or KDE Plasma's menu and tooltip. Each is read in the script itself, as WebKit's CSP refuses
