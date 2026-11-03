@@ -671,14 +671,13 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                     data["to_resets_at"] = json!(ahead.resets_at());
                     data["from_resets_at"] = json!(behind.resets_at());
                     match (ahead.resets_at(), behind.resets_at()) {
-                        (Some(to_at), from_at) => words::resets_before(
+                        (Some(to_at), Some(from_at)) => words::resets_at_before(
                             &to_bold,
+                            &moment(to_at),
                             &from_bold,
-                            from_at
-                                .map(|from_at| (moment(to_at), moment(from_at)))
-                                .as_ref()
-                                .map(|(to_at, from_at)| (to_at.as_str(), from_at.as_str())),
+                            &moment(from_at),
                         ),
+                        (Some(_), None) => words::resets_before(&to_bold, &from_bold),
                         (None, _) => words::no_weekly_limit(&to_bold),
                     }
                 }

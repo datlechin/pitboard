@@ -270,7 +270,7 @@ pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
 // lost at each 5-hour reset.", of `to`, which comes first, with `weekly` where it has a week.
 pub(crate) fn resets_first(to: &str, from: &str, weekly: bool) -> String {
     let clause = if weekly {
-        pitboard_core::words::resets_before(&quoted(to), &quoted(from), None)
+        pitboard_core::words::resets_before(&quoted(to), &quoted(from))
     } else {
         pitboard_core::words::no_weekly_limit(&quoted(to))
     };

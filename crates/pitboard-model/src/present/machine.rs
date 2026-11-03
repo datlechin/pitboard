@@ -430,22 +430,20 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             from, to, because, ..
         }) => {
             let (from, to) = (words::quoted(from), words::quoted(to));
+            use pitboard_core::words as said;
             let because = match because {
-                Because::Limit { used, .. } => pitboard_core::words::has_used(&from, used),
+                Because::Limit { used, .. } => said::has_used(&from, used),
                 Because::ResetsFirst {
                     to: Some(ahead),
-                    from: behind,
-                } => pitboard_core::words::resets_before(
-                    &to,
-                    &from,
-                    behind
-                        .map(|behind| (seen.clock(*ahead), seen.clock(behind)))
-                        .as_ref()
-                        .map(|(ahead, behind)| (ahead.as_str(), behind.as_str())),
-                ),
-                Because::ResetsFirst { to: None, .. } => pitboard_core::words::no_weekly_limit(&to),
+                    from: Some(behind),
+                } => said::resets_at_before(&to, &seen.clock(*ahead), &from, &seen.clock(*behind)),
+                Because::ResetsFirst {
+                    to: Some(_),
+                    from: None,
+                } => said::resets_before(&to, &from),
+                Because::ResetsFirst { to: None, .. } => said::no_weekly_limit(&to),
             };
-            pitboard_core::words::auto_switched(&from, &to, &because)
+            said::auto_switched(&from, &to, &because)
         }
         AutoStanding::Came(AutoSwitched::Skipped {
             from,

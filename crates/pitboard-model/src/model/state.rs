@@ -2589,7 +2589,7 @@ impl State {
             if choice == AtLimit::Switch && first.provider == ProviderId::Claude {
                 continue;
             }
-            self.told.insert(first.key_of(), first.told_at());
+            self.told.insert(first.key_of(), first.week);
             kept = true;
             jobs.push(Job::Post {
                 notice: crate::present::first_notice(self.front, &first),

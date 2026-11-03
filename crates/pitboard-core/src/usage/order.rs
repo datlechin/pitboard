@@ -1,36 +1,25 @@
-//! Which account Pitboard picks when it picks one itself: the automatic switch, and the app's
-//! offer once an account reaches the share or runs out.
+//! Which account Pitboard picks by itself: for the automatic switch, and for the app's offer.
 //!
-//! Most left, the order everyone has unless they choose otherwise, keeps the most room ahead.
-//! Resets soonest spends first what is lost first. Anthropic gives each account a weekly reset
-//! of its own, at a fixed time whatever is used (`weekly_period_is_a_fixed_cycle`), and what
-//! an account leaves unused of its week is gone at that reset. So the account whose week
-//! resets soonest is used first, and the automatic switch moves to it before the account in use
-//! reaches the share. An account without a weekly limit for all models, such as a Team seat,
-//! comes first in either order: what it leaves unused is lost at each five-hour reset.
+//! Resets soonest spends first what is lost first. Each account's week resets at a fixed time of
+//! its own (`weekly_period_is_a_fixed_cycle`), and what it leaves unused is gone then. An account
+//! without a weekly limit for all models, such as a Team seat, loses it at each five-hour reset,
+//! so it comes first in either order.
 
 use super::{LimitKind, Snapshot, Window, budget, reached, same_reset};
 use std::cmp::Ordering;
 
-/// How old a reading may be for a move before the share: as long as a usage check waits at
-/// most on a service out of reach. Every front end that acts by itself reads each account
-/// more often, so an older reading is of an account nobody could ask about, which may have
-/// been used since.
+// A front end that acts by itself reads each account more often than a usage check waits at most
+// on a service out of reach: an older reading is of an account nobody could ask about.
 const FRESH: i64 = budget::UNREACHABLE_MOST;
 
-/// Which account goes first when Pitboard picks one.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Order {
-    /// The most room in the limit that reached the share, then the least full in the others.
     #[default]
     MostLeft,
-    /// The account whose week resets soonest, which the automatic switch also moves to before
-    /// the account in use reaches the share.
     ResetsSoonest,
 }
 
 impl Order {
-    /// As the command line and the app's preferences write it.
     pub fn code(self) -> &'static str {
         match self {
             Order::MostLeft => "most-left",
@@ -50,19 +39,16 @@ impl Order {
 /// When what an account has left of its week is lost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Week {
-    /// It has no weekly limit for all models, such as a Team seat: what it leaves unused is
-    /// lost at each five-hour reset.
+    /// No weekly limit for all models.
     Free,
-    /// Its weekly limit for all models resets then, in epoch seconds.
+    /// In epoch seconds.
     Resets(i64),
-    /// It has one, or may have, and nothing says when it resets: none was given, or the one
-    /// given has passed and no reading has said the next.
+    /// It has one, or may have, and no reading says when it resets next.
     Unknown,
 }
 
 impl Week {
-    /// The week of the account whose reading is `reading`, as of `now`. A reading that may
-    /// leave limits out says nothing of one it leaves out, as [`room`] takes it.
+    // A reading that may leave limits out says nothing of one it leaves out.
     pub fn of(reading: &Snapshot, now: i64) -> Week {
         let week = reading
             .windows
@@ -78,7 +64,6 @@ impl Week {
         }
     }
 
-    /// When it resets, where it is known.
     pub fn resets_at(self) -> Option<i64> {
         match self {
             Week::Resets(at) => Some(at),
@@ -86,10 +71,8 @@ impl Week {
         }
     }
 
-    /// Whether an account of this week comes before one of `other` for a move before the
-    /// share. One without a weekly limit comes before one with, and of two that reset, the one
-    /// that resets sooner, by more than [`same_reset`]. Never two without, which lose alike,
-    /// nor where either reset is unknown.
+    /// For a move before the share: never between two without a week, which lose alike, nor
+    /// where either reset is unknown.
     pub fn comes_before(self, other: Week) -> bool {
         match (self, other) {
             (Week::Free, Week::Resets(_) | Week::Unknown) => true,
@@ -98,12 +81,10 @@ impl Week {
         }
     }
 
-    // Without a weekly limit first, in either order.
     fn free_first(self, other: Week) -> Ordering {
         (self != Week::Free).cmp(&(other != Week::Free))
     }
 
-    // The sooner reset first, an unknown one last.
     fn sooner(self, other: Week) -> Ordering {
         match (self, other) {
             (Week::Resets(a), Week::Resets(b)) if same_reset(a, b) => Ordering::Equal,
@@ -124,26 +105,21 @@ impl Week {
 /// What an account with room for a switch has used.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Room {
-    /// Of the limit at the share. `None` where the account does not have it, and for a move
-    /// before the share.
+    /// Of the limit at the share, where it has that limit and there is one.
     pub used: Option<f64>,
     /// Of the fullest of its other limits.
     pub fullest: f64,
-    /// When what it has left of its week is lost.
     pub week: Week,
 }
 
-/// The room an account whose reading is `theirs` has for a switch away from `limit` of the
-/// account in use, whose limits are `mine`: `None` where any of `theirs` has reached `share` as
-/// it is drawn, or where nothing says what the account has used of one of `mine`. The automatic
-/// switch asks it with its share, and the app's advice with 100.
+/// The room for a switch away from `limit` of the account in use, whose limits are `mine`:
+/// `None` where any of `theirs` has reached `share` as it is drawn, or where nothing says what
+/// it has used of one of `mine`.
 ///
-/// Where `theirs` lists every limit the account has ([`Snapshot::lists_every_limit`]), one it
-/// leaves out is one it does not have, so a plan without the limit that ran out, such as a
-/// Team seat with no weekly limit for all models, is a place to go. Any other reading says
-/// nothing of a limit it leaves out, which may be used up, as with no reading at all. Only a
-/// model's limit other than `limit` may be left out of one that gives the five-hour and weekly
-/// limits: the older named shape names no model's, and plans limit models apart.
+/// A reading that lists every limit ([`Snapshot::lists_every_limit`]) does not have one it
+/// leaves out, so a Team seat is a place to go from a weekly limit. Any other may leave out a
+/// used-up limit; only a model's limit other than `limit` may be missing from one that gives the
+/// five-hour and weekly limits, since plans limit models apart.
 pub fn room(
     theirs: &Snapshot,
     mine: &[Window],
@@ -154,11 +130,9 @@ pub fn room(
     below(theirs, mine, Some(limit), share, now)
 }
 
-/// The room an account whose reading is `theirs` has for a move before the share away from the
-/// account in use, whose reading is `mine`, where it comes first by when its week resets
-/// ([`Week::comes_before`]): `None` where it does not, where it has used more of its five-hour
-/// limit, where its reading is older than `FRESH` or not Anthropic's, or where it has no room
-/// below `share`, as [`room`] judges it. An account without a five-hour limit has used none.
+/// The room for a move before the share away from the account in use, whose reading is `mine`:
+/// `None` also where `theirs` has used more of its five-hour limit, or is old or not
+/// Anthropic's.
 pub fn resets_first(theirs: &Snapshot, mine: &Snapshot, share: u8, now: i64) -> Option<Room> {
     let fresh = theirs.answered_at.is_some_and(|at| now - at <= FRESH);
     let first = Week::of(theirs, now).comes_before(Week::of(mine, now));
@@ -168,29 +142,23 @@ pub fn resets_first(theirs: &Snapshot, mine: &Snapshot, share: u8, now: i64) -> 
     below(theirs, &mine.windows, None, share, now)
 }
 
-/// The candidate to switch to, in `order`. One without a weekly limit for all models comes
-/// first in both. Under [`Order::ResetsSoonest`] the one whose week resets sooner then, as
-/// [`same_reset`] tells resets apart, an unknown reset last. Then the least used of the limit
-/// at the share, one without it as one with none used, then the least full in its others. The
-/// first of those alike.
+/// The candidate to switch to in `order`, the first of those alike. An account without the limit
+/// at the share counts as having used none of it.
 pub fn preferred<T>(
     order: Order,
     candidates: impl IntoIterator<Item = (T, Room)>,
 ) -> Option<(T, Room)> {
     candidates.into_iter().min_by(|(_, a), (_, b)| {
-        a.week
-            .free_first(b.week)
-            .then_with(|| match order {
-                Order::MostLeft => Ordering::Equal,
-                Order::ResetsSoonest => a.week.sooner(b.week),
-            })
-            .then_with(|| a.used.unwrap_or(0.0).total_cmp(&b.used.unwrap_or(0.0)))
-            .then_with(|| a.fullest.total_cmp(&b.fullest))
+        match order {
+            Order::MostLeft => a.week.free_first(b.week),
+            Order::ResetsSoonest => a.week.sooner(b.week),
+        }
+        .then_with(|| a.used.unwrap_or(0.0).total_cmp(&b.used.unwrap_or(0.0)))
+        .then_with(|| a.fullest.total_cmp(&b.fullest))
     })
 }
 
-/// What an account whose limits are `windows` has used of its five-hour limit as of `now`:
-/// none where it has none, or it has reset.
+/// Of its five-hour limit as of `now`, none where it has none.
 pub fn five_hours(windows: &[Window], now: i64) -> f64 {
     windows
         .iter()

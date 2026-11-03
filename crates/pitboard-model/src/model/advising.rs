@@ -1025,6 +1025,32 @@ fn a_seat_is_told_of_as_losing_what_it_leaves_unused() {
     );
 }
 
+/// Told once for a week, a seat is not told of while the account in use has no known week: kept
+/// under none, it would never be told of again.
+#[test]
+fn a_seat_is_not_told_of_while_no_week_is_known() {
+    let seat = account(Some("seat"))
+        .limits(vec![window("session", 10.0).resets(Some(7_200))])
+        .build();
+    let unknown = account(Some("work"))
+        .signed_in()
+        .limits(vec![
+            window("session", 30.0).resets(Some(7_200)),
+            window("weekly_all", 40.0).resets(None),
+        ])
+        .build();
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![unknown, seat])));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Notify,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty(), "{:?}", machine.posted);
+}
+
 /// Under Switch the core moves Claude Code itself, so only Codex, which it never switches, is
 /// told of.
 #[test]

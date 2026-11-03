@@ -239,21 +239,18 @@ impl HeadsUp {
     }
 }
 
-/// Under Resets Soonest, an account of a tool in use that comes first by its week, with room
-/// below the share in every limit and at least as much of its five-hour limit left, while no
-/// limit of the account in use has reached the share: the account the automatic switch would
-/// move to before the share.
+/// Under Resets Soonest, the account the automatic switch would move to before the share, told
+/// once for the week it is about.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct First {
     pub(crate) provider: ProviderId,
     pub(crate) tool: Option<String>,
-    /// The account in use, and its week.
     pub(crate) ran: String,
-    pub(crate) behind: Week,
-    /// The account that comes first, its week, what it has used of its five-hour limit, and
-    /// what to switch to.
     pub(crate) instead: String,
-    pub(crate) ahead: Week,
+    // whether `instead` has a weekly limit for all models
+    pub(crate) weekly: bool,
+    pub(crate) week: i64,
+    // of `instead`'s five-hour limit
     pub(crate) five_hours: f64,
     pub(crate) switch_to: Key,
 }
@@ -286,33 +283,26 @@ impl First {
                         Some((account, room))
                     }),
                 )?;
+                // Its own week, or for an account without one, the week of the account in use.
+                let week = room.week.resets_at().or(Week::of(mine, now).resets_at())?;
                 let first = First {
                     provider: found.provider,
                     tool: found.tool,
                     ran: ran.to_owned(),
-                    behind: Week::of(mine, now),
                     instead: account.label.clone()?,
-                    ahead: room.week,
+                    weekly: room.week != Week::Free,
+                    week,
                     five_hours: usage::five_hours(&account.usage.as_ref()?.windows, now),
                     switch_to: account.key.clone()?,
                 };
                 let at = told.get(&first.key_of());
-                (at.is_none_or(|&at| !same_reset(at, first.told_at()))).then_some(first)
+                (at.is_none_or(|&at| !same_reset(at, week))).then_some(first)
             })
             .collect()
     }
 
     pub(crate) fn key_of(&self) -> String {
         [self.provider.code(), &self.instead, "first", ""].join("/")
-    }
-
-    /// The week it is told once for: its own, or, for an account without a weekly limit, the
-    /// week of the account in use.
-    pub(crate) fn told_at(&self) -> i64 {
-        self.ahead
-            .resets_at()
-            .or(self.behind.resets_at())
-            .unwrap_or(0)
     }
 }
 

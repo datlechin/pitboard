@@ -681,11 +681,7 @@ pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> Not
 pub(crate) fn first_notice(front: Front, first: &First) -> Notice {
     let body = format!(
         "{} {}",
-        words::resets_first(
-            &first.instead,
-            &first.ran,
-            first.ahead.resets_at().is_some()
-        ),
+        words::resets_first(&first.instead, &first.ran, first.weekly),
         words::five_hours_used(&said::figure(first.five_hours))
     );
     Notice {
@@ -695,7 +691,7 @@ pub(crate) fn first_notice(front: Front, first: &First) -> Notice {
             &Clicked::Switch(first.switch_to.clone()),
         ),
         ..posted(
-            format!("{}-{}", first.key_of(), first.told_at()),
+            format!("{}-{}", first.key_of(), first.week),
             words::of_tool(first.tool.as_deref(), &words::resets_first_title(front)),
             Some(first.provider),
             body,
