@@ -4,7 +4,7 @@ sidebarTitle: "Switch automatically"
 description: "Have Pitboard switch Claude Code to another of your accounts before the one in use reaches a limit."
 ---
 
-Automatic switching is off until you choose it. It acts once a limit of the Claude Code account in use reaches a share you choose: 95% by default, from 50% to 99%.
+Automatic switching is off until you choose it. It acts once a limit of the Claude Code account in use reaches a share you choose: 95% by default, from 50% to 99%. Under **Resets Soonest**, it also acts earlier, as [Spend the week that resets first](#spend-the-week-that-resets-first) says.
 
 It switches early because open Claude Code sessions take up to about 33 seconds to follow, and never switches Codex, whose sessions do not follow at all. [Open sessions](/concepts/open-sessions) explains both.
 
@@ -60,15 +60,46 @@ On Linux, where systemd did not start the system, as in many containers, it refu
 
 Pitboard watches the account whose login Claude Code has stored, as Anthropic [identifies it](/concepts/identity), not the account Claude Code's config names.
 
-Pitboard switches to another enrolled Claude Code account with room under the share in every limit. [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives every rule.
+Pitboard switches to another enrolled Claude Code account with room under the share in every limit. By default, it picks the one with the most room. [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives every rule.
 
 If no account qualifies, nothing moves until the account runs out. The app then offers a switch by the same rules at 100%, as [When an account runs out](/guides/switch#when-an-account-runs-out) describes.
+
+## Spend the week that resets first
+
+Anthropic resets each account's week at a fixed time of its own, and what the account has not used of it is lost then. **Resets Soonest** spends that first: Pitboard picks the account whose week resets first, and switches to it before the share when it has room.
+
+<Tabs>
+  <Tab title="macOS">
+    In **Settings** > **Limits**, choose **Resets Soonest** in **Use first**, under **At**.
+  </Tab>
+  <Tab title="Windows">
+    In **Settings**, under **Limits**, expand **When a limit reaches** and select **Resets soonest** in **Use first**.
+  </Tab>
+  <Tab title="Linux">
+    In **Preferences** > **Limits**, choose **Resets Soonest** in **Use first**, under **At**.
+  </Tab>
+</Tabs>
+
+On the command line, give `pitboard watch` the order, or give it to `pitboard watch install`:
+
+```sh
+pitboard watch --order resets-soonest
+```
+
+```text
+13:52:40 Switched Claude Code from work to personal: personal's week resets at Nov 4 21:00, before work's at Nov 8 18:00. Claude Code sessions already running follow within 33 seconds.
+```
+
+An account without a weekly limit for all models, such as a Team seat, still comes first: what it leaves unused is lost at each five-hour reset. Under **Notify Me**, the app posts **Another Account Resets First** with **Switch** in place of switching. [Before the share](/reference/automatic-switching#before-the-share) gives every rule.
 
 ## What it never does
 
 - Switch back by itself. Next time, it may choose the account it left.
+- Switch before the share to the same account twice, until that account reaches a limit or its week resets.
 - Try an account again after its parked login failed, before the limit it was tried for resets.
 - Quit an app.
+
+Under **Resets Soonest**, it switches back to the account whose week resets first once that account's five-hour limit resets.
 
 ## When it holds back
 

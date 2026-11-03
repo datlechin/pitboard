@@ -21,7 +21,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. A line for a folder in `parks/` starts with `folder `. Absent when empty. | Anything that parks a login |
 | `renewal.json` | Where a run of [daily renewal](/reference/files#renewal-schedule) could not open the parked logins, when, and why, as error codes, until a run of it opens them. Absent otherwise. | Daily renewal |
 | `watch.json` | Where a switch or warm-up of the [watch service](/reference/files#watch-service) could not open the parked logins, when, and why, as error codes, until one of them opens them. Absent otherwise. | The watch service |
-| `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. When it last failed to identify Claude Code's login. | The automatic switch |
+| `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. Each switch before the share, by the account switched to, until a minute after its week resets, or 7 days for an account without a weekly limit. When it last failed to identify Claude Code's login. | The automatic switch |
 | `signin.lock` | The lock that allows one sign-in at a time | A sign-in |
 | `warm.json` | The accounts turned on for warm-ups, by id, and the hours they are made in | `pitboard warm on`, `off` and `range`, and the app's **Warm-Up** |
 | `warmed.json` | The warm-ups of each account tried today, and when one last started its period | A warm-up |
@@ -255,7 +255,7 @@ The environment holds the proxy variables as they were set at install, and on ma
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
 | Where | `~/Library/LaunchAgents/com.datlechin.pitboard.watch.plist` | The task `\Pitboard\Watch <SID>` in Task Scheduler | `pitboard-watch.service` in the folder of the renewal schedule's units |
-| Runs | `<program> watch --scheduled --at <PERCENT>`, or `--no-switch` in place of `--at` | The same | The same |
+| Runs | `<program> watch --scheduled --at <PERCENT>`, followed by `--order resets-soonest` where `install` was given it, or `--no-switch` in place of both | The same | The same |
 | When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes. `ConditionFileIsExecutable=`: skipped while `<program>` is not there |
 | Environment | `EnvironmentVariables` | `watch.env` in Pitboard's directory | One `Environment=` line each |
 | Lines it prints | `~/Library/Logs/Pitboard/watch.log`, removed with the service | Kept nowhere | Your user's journal |
@@ -360,6 +360,7 @@ The apps keep these in `app.json` in Pitboard's directory, so they follow `PITBO
 | `at_limit` | The choice in **When a limit reaches**: `nothing`, `notify` or `switch`. While left out, `auto_switch` decides. |
 | `auto_switch` | `true` while **Switch Automatically** is chosen. Left out otherwise. Without `at_limit`, `true` reads as **Switch Automatically** and anything else as **Notify Me**. |
 | `auto_switch_at` | The share it notifies or switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
+| `order` | The choice in **Use first**: `most-left` or `resets-soonest`. Left out, or any other value, reads as `most-left`. |
 
 ## Account windows
 

@@ -110,8 +110,8 @@ In the order of `pitboard --help`:
 | `rename` | `from`, `to` and `email`. |
 | `forget` | `label` and `email`. |
 | `watch` | One envelope per event, as [Watch events](/reference/json-output#watch-events) lists. |
-| `watch install` | `installed` (`true`), `threshold`, the share it switches at, `switches`, and `path`, the job's file. With `--no-switch`, `threshold` is `null` and `switches` is `false`. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
-| `watch status` | `installed`. When `true`, also `threshold`, `switches` and `path`, or `task` on Windows. A service that never switches has a `threshold` of `null` and `switches` of `false`. Where the job says neither the way Pitboard writes it, both are `null`. Where Pitboard has no scheduler to write, also `supported` (`false`). |
+| `watch install` | `installed` (`true`), `threshold`, the share it switches at, `order`, `most-left` or `resets-soonest`, `switches`, and `path`, the job's file. With `--no-switch`, `threshold` and `order` are `null` and `switches` is `false`. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
+| `watch status` | `installed`. When `true`, also `threshold`, `order`, `switches` and `path`, or `task` on Windows. A service that never switches has a `threshold` and an `order` of `null`, and `switches` of `false`. Where the job says none of them the way Pitboard writes it, all three are `null`. Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `watch uninstall` | `installed` (`false`) and `removed`, `false` when nothing was installed. |
 | `warm` | `range`, with `from` and `to` as `HH:MM`; `halted`, `null`, or an object with `reason`, a `warm_up_halted` code from [Watch events](/reference/json-output#watch-events), where nothing can be warmed up here; and `accounts`, one object per Claude Code account with `label` and `on`. An account turned on also has `state`: `due`, `running`, `resting`, `waiting` or `held`, with `until` and `next_at` where they are known and, for `held`, `reason`, a code from [Watch events](/reference/json-output#watch-events). |
 | `warm on`, `warm off` | `label`, `on`, and `changed`, `false` when it was so already. |
@@ -242,9 +242,9 @@ Each event's envelope has `command` set to `watch`. With `--once`, `watch` print
 
 | `event` | When | Other fields |
 | --- | --- | --- |
-| `watching` | `watch` starts. Not printed with `--once`. | `switches`, `false` with `--no-switch`, and `warm`, where an account is turned on for warm-ups: `range` and `accounts`, their labels |
+| `watching` | `watch` starts. Not printed with `--once`. | `order`, `switches`, `false` with `--no-switch`, and `warm`, where an account is turned on for warm-ups: `range` and `accounts`, their labels |
 | `idle` | No limit of the account in use has reached the share. | `account`, `limit`, `as_of` and `held_until` |
-| `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit` and `adoption` |
+| `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit`, `reason` and `adoption`, with `to_resets_at` and `from_resets_at` for `resets_first` |
 | `waiting` | A limit reached the share, and a try at switching away came to nothing. | `from`, `limit` and `until` |
 | `no_room` | A limit reached the share, and no other account has room. | `from`, `limit` and `unread` |
 | `skipped` | A limit reached the share, and Pitboard stays on the account for a `reason`. | `from`, `limit` and `reason`, and `until` for `settling` |
@@ -260,7 +260,9 @@ The other fields:
 | `account` | string | The Claude Code account in use, by its label: for `idle`, the one Pitboard watches, and for `no_reading`, the one with no reading. For `warmed_up` and `warm_up_held`, the account warmed up or held back. |
 | `from` | string | The Claude Code account in use, by its label as `pitboard use` takes it. |
 | `to` | string | The account switched to, by its label. |
-| `limit` | object or null | The limit of `from` that reached the share, as last read: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be `94.5` for a `threshold` of `95`. For `idle`, the fullest limit of `account` that has not reset, or `null` when it has none. |
+| `limit` | object or null | The limit of `from` that reached the share, as last read: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be `94.5` for a `threshold` of `95`. For `idle`, the fullest limit of `account` that has not reset, or `null` when it has none. For a `switched` event whose `reason` is `resets_first`, `null`. |
+| `order` | string or null | Which account it switches to first: `most-left` or `resets-soonest`, as [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives them. `null` with `--no-switch`. |
+| `to_resets_at`, `from_resets_at` | integer or null | When the week of `to`, and of `from`, resets. `to_resets_at` is `null` for an account without a weekly limit for all models. |
 | `as_of` | integer or null | When the reading of `account` was taken. |
 | `held_until` | integer or null | When Pitboard may next ask Anthropic about `account`, while it waits after a rate limit or an error. `null` otherwise. |
 | `unread` | array of strings | The accounts Pitboard could switch to that Anthropic has given no reading of yet, by label. Empty when there are none. |
@@ -269,6 +271,8 @@ The other fields:
 | `reason` | string | Why, as a code. The codes for each event follow this table. |
 | `email` | string | For `not_enrolled`, the email address of the account whose login Claude Code has stored. |
 | `detail` | string | For `not_identified`, why Pitboard could not identify the login, in a few words. |
+
+For `switched`, `reason` is `limit`, where a limit of `from` reached the share, or `resets_first`, where `to` comes first by its week [before the share](/reference/automatic-switching#before-the-share).
 
 For `skipped` and `not_watching`, [Automatic switching](/reference/automatic-switching) lists the codes.
 
