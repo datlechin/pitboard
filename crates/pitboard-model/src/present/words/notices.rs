@@ -266,6 +266,30 @@ pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
     format!("{}. {then}", has_used(account, used))
 }
 
+// "soon’s week resets before work’s.", or "seat has no weekly limit, so what it leaves unused is
+// lost at each 5-hour reset.", of `to`, which comes first, with `weekly` where it has a week.
+pub(crate) fn resets_first(to: &str, from: &str, weekly: bool) -> String {
+    let clause = if weekly {
+        pitboard_core::words::resets_before(&quoted(to), &quoted(from))
+    } else {
+        pitboard_core::words::no_weekly_limit(&quoted(to))
+    };
+    format!("{}.", typeset(&clause))
+}
+
+pub(crate) fn resets_first_title(front: Front) -> String {
+    titled(
+        front,
+        "Another Account Resets First",
+        "Another account resets first",
+    )
+}
+
+// "It has used 20% of its 5-hour limit."
+pub(crate) fn five_hours_used(figure: &str) -> String {
+    format!("It has used {figure} of its 5-hour limit.")
+}
+
 // "spare has used 20%.", with `left` of the same limit, or "seat has no such limit."
 pub(crate) fn other_used(account: &str, left: Option<i64>) -> String {
     match left {

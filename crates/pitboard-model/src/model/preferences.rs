@@ -4,9 +4,10 @@
 //! them in UserDefaults, and hands them over once, in `EarlierHandover::preferences`: where the
 //! file is there, it wins.
 
-use super::{AtLimit, EarlierPreferences, Tip};
-use pitboard_core::duty::autoswitch::Threshold;
+use super::{AtLimit, EarlierPreferences, SwitchOrder, Tip};
+use pitboard_core::duty::autoswitch::{Policy, Threshold};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::usage::Order;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -46,6 +47,9 @@ pub(crate) struct Preferences {
     // Text, as `at_limit` is, for a tip a later version adds.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub(crate) tips_declined: BTreeSet<String>,
+    // Which account goes first, by the core's code. Text, as `at_limit` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) order: Option<String>,
 }
 
 impl Preferences {
@@ -83,12 +87,31 @@ impl Preferences {
             .map_or_else(Threshold::default, Threshold::clamped)
     }
 
+    // One a later version adds reads as the default.
+    pub(crate) fn order(&self) -> Order {
+        self.order
+            .as_deref()
+            .and_then(Order::from_code)
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_order(&mut self, order: SwitchOrder) {
+        self.order = Some(Order::from(order).code().to_owned());
+    }
+
+    pub(crate) fn policy(&self) -> Policy {
+        Policy {
+            threshold: self.threshold(),
+            order: self.order(),
+        }
+    }
+
     // What the watch service does at a limit: switch where Limits says Switch, and otherwise
     // only warm up.
     pub(crate) fn watch_switching(&self) -> pitboard_core::watch_service::Switching {
         use pitboard_core::watch_service::Switching;
         match self.at_limit() {
-            AtLimit::Switch => Switching::At(self.threshold()),
+            AtLimit::Switch => Switching::At(self.policy()),
             AtLimit::Notify | AtLimit::Nothing => Switching::Never,
         }
     }
@@ -206,6 +229,30 @@ mod tests {
         let (kept, from_file) = Preferences::kept(Some("{}"), None);
         assert!(from_file);
         assert_eq!(kept, Preferences::default());
+    }
+
+    /// The order reads back as it was written; none, and one a later version wrote, read as
+    /// the most left, and the watch service is installed with it under Switch.
+    #[test]
+    fn the_order_reads_back_and_one_unknown_is_most_left() {
+        let mut preferences = Preferences::default();
+        assert_eq!(preferences.order(), Order::MostLeft);
+        preferences.set_order(SwitchOrder::ResetsSoonest);
+        let text = preferences.text().expect("text");
+        assert!(text.contains(r#""order":"resets-soonest""#), "{text}");
+        let (kept, _) = Preferences::kept(Some(&text), None);
+        assert_eq!(kept.order(), Order::ResetsSoonest);
+        let (later, _) = Preferences::kept(Some(r#"{"order":"fairest"}"#), None);
+        assert_eq!(later.order(), Order::MostLeft);
+        let mut switching = kept;
+        switching.choose(AtLimit::Switch);
+        assert_eq!(
+            switching.watch_switching(),
+            pitboard_core::watch_service::Switching::At(Policy {
+                threshold: Threshold::DEFAULT,
+                order: Order::ResetsSoonest,
+            })
+        );
     }
 
     /// The file is what it holds, read back as it was written.

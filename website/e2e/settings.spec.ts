@@ -1,12 +1,17 @@
-// Settings at When a limit reaches on macOS and Windows: the pop-up and the ComboBox, the share's
-// field, stepper and NumberBox, and the words under the choice (plan 3.6 and 3.7). notice.spec.ts
-// has the banner the app posts at the share.
+// Settings at When a limit reaches on macOS and Windows: the pop-ups and the ComboBoxes of the
+// choice and Use first, the share's field, stepper and NumberBox, and the words under the choice
+// (plan 3.6 and 3.7). notice.spec.ts has the banner the app posts at the share.
 import type { Locator, Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
 
 const notify =
   "Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open.";
 const watching = "Watching work: 40% of its weekly limit, as of 20:50.";
+// what Resets Soonest adds to the note under Notify Me and under Switch Automatically
+const soonestNotify =
+  "It also tells you when another account’s week resets sooner and that account has room.";
+const soonestSwitch =
+  "Before then, it switches to an account whose week resets sooner, if that account has room and as much of its 5-hour limit left.";
 
 async function open(page: Page, platform: Platform, id: string) {
   await choose(page.context(), { platform });
@@ -125,6 +130,51 @@ test.describe("macOS", () => {
     await expect(fig.locator("[data-standing]")).toBeVisible();
   });
 
+  test("Use first is a pop-up under At whose choice the note says, and Do Nothing leaves out", async ({
+    page,
+  }) => {
+    const fig = await open(page, "macos", "auto-mac");
+    const box = page.locator("#auto-mac-order");
+    const list = page.locator("#auto-mac-order-choices");
+    const tall = await height(fig);
+    await expect(box).toHaveAccessibleName("Use first");
+    await expect(chosen(box)).toHaveText("Most Left");
+    await expect(fig.locator('[data-note="notify"]')).toHaveText(notify);
+    await box.focus();
+    await page.keyboard.press("Space");
+    await expect(list).toBeVisible();
+    await expect(list.getByRole("option")).toHaveText(["Most Left", "Resets Soonest"]);
+    await expect(box).toHaveAttribute("aria-activedescendant", "auto-mac-order-most-left");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(list).toBeHidden();
+    await expect(chosen(box)).toHaveText("Resets Soonest");
+    await expect(page.locator("#auto-mac-order-resets-soonest")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(fig.locator('[data-note="notify"]')).toHaveText(`${notify} ${soonestNotify}`);
+    // under Switch Automatically, what it does before the share, the figure as tall as before
+    const at = page.locator("#auto-mac-at");
+    await at.focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.type("sw");
+    await page.keyboard.press("Enter");
+    await expect(fig.locator('[data-note="switch"]')).toContainText(soonestSwitch);
+    await expect(fig.getByRole("link", { name: "Is this allowed?" })).toBeInViewport({ ratio: 1 });
+    expect(await height(fig)).toBe(tall);
+    // Do Nothing leaves it out with the share, and says nothing of it
+    await at.focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Enter");
+    await expect(chosen(at)).toHaveText("Do Nothing");
+    await expect(box).toBeHidden();
+    for (const note of await fig.locator("[data-note]").all()) await expect(note).toBeHidden();
+    expect(await height(fig)).toBe(tall);
+  });
+
   test("the field takes a share, clamped, gives back text that is no figure, and the stepper steps", async ({
     page,
   }) => {
@@ -192,6 +242,45 @@ test.describe("Windows", () => {
     await page.locator("#auto-win-choice-switch").click();
     await expect(chosen(box)).toHaveText("Switch automatically");
     await expect(fig.getByRole("link", { name: "Is this allowed?" })).toBeVisible();
+  });
+
+  test("Use first is a ComboBox in a card after At's, whose choice the note says, dimmed under Do nothing", async ({
+    page,
+  }) => {
+    const fig = await open(page, "windows", "auto-win");
+    const box = page.locator("#auto-win-order");
+    const list = page.locator("#auto-win-order-choices");
+    const card = fig.locator("[data-order-card]");
+    await expect(box).toHaveAccessibleName("Use first");
+    await expect(chosen(box)).toHaveText("Most left");
+    await expect(card).toContainText("Use first");
+    const tall = await height(fig);
+    await box.click();
+    await expect(list).toBeVisible();
+    await expect(list.getByRole("option")).toHaveText(["Most left", "Resets soonest"]);
+    await page.keyboard.press("Escape");
+    // WinUI changes the choice in place while closed
+    await page.keyboard.press("ArrowDown");
+    await expect(chosen(box)).toHaveText("Resets soonest");
+    await expect(fig.locator('[data-note="notify"]')).toHaveText(`${notify} ${soonestNotify}`);
+    const at = page.locator("#auto-win-at");
+    await at.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(fig.locator('[data-note="switch"]')).toContainText(soonestSwitch);
+    expect(await height(fig)).toBe(tall);
+    // Do nothing dims it with At, out of reach, and keeps its choice
+    await page.keyboard.press("Home");
+    await expect(chosen(at)).toHaveText("Do nothing");
+    await expect(card).toBeVisible();
+    await expect(box).toHaveAttribute("aria-disabled", "true");
+    await expect(box).toHaveAttribute("tabindex", "-1");
+    await box.click({ force: true });
+    await expect(list).toBeHidden();
+    await expect(at).toBeFocused();
+    await expect(chosen(box)).toHaveText("Resets soonest");
+    await page.keyboard.press("End");
+    await expect(box).not.toHaveAttribute("aria-disabled");
+    expect(await height(fig)).toBe(tall);
   });
 
   test("the NumberBox steps by 1 and 5, clamps, takes typed text on Enter and puts it back on Escape", async ({
@@ -321,6 +410,37 @@ for (const system of ["gnome", "kde"] as const)
       await expect(chosen(box)).toHaveText("Switch Automatically");
     });
 
+    test("Use first lists its orders after At, the note says Resets Soonest's, and Do Nothing hides it", async ({
+      page,
+    }) => {
+      const fig = await preferences(page, system);
+      const box = fig.getByRole("combobox", { name: "Use first" });
+      const list = page.locator("#auto-linux-order-choices");
+      const note = fig.locator('[data-part="note"]:not([hidden])');
+      await expect(chosen(box)).toHaveText("Most Left");
+      await box.click();
+      await expect(list).toBeVisible();
+      await expect(list.getByRole("option")).toHaveText(["Most Left", "Resets Soonest"], {
+        useInnerText: true,
+      });
+      // the list opens under its own row
+      const row = (await fig.locator('[data-part="order-row"]').boundingBox())!;
+      expect((await list.boundingBox())!.y).toBeGreaterThan(row.y + row.height / 2);
+      expect(await axe(page, ["#auto-linux"])).toEqual([]);
+      await list.getByRole("option", { name: "Resets Soonest" }).click();
+      await expect(list).toBeHidden();
+      await expect(chosen(box)).toHaveText("Resets Soonest");
+      await expect(note).toHaveText(`${notify} ${soonestNotify}`);
+      const at = fig.getByRole("combobox", { name: "When a limit reaches" });
+      await at.click();
+      await page.locator("#auto-linux-at-limit-switch").click();
+      await expect(note).toContainText(soonestSwitch);
+      await at.click();
+      await page.locator("#auto-linux-at-limit-nothing").click();
+      await expect(fig.locator('[data-part="order-row"]')).toBeHidden();
+      await expect(fig.locator('[data-part="share"]')).toBeHidden();
+    });
+
     test("At steps by a percent and a page, goes to its ends, and clamps what is typed", async ({
       page,
     }) => {
@@ -421,15 +541,21 @@ for (const system of ["gnome", "kde"] as const)
     });
   });
 
-test("axe finds nothing in the open pop-up and the open ComboBox", async ({ page }) => {
+test("axe finds nothing in the open pop-ups and the open ComboBoxes", async ({ page }) => {
   for (const [platform, id] of [
     ["macos", "auto-mac"],
     ["windows", "auto-win"],
   ] as const) {
     await open(page, platform, id);
-    await page.locator(`#${id}-at`).focus();
-    await page.keyboard.press(platform === "macos" ? "Space" : "Enter");
-    await expect(page.locator(`#${id}-choices`)).toBeVisible();
-    expect(await axe(page, [`#${id}`])).toEqual([]);
+    for (const [box, list] of [
+      ["at", "choices"],
+      ["order", "order-choices"],
+    ]) {
+      await page.locator(`#${id}-${box}`).focus();
+      await page.keyboard.press(platform === "macos" ? "Space" : "Enter");
+      await expect(page.locator(`#${id}-${list}`)).toBeVisible();
+      expect(await axe(page, [`#${id}`])).toEqual([]);
+      await page.keyboard.press("Escape");
+    }
   }
 });

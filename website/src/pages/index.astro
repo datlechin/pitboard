@@ -387,7 +387,7 @@ const jsonLd = [
           <p>
             Pitboard can also
             <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a>, from
-            the app or from a background service that <code>pitboard watch install</code> sets up.
+            the app or a background service, and early to an account whose week resets sooner.
           </p>
           <Figure
             slot="fig"
@@ -395,22 +395,22 @@ const jsonLd = [
               macos: {
                 caption: "Settings on macOS, in the Limits pane.",
                 describe:
-                  "The Limits pane of Pitboard's Settings: When a limit reaches, Switch Automatically, and At, 95%. Under them: Watching work: 40% of its weekly limit, as of 20:50, and the link Is this allowed?",
+                  "The Limits pane of Pitboard's Settings: When a limit reaches, Switch Automatically, At, 95%, and Use first, Most Left. Under them: Watching work: 40% of its weekly limit, as of 20:50, and the link Is this allowed?",
               },
               windows: {
                 caption: "Settings on Windows, under Limits.",
                 describe:
-                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, and the line: Watching work: 40% of its weekly limit, as of 20:50. Under it, At, 95.",
+                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, with the lines: Watching work: 40% of its weekly limit, as of 20:50. Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Then the link Is this allowed? Under it, At, 95, from 50% to 99%, and Use first, Most left.",
               },
               gnome: {
                 caption: "Preferences on Linux, in Limits.",
                 describe:
-                  "Pitboard's Preferences in Limits, over the window. Before an account runs out: Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Once its window is closed, nothing switches it unless Watch in the Background is on. Under it, When a limit reaches, Switch Automatically, with Watching work: 40% of its weekly limit, as of 20:50, then At, 95%, from 50% to 99%, and the link Is this allowed?",
+                  "Pitboard's Preferences in Limits, over the window. Before an account runs out: Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Once its window is closed, nothing switches it unless Watch in the Background is on. Under it, When a limit reaches, Switch Automatically, with Watching work: 40% of its weekly limit, as of 20:50, then At, 95%, from 50% to 99%, Use first, Most Left, and the link Is this allowed?",
               },
               kde: {
                 caption: "Preferences on Linux, in Limits.",
                 describe:
-                  "Pitboard's Preferences in Limits, over the window. Before an account runs out: Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Under it, When a limit reaches, Switch Automatically, with Watching work: 40% of its weekly limit, as of 20:50, then At, 95%, from 50% to 99%, and the link Is this allowed?",
+                  "Pitboard's Preferences in Limits, over the window. Before an account runs out: Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Under it, When a limit reaches, Switch Automatically, with Watching work: 40% of its weekly limit, as of 20:50, then At, 95%, from 50% to 99%, Use first, Most Left, and the link Is this allowed?",
               },
             }}
             cli={{

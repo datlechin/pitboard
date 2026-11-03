@@ -60,7 +60,8 @@ pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
-    MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown, WatchServiceShown,
+    MachineShown, OrderChoice, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
+    WatchServiceShown,
 };
 pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
 pub use removal::{OsRelease, Package, PackageRemoval, RemovalShown, package_removal};
@@ -76,8 +77,8 @@ pub use windows::{
 pub(crate) use accounts::{in_order, needs_sign_in};
 pub(crate) use notices::{
     Clicked, UNUSABLE, at_limit_notice, auto_not_watching_notice, auto_refused_notice,
-    auto_skipped_notice, auto_switched_notice, notice_buttons, standing_notice, unusable_notice,
-    warm_failed_notice,
+    auto_skipped_notice, auto_switched_notice, first_notice, notice_buttons, standing_notice,
+    unusable_notice, warm_failed_notice,
 };
 
 use crate::account_windows::{AlertText, WindowAccount};

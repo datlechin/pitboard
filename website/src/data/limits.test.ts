@@ -5,6 +5,8 @@ import {
   atLabel,
   choices,
   heading,
+  orderLabel,
+  orders,
   section,
   shareLabel,
   shareRange,
@@ -51,6 +53,33 @@ test("each choice is titled on macOS and in sentence case on Windows, in at_limi
   assert.ok(
     words.includes(
       "Front::WindowsNotificationArea => sentence_case,\n        Front::MacMenuBar | Front::Gnome => title_case,",
+    ),
+  );
+});
+
+test("Use first offers each order titled on macOS and in sentence case on Windows, under At", () => {
+  assert.ok(machine.includes("order_label: words::USE_FIRST.into(),"));
+  assert.ok(words.includes(`pub(crate) const USE_FIRST: &str = "${orderLabel}";`));
+  const listed = [
+    ...words.matchAll(/SwitchOrder::(\w+) => titled\(front, "([^"]+)", "([^"]+)"\),/g),
+  ].map(([, , mac, win]) => [mac, win]);
+  assert.deepEqual(
+    listed,
+    orders.map((o) => [o.mac, o.win]),
+  );
+  assert.ok(machine.includes("orders: [SwitchOrder::MostLeft, SwitchOrder::ResetsSoonest]"));
+  // each by the core's code, which the command line's --order takes
+  const order = repo("crates/pitboard-core/src/usage/order.rs");
+  for (const o of orders) {
+    const name = o.mac.replace(" ", "");
+    assert.ok(order.includes(`Order::${name} => "${o.value}",`), o.value);
+  }
+  // and Most Left the default
+  assert.ok(order.includes("#[default]\n    MostLeft,"));
+  // shown, and enabled, while something happens at the share
+  assert.ok(
+    machine.includes(
+      "share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,",
     ),
   );
 });

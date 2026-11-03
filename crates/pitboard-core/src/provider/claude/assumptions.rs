@@ -2031,7 +2031,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     at 18:00: at 18:02, before any request, the answer gave the next week's \
                     reset at 0%",
         verified_against: "2.1.296",
-        depends: "warm::decide, which starts the five-hour period alone",
+        depends: "warm::decide, which starts the five-hour period alone; usage::order, which \
+                  ranks accounts by when their week resets and takes an idle account's reset as \
+                  its own",
         probe: &[],
         absent: &[],
     },

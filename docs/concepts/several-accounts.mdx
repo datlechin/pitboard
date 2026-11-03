@@ -20,7 +20,7 @@ The two work together. Pitboard switches the login of the folder that `CLAUDE_CO
 
 [codex-auth](https://github.com/Loongphy/codex-auth) 0.3.1 switches Codex. `codex-auth login` runs `codex login`, then keeps a copy of the login in Codex's home. Codex takes a switch at its next start, as it does with Pitboard. `codex-auth list` shows each stored account's usage.
 
-Pitboard adds an account through the tool's own sign-in in a private folder, so the account in use stays signed in. It switches Claude Code, Codex and, on macOS, Claude Desktop. It [switches Claude Code by itself](/guides/automatic-switching) before a limit runs out, and [warms up](/guides/warm-up) the accounts you choose.
+Pitboard adds an account through the tool's own sign-in in a private folder, so the account in use stays signed in. It switches Claude Code, Codex and, on macOS, Claude Desktop. It [switches Claude Code by itself](/guides/automatic-switching) before a limit runs out, or [to the account whose week resets first](/guides/automatic-switching#spend-the-week-that-resets-first), and [warms up](/guides/warm-up) the accounts you choose.
 
 Both other switchers export and import their logins. Pitboard does neither, since each machine signs in to each account itself, as [What Pitboard will not do](/concepts/limits#rules) says.
 

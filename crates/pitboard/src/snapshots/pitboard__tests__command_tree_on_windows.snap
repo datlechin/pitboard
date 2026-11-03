@@ -554,6 +554,31 @@ expression: command_tree()
           "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
         },
         {
+          "id": "order",
+          "long": "order",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "ORDER"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [
+            "most-left",
+            "resets-soonest"
+          ],
+          "default_values": [
+            "most-left"
+          ],
+          "conflicts_with": [],
+          "help": "Which account to switch to first: `most-left`, the one with the most room, or `resets-soonest`, the one whose week resets soonest, even before the share"
+        },
+        {
           "id": "no_switch",
           "long": "no-switch",
           "short": null,
@@ -573,7 +598,8 @@ expression: command_tree()
             "false"
           ],
           "conflicts_with": [
-            "at"
+            "at",
+            "order"
           ],
           "help": "Never switch, and only warm up the accounts `pitboard warm on` turned on"
         },
@@ -694,6 +720,31 @@ expression: command_tree()
               "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
             },
             {
+              "id": "order",
+              "long": "order",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "ORDER"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [
+                "most-left",
+                "resets-soonest"
+              ],
+              "default_values": [
+                "most-left"
+              ],
+              "conflicts_with": [],
+              "help": "Which account to switch to first: `most-left`, the one with the most room, or `resets-soonest`, the one whose week resets soonest, even before the share"
+            },
+            {
               "id": "no_switch",
               "long": "no-switch",
               "short": null,
@@ -713,7 +764,8 @@ expression: command_tree()
                 "false"
               ],
               "conflicts_with": [
-                "at"
+                "at",
+                "order"
               ],
               "help": "Never switch, and only warm up the accounts `pitboard warm on` turned on"
             },

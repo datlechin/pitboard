@@ -246,7 +246,7 @@ mod tests {
             crate::watch_service::install(
                 &m.ctx,
                 Permit::for_a_test(),
-                crate::watch_service::Switching::At(crate::duty::autoswitch::Threshold::DEFAULT),
+                crate::watch_service::Switching::At(crate::duty::autoswitch::Policy::default()),
             )
             .expect("installed");
 

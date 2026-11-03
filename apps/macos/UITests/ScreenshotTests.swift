@@ -82,6 +82,11 @@ final class ScreenshotTests: FixtureTestCase {
         choose(Words.switchAutomatically, in: atLimit)
         XCTAssertTrue(app.control("settings.autoSwitchStanding").waitForExistence(timeout: 5))
         keep(settings, as: "macos-settings-limits-switch")
+        let order = app.popUpButtons["settings.atLimitOrder"]
+        choose(Words.resetsSoonest, in: order)
+        XCTAssertTrue(order.wait(until: "value == '\(Words.resetsSoonest)'", timeout: 5))
+        keep(settings, as: "macos-settings-limits-resets-soonest")
+        choose(Words.mostLeft, in: order)
 
         // Last, since it switches, and to personal, whose five-hour limit is used up: switching
         // automatically would switch away from it again.

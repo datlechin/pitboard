@@ -96,7 +96,11 @@ package func snapshot(
                     AtLimitChoice(choice: .nothing, title: "Do Nothing"),
                     AtLimitChoice(choice: .notify, title: "Notify Me"),
                     AtLimitChoice(choice: .switch, title: "Switch Automatically"),
-                ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
+                ], at: 95, lowest: 50, highest: 99, order: .mostLeft,
+                orders: [
+                    OrderChoice(order: .mostLeft, title: "Most Left"),
+                    OrderChoice(order: .resetsSoonest, title: "Resets Soonest"),
+                ], orderLabel: "Use first", enabled: true, shareEnabled: true,
                 heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
                 shareLabel: "Share of a limit", shareRange: "From 50% to 99%", note: nil,
                 standing: nil,

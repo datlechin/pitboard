@@ -53,6 +53,8 @@ mod imp {
         #[template_child]
         pub(super) share: TemplateChild<adw::SpinRow>,
         #[template_child]
+        pub(super) order: TemplateChild<adw::ComboRow>,
+        #[template_child]
         pub(super) terms: TemplateChild<adw::ActionRow>,
         #[template_child]
         pub(super) warm_group: TemplateChild<adw::PreferencesGroup>,

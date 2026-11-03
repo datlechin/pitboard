@@ -165,6 +165,12 @@ Options:
       --json
           Print JSON instead of text
 
+      --order <ORDER>
+          Which account to switch to first: `most-left`, the one with the most room, or
+          `resets-soonest`, the one whose week resets soonest, even before the share
+          
+          [default: most-left]
+
       --no-switch
           Never switch, and only warm up the accounts `pitboard warm on` turned on
 
@@ -191,6 +197,12 @@ Options:
 
       --json
           Print JSON instead of text
+
+      --order <ORDER>
+          Which account to switch to first: `most-left`, the one with the most room, or
+          `resets-soonest`, the one whose week resets soonest, even before the share
+          
+          [default: most-left]
 
       --no-switch
           Never switch, and only warm up the accounts `pitboard warm on` turned on

@@ -108,11 +108,12 @@ On macOS, Pitboard's item in the menu bar shows:
 | --- | --- | --- |
 | **When a limit reaches** | **Limits** | **Notify Me** |
 | **At**, the share | Under the choice | 95%, from 50% to 99% in steps of 1% |
+| **Use first** | Under **At** | **Most Left** |
 | **From** | **Warm-Up** | 06:00 |
 | **To** | **Warm-Up** | 22:00 |
 | A switch for each Claude Code account | **Warm-Up** | Off |
 
-The choice and its share are kept in `app.json`, as [The app](/reference/files#the-app) describes. Both stay dimmed until the app has read that file.
+The choice, its share and **Use first** are kept in `app.json`, as [The app](/reference/files#the-app) describes. They stay dimmed until the app has read that file.
 
 ### When a limit reaches
 
@@ -126,7 +127,7 @@ While the app is open, it acts once a limit of the account in use reaches the sh
 
 On Linux, where the desktop shows no tray icon, [Watch in the Background](/reference/linux-app#watch-in-the-background) goes on once the window is closed.
 
-**At** shows under **Notify Me** and **Switch Automatically**: a field and a stepper on macOS, a number box from 50 to 99 on Windows. On Linux, it is a field with buttons. On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
+**At** and [Use first](#use-first) show under **Notify Me** and **Switch Automatically**. **At** is a field and a stepper on macOS, a number box from 50 to 99 on Windows. On Linux, it is a field with buttons. On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
 
 A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains. Whatever is chosen, **Is this allowed?** under the choice opens [Is this allowed](/concepts/limits#is-this-allowed).
 
@@ -149,8 +150,22 @@ A line says what the app last decided:
 | **Pitboard couldn't switch Claude Code, and tries again at 16:41:**, then the error | A switch failed. |
 | **Pitboard can't tell whether to switch Claude Code:**, then the error | Pitboard could not read its own files. |
 | **Switched Claude Code from work to personal: work has used 97% of its 5-hour limit.** | The app switched. |
+| **Switched Claude Code from work to personal: personal's week resets at Tue 21:00, before work's at Sun 18:00.** | The app switched before the share, under **Resets Soonest**. |
 
 [Automatic switching](/reference/automatic-switching) lists each reason. The [menu bar app](/reference/mac-app#notifications) and [the app on Windows](/reference/windows-app#notifications) list what they post.
+
+### Use first
+
+**Use first** sets which account the app offers and switches to first. `pitboard watch` takes its own, `--order`.
+
+| Choice | What the app does |
+| --- | --- |
+| **Most Left** | Offers and switches to the account with the most room in the limit at the share. |
+| **Resets Soonest** | Offers and switches to the account whose week resets first. Under **Switch Automatically**, it also switches before the share, as [Before the share](/reference/automatic-switching#before-the-share) gives the rules. Under **Notify Me**, it posts **Another Account Resets First** instead, once for each account and week. |
+
+Both put an account without a weekly limit for all models, such as a Team seat, first. [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives every rule.
+
+For Codex, which the app never switches, **Resets Soonest** posts **Another Account Resets First** under **Switch Automatically** too. On Windows, the choices are **Most left** and **Resets soonest**.
 
 ### Warm-up
 

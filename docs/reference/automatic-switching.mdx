@@ -16,19 +16,38 @@ Once a limit reaches the share, Pitboard looks for another enrolled Claude Code 
 - Has used less than the share of every limit it has.
 - Has not been passed over at this limit, as [When a try fails](#when-a-try-fails) says.
 
-Of those, Pitboard picks by these rules, in order:
+Of those, Pitboard picks by the order chosen in [Use first](/reference/settings#use-first), or given to `pitboard watch` as `--order`:
 
-1. An account without a weekly limit for all models goes first, such as a Team seat. What it leaves unused is lost at each five-hour reset.
-2. Then the most room in the limit at the share. An account without that limit counts as having used none of it.
-3. On a tie, the account least full in its other limits.
+| Rule | **Most Left**, `most-left` | **Resets Soonest**, `resets-soonest` |
+| --- | --- | --- |
+| First | An account without a weekly limit for all models, such as a Team seat. What it leaves unused is lost at each five-hour reset. | The same |
+| Then | The most room in the limit at the share. An account without that limit counts as having used none of it. | The account whose weekly limit for all models resets first. One whose reset has passed or is not known comes last. |
+| On a tie | The account least full in its other limits | The most room in the limit at the share, then the least full in the other limits |
 
-A limit past its reset time counts as reset.
+Resets less than a minute apart count as one. A limit past its reset time counts as reset.
 
 A reading may leave a limit out when Anthropic answers without its list of limits, or Pitboard cannot read the answer whole. Such a reading qualifies only with the five-hour and weekly limits, and with a model's weekly limit when that one is at the share. Pitboard counts it as having a weekly limit for all models.
 
 When several limits are at the share, Pitboard acts on the fullest one it has not already left or given up on.
 
 The app's offer once an account runs out follows the same rules at 100%.
+
+## Before the share
+
+Under **Resets Soonest**, Pitboard also switches while no limit of the account in use has reached the share. Anthropic resets each account's week at a fixed time of its own, and what the account leaves unused that week is lost then.
+
+Pitboard switches to the first account, by the order above, that:
+
+- Comes before the account in use: it has no weekly limit for all models and the account in use has or may have one, or both weeks have a known reset and its week resets more than a minute sooner.
+- Has used less than the share of every limit it has.
+- Has used no more of its five-hour limit than the account in use. An account without a five-hour limit counts as having used none.
+- Has a reading Anthropic gave in the last 15 minutes.
+
+It never switches before the share between two accounts without a weekly limit for all models.
+
+Pitboard switches to an account before the share once, until that account reaches the share of a limit while in use or its week resets. After **Switch Back**, or a switch of your own, it does not switch to that account again before the share. Left at its five-hour limit, the account is switched back to once that limit resets, while its week still resets first.
+
+It holds back without saying so for the 5 minutes after any switch, after a try that came to nothing, and while Claude Code signs in another way. `pitboard log` records each switch as `auto-switch`.
 
 ## When it stays on the account
 

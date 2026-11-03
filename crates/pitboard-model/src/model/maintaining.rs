@@ -23,7 +23,7 @@ use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, WatchServiceShown, present_on, words};
 use crate::{AppCore, Surfaces};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
-use pitboard_core::duty::autoswitch::Threshold;
+use pitboard_core::duty::autoswitch::{Policy, Threshold};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::watch_service::{Installed, Switching};
@@ -1086,7 +1086,10 @@ fn service_machine(name: &str) -> World {
 }
 
 fn switch_at(percent: u8) -> Switching {
-    Switching::At(Threshold::new(percent).expect("a share"))
+    Switching::At(Policy {
+        threshold: Threshold::new(percent).expect("a share"),
+        order: pitboard_core::usage::Order::MostLeft,
+    })
 }
 
 /// What GNOME's app shows of the watch service now.
@@ -1133,7 +1136,7 @@ fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs
         model.send(Intent::SetWatchService { on: true }),
         [Job::SetWatchService {
             on: true,
-            switching: Switching::At(Threshold::DEFAULT),
+            switching: Switching::At(Policy::default()),
         }]
     );
     assert_eq!(
@@ -1155,7 +1158,7 @@ fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs
     let Installed::Yes { switching, .. } = world.elsewhere().watch_service() else {
         panic!("installed in the scratch machine");
     };
-    assert_eq!(switching, Some(Switching::At(Threshold::DEFAULT)));
+    assert_eq!(switching, Some(Switching::At(Policy::default())));
     let (at_limit, warm) = notes(&model);
     assert!(
         at_limit.ends_with(&words::switching_once_closed(true)),

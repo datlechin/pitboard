@@ -8,7 +8,7 @@ use super::testing::machine::{Hand, Stub};
 use super::testing::records::{already_active, refusal, status, switched, warned, warning};
 use super::{
     AtLimit, Intent, Notice, NoticeButton, NoticeButtonKind, Place, SettingsSection, Sheet,
-    WindowRequest,
+    SwitchOrder, WindowRequest,
 };
 use crate::Account;
 use crate::AccountKey;
@@ -848,7 +848,14 @@ fn the_settings_offer_three_choices_and_the_terms_beside_them() {
     assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));
     assert_eq!(
         shown.at_limit.note,
-        words::at_limit_note(Front::MacMenuBar, AtLimit::Notify, 95, false, 33)
+        words::at_limit_note(
+            Front::MacMenuBar,
+            AtLimit::Notify,
+            95,
+            SwitchOrder::MostLeft,
+            false,
+            33
+        )
     );
     assert!(shown.at_limit.share_enabled);
     assert_eq!(
@@ -879,4 +886,259 @@ fn the_settings_offer_three_choices_and_the_terms_beside_them() {
     let shown = model.shown().machine.at_limit;
     assert!(!shown.share_enabled, "nothing happens at the share");
     assert_eq!((shown.note, shown.terms), (None, terms));
+}
+
+fn ordered(model: &mut Hand, machine: &mut Stub, choice: AtLimit, order: SwitchOrder) {
+    let mut preferences = super::preferences::Preferences::default();
+    preferences.choose(choice);
+    preferences.set_order(order);
+    model.give(super::state::Answer::Kept {
+        told: Told::new(),
+        preferences: Some((preferences, true)),
+        windows: None,
+    });
+    model.run(machine);
+}
+
+/// `label`, its five-hour limit `session` used, and its week resetting at `week`.
+fn weekly(label: &str, signed_in: bool, session: f64, week: i64) -> Account {
+    let made = account(Some(label)).limits(vec![
+        window("session", session).resets(Some(7_200)),
+        window("weekly_all", 40.0).resets(Some(week)),
+    ]);
+    if signed_in { made.signed_in() } else { made }.build()
+}
+
+/// Once the account in use runs out, the offer under Resets Soonest is the account whose week
+/// resets first, where Most Left offers the one with the most room.
+#[test]
+fn resets_soonest_offers_the_account_whose_week_resets_first() {
+    let read = || {
+        status(vec![
+            weekly("work", true, 100.0, 500_000),
+            weekly("roomy", false, 0.0, 400_000),
+            weekly("soon", false, 50.0, 100_000),
+        ])
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(read()));
+    model.refresh(&mut machine);
+    assert_eq!(switches_to(&model), ["claude/roomy"]);
+
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(read()));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Nothing,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    assert_eq!(switches_to(&model), ["claude/soon"]);
+}
+
+/// Under Notify and Resets Soonest, an account whose week resets before the one in use's, with
+/// room, is told of once for that week, with a button that switches to it.
+#[test]
+fn an_account_whose_week_resets_first_is_told_of_once_for_that_week() {
+    let read = || {
+        status(vec![
+            weekly("work", true, 30.0, 500_000),
+            weekly("soon", false, 20.0, 100_000),
+        ])
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(read()));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Notify,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    assert_eq!(
+        machine.posted,
+        [Notice {
+            id: "claude/soon/first/-100000".into(),
+            title: words::resets_first_title(Front::MacMenuBar),
+            subtitle: Some("Claude Code".into()),
+            body: format!(
+                "{} {}",
+                words::resets_first("soon", "work", true),
+                words::five_hours_used("20%")
+            ),
+            clicked: "accounts".into(),
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SwitchTo,
+                title: words::switch_button(Front::MacMenuBar, "soon"),
+                clicked: "switch/claude/soon".into(),
+            }),
+        }]
+    );
+    assert_eq!(
+        machine.posted[0].body,
+        "soon’s week resets before work’s. It has used 20% of its 5-hour limit."
+    );
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once for that week");
+    assert!(model.state.advice.is_empty(), "nothing ran out");
+
+    for (choice, order) in [
+        (AtLimit::Notify, SwitchOrder::MostLeft),
+        (AtLimit::Nothing, SwitchOrder::ResetsSoonest),
+    ] {
+        let mut model = Hand::new();
+        let mut machine = Stub::reading(Ok(read()));
+        ordered(&mut model, &mut machine, choice, order);
+        model.refresh(&mut machine);
+        assert!(machine.posted.is_empty(), "{choice:?} {order:?}");
+    }
+}
+
+/// An account without a weekly limit, such as a Team seat, comes first: the notice says why.
+#[test]
+fn a_seat_is_told_of_as_losing_what_it_leaves_unused() {
+    let seat = account(Some("seat"))
+        .limits(vec![
+            window("session", 10.0).resets(Some(7_200)),
+            window("weekly_scoped", 0.0).scope("Fable"),
+        ])
+        .build();
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![weekly("work", true, 30.0, 500_000), seat])));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Notify,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    let notice = machine.posted.first().expect("posted");
+    assert_eq!(
+        notice.id, "claude/seat/first/-500000",
+        "told for the week in use"
+    );
+    assert_eq!(
+        notice.body,
+        "seat has no weekly limit, so what it leaves unused is lost at each 5-hour reset. It \
+         has used 10% of its 5-hour limit."
+    );
+}
+
+/// Told once for a week, a seat is not told of while the account in use has no known week: kept
+/// under none, it would never be told of again.
+#[test]
+fn a_seat_is_not_told_of_while_no_week_is_known() {
+    let seat = account(Some("seat"))
+        .limits(vec![window("session", 10.0).resets(Some(7_200))])
+        .build();
+    let unknown = account(Some("work"))
+        .signed_in()
+        .limits(vec![
+            window("session", 30.0).resets(Some(7_200)),
+            window("weekly_all", 40.0).resets(None),
+        ])
+        .build();
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![unknown, seat])));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Notify,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty(), "{:?}", machine.posted);
+}
+
+/// Under Switch the core moves Claude Code itself, so only Codex, which it never switches, is
+/// told of.
+#[test]
+fn under_switch_only_codex_is_told_its_week_resets_first() {
+    let codex = |label: &str, week: i64, signed_in: bool| {
+        let made = account(Some(label)).of(ProviderId::Codex).limits(vec![
+            window("five_hour", 10.0).length(18_000).resets(Some(7_200)),
+            window("seven_day", 30.0).length(604_800).resets(Some(week)),
+        ]);
+        if signed_in { made.signed_in() } else { made }.build()
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        weekly("work", true, 30.0, 500_000),
+        weekly("soon", false, 0.0, 100_000),
+        codex("job", 500_000, true),
+        codex("side", 100_000, false),
+    ])));
+    machine.look = Ok(crate::AutoLooked::Stands(Box::new(
+        super::testing::records::watching("work"),
+    )));
+    ordered(
+        &mut model,
+        &mut machine,
+        AtLimit::Switch,
+        SwitchOrder::ResetsSoonest,
+    );
+    model.refresh(&mut machine);
+    let posted: Vec<(&str, Option<&str>)> = machine
+        .posted
+        .iter()
+        .map(|notice| (notice.id.as_str(), notice.subtitle.as_deref()))
+        .collect();
+    assert_eq!(posted, [("codex/side/first/-100000", Some("Codex"))]);
+}
+
+/// The order is shown under the share in the system's own case, hidden with it under Do
+/// Nothing, and taken only once the preferences are read.
+#[test]
+fn the_settings_offer_the_order_under_the_share() {
+    let mut model = Hand::new();
+    assert!(
+        model
+            .send(Intent::SetOrder {
+                order: SwitchOrder::ResetsSoonest
+            })
+            .is_empty(),
+        "not before the preferences are read"
+    );
+    let mut machine = Stub::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
+    chose(&mut model, &mut machine, AtLimit::Notify);
+    let shown = model.on_a_mac().machine.at_limit;
+    assert_eq!(shown.order, SwitchOrder::MostLeft);
+    assert_eq!(shown.order_label, words::USE_FIRST);
+    let titles: Vec<String> = shown.orders.iter().map(|o| o.title.clone()).collect();
+    assert_eq!(titles, ["Most Left", "Resets Soonest"]);
+    assert_eq!(
+        model.on_windows().machine.at_limit.orders[1].title,
+        "Resets soonest"
+    );
+
+    let jobs = model.send(Intent::SetOrder {
+        order: SwitchOrder::ResetsSoonest,
+    });
+    assert!(
+        matches!(&jobs[..], [super::state::Job::KeepPreferences { preferences }, ..]
+            if preferences.order.as_deref() == Some("resets-soonest")),
+        "{jobs:?}"
+    );
+    let shown = model.on_a_mac().machine.at_limit;
+    assert_eq!(shown.order, SwitchOrder::ResetsSoonest);
+    assert_eq!(
+        shown.note.as_deref(),
+        Some(
+            "Pitboard notifies you once a limit of the account in use reaches 95%, while the app \
+             is open. It also tells you when another account’s week resets sooner and that \
+             account has room."
+        )
+    );
+    assert!(
+        model
+            .send(Intent::SetOrder {
+                order: SwitchOrder::ResetsSoonest
+            })
+            .is_empty(),
+        "unchanged"
+    );
+
+    chose(&mut model, &mut machine, AtLimit::Nothing);
+    assert!(!model.on_a_mac().machine.at_limit.share_enabled);
 }

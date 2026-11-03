@@ -362,6 +362,8 @@ pub enum Intent {
     SetWatchService { on: bool },
     /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
     SetAtLimit { choice: AtLimit, at: u8 },
+    /// Which account goes first when Pitboard picks one, taken as `SetAtLimit` is.
+    SetOrder { order: SwitchOrder },
     /// "Not Now" to a setup tip, kept with the app's preferences.
     DeclineTip { tip: Tip },
     /// What the app's system says of opening the app at login. A setup step offers it for the
@@ -469,6 +471,31 @@ pub enum AtLimit {
     Nothing,
     Notify,
     Switch,
+}
+
+// Which account Pitboard offers or switches to first: the core's `Order`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SwitchOrder {
+    MostLeft,
+    ResetsSoonest,
+}
+
+impl From<SwitchOrder> for pitboard_core::usage::Order {
+    fn from(order: SwitchOrder) -> Self {
+        match order {
+            SwitchOrder::MostLeft => Self::MostLeft,
+            SwitchOrder::ResetsSoonest => Self::ResetsSoonest,
+        }
+    }
+}
+
+impl From<pitboard_core::usage::Order> for SwitchOrder {
+    fn from(order: pitboard_core::usage::Order) -> Self {
+        match order {
+            pitboard_core::usage::Order::MostLeft => Self::MostLeft,
+            pitboard_core::usage::Order::ResetsSoonest => Self::ResetsSoonest,
+        }
+    }
 }
 
 /// A sheet over the main window, as the Swift model's `AccountSheet` has them. Not called

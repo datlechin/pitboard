@@ -1438,12 +1438,19 @@ pub(super) fn runs_from_sign_in(
     switching: Option<crate::watch_service::Switching>,
     program: impl Display,
 ) -> String {
+    use crate::usage::Order;
     use crate::watch_service::Switching;
     match switching {
-        Some(Switching::At(at)) => format!(
-            "from sign-in  ·  switches at {}%  ·  runs {program}",
-            at.percent()
-        ),
+        Some(Switching::At(policy)) => {
+            let first = match policy.order {
+                Order::MostLeft => "",
+                Order::ResetsSoonest => "  ·  resets soonest first",
+            };
+            format!(
+                "from sign-in  ·  switches at {}%{first}  ·  runs {program}",
+                policy.threshold.percent()
+            )
+        }
         Some(Switching::Never) => format!("from sign-in  ·  never switches  ·  runs {program}"),
         None => format!("from sign-in  ·  runs {program}"),
     }
@@ -1537,8 +1544,10 @@ mod tests {
     const SID: &str = "S-1-5-21-1004336348-1177238915-682003330-1001";
 
     fn at(percent: u8) -> crate::watch_service::Switching {
-        let at = crate::duty::autoswitch::Threshold::new(percent).expect("a share");
-        crate::watch_service::Switching::At(at)
+        crate::watch_service::Switching::At(crate::duty::autoswitch::Policy {
+            threshold: crate::duty::autoswitch::Threshold::new(percent).expect("a share"),
+            order: crate::usage::Order::MostLeft,
+        })
     }
 
     // On Windows two `icacls` a path, and none where the person's SID could not be read.

@@ -605,7 +605,7 @@ fn a_folder_move_waiting_does_not_stop_a_claude_code_switch() {
                 state,
                 here,
                 &ledger,
-                crate::duty::autoswitch::Threshold::DEFAULT,
+                crate::duty::autoswitch::Policy::default(),
                 NOW
             )
         )

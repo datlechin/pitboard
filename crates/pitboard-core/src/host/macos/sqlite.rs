@@ -113,16 +113,24 @@ enum At {
 
 fn refused(error: rusqlite::Error, at: At) -> JarError {
     let detail = error.to_string();
-    let Some(code) = error.sqlite_error_code() else {
+    // A statement SQLite would not prepare comes with where in its text it stopped.
+    let failure = match &error {
+        rusqlite::Error::SqlInputError { error, .. } => Some(error),
+        error => error.sqlite_error(),
+    };
+    let Some(&rusqlite::ffi::Error {
+        code,
+        extended_code,
+    }) = failure
+    else {
         return match error {
             rusqlite::Error::InvalidColumnType(..)
             | rusqlite::Error::FromSqlConversionFailure(..) => JarError::Unknown(detail),
             _ => JarError::Unreadable(detail),
         };
     };
-    let extended = error.sqlite_error().map(|e| e.extended_code);
-    let rollback = extended == Some(rusqlite::ffi::SQLITE_READONLY_ROLLBACK);
-    let generic = extended.is_some_and(|code| code & 0xff == rusqlite::ffi::SQLITE_ERROR);
+    let rollback = extended_code == rusqlite::ffi::SQLITE_READONLY_ROLLBACK;
+    let generic = extended_code & 0xff == rusqlite::ffi::SQLITE_ERROR;
     match code {
         ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => JarError::Unsettled(detail),
         ErrorCode::ReadOnly if rollback => JarError::Unsettled(detail),

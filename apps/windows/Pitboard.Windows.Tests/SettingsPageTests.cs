@@ -325,6 +325,12 @@ public sealed class SettingsPageTests
 
         share.Value = 96;
         Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 96), model.Sent);
+
+        var order = Views.Element<ComboBox>(page, "settings.atLimitOrder");
+        CollectionAssert.AreEqual(new object[] { "Most left", "Resets soonest" }, order.Items.ToArray());
+        Assert.AreEqual("Use first", AutomationProperties.GetName(order));
+        order.SelectedIndex = 1;
+        Assert.Contains(new Intent.SetOrder(SwitchOrder.ResetsSoonest), model.Sent);
     }
 
     [UITestMethod]
@@ -336,6 +342,7 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
         Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
+        Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimitOrder").IsEnabled);
     }
 
     [UITestMethod]

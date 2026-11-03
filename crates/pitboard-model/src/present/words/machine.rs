@@ -5,7 +5,7 @@ use super::{
     CLOSING_QUITS, settings, sign_in_standing, store_in_front, this_machine, titled, typeset,
 };
 use crate::Front;
-use crate::model::AtLimit;
+use crate::model::{AtLimit, SwitchOrder};
 use pitboard_core::status::Standing;
 use pitboard_core::words::capitalised;
 
@@ -96,11 +96,12 @@ pub(crate) fn watch_service_about(
 ) -> String {
     use pitboard_core::watch_service::Switching;
     match switching {
-        Switching::At(at) => format!(
-            "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}% and warming up \
+        Switching::At(policy) => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}%{} and warming up \
              the accounts {} turns on, from each login.",
             this_machine(front),
-            at.percent(),
+            policy.threshold.percent(),
+            pitboard_core::words::first_by(policy.order),
             warm_up(front)
         ),
         Switching::Never => format!(
@@ -146,6 +147,16 @@ pub(crate) fn at_limit_label(at: u8) -> String {
 // The share's field, beside "When a limit reaches".
 pub(crate) const AT: &str = "At";
 
+// The order's choice, under the share.
+pub(crate) const USE_FIRST: &str = "Use first";
+
+pub(crate) fn order_choice(front: Front, order: SwitchOrder) -> String {
+    match order {
+        SwitchOrder::MostLeft => titled(front, "Most Left", "Most left"),
+        SwitchOrder::ResetsSoonest => titled(front, "Resets Soonest", "Resets soonest"),
+    }
+}
+
 pub(crate) fn at_limit_choice(front: Front, choice: AtLimit) -> String {
     match choice {
         AtLimit::Nothing => titled(front, "Do Nothing", "Do nothing"),
@@ -160,25 +171,41 @@ pub(crate) fn at_limit_note(
     front: Front,
     choice: AtLimit,
     at: u8,
+    order: SwitchOrder,
     file_left: bool,
     seconds: u32,
 ) -> Option<String> {
-    match choice {
-        AtLimit::Nothing => None,
-        AtLimit::Notify => Some(format!(
+    let note = match choice {
+        AtLimit::Nothing => return None,
+        AtLimit::Notify => format!(
             "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
              is open."
-        )),
-        AtLimit::Switch if file_left => Some(format!(
+        ),
+        AtLimit::Switch if file_left => format!(
             "Pitboard switches Claude Code at {at}%, but its running sessions don’t follow while a \
              sign-in file is left behind {}.",
             store_in_front(front)
-        )),
-        AtLimit::Switch => Some(format!(
+        ),
+        AtLimit::Switch => format!(
             "Pitboard switches Claude Code at {at}%, and its running sessions follow within about \
              {seconds} seconds."
-        )),
-    }
+        ),
+    };
+    let first = match (order, choice) {
+        (SwitchOrder::MostLeft, _) | (SwitchOrder::ResetsSoonest, AtLimit::Nothing) => None,
+        (SwitchOrder::ResetsSoonest, AtLimit::Notify) => Some(
+            "It also tells you when another account’s week resets sooner and that account has \
+             room.",
+        ),
+        (SwitchOrder::ResetsSoonest, AtLimit::Switch) => Some(
+            "Before then, it switches to an account whose week resets sooner, if that account has \
+             room and as much of its 5-hour limit left.",
+        ),
+    };
+    Some(match first {
+        Some(first) => format!("{note} {first}"),
+        None => note,
+    })
 }
 
 // Under the setting, where switching by itself stopped on `message`: `until` it tries again.
@@ -720,25 +747,56 @@ mod tests {
             ("Switch Automatically".into(), "Switch automatically".into())
         );
         assert_eq!(
-            at_limit_note(Front::MacMenuBar, AtLimit::Nothing, 95, false, 33),
+            at_limit_note(
+                Front::MacMenuBar,
+                AtLimit::Nothing,
+                95,
+                SwitchOrder::MostLeft,
+                false,
+                33
+            ),
             None
         );
         assert_eq!(
-            at_limit_note(Front::MacMenuBar, AtLimit::Notify, 95, true, 33).as_deref(),
+            at_limit_note(
+                Front::MacMenuBar,
+                AtLimit::Notify,
+                95,
+                SwitchOrder::MostLeft,
+                true,
+                33
+            )
+            .as_deref(),
             Some(
                 "Pitboard notifies you once a limit of the account in use reaches 95%, while the \
                  app is open."
             )
         );
         assert_eq!(
-            at_limit_note(Front::MacMenuBar, AtLimit::Switch, 95, false, 33).as_deref(),
+            at_limit_note(
+                Front::MacMenuBar,
+                AtLimit::Switch,
+                95,
+                SwitchOrder::MostLeft,
+                false,
+                33
+            )
+            .as_deref(),
             Some(
                 "Pitboard switches Claude Code at 95%, and its running sessions follow within \
                  about 33 seconds."
             )
         );
         assert_eq!(
-            at_limit_note(Front::MacMenuBar, AtLimit::Switch, 95, true, 33).as_deref(),
+            at_limit_note(
+                Front::MacMenuBar,
+                AtLimit::Switch,
+                95,
+                SwitchOrder::MostLeft,
+                true,
+                33
+            )
+            .as_deref(),
             Some(
                 "Pitboard switches Claude Code at 95%, but its running sessions don’t follow while \
                  a sign-in file is left behind the keychain."
@@ -746,7 +804,15 @@ mod tests {
         );
         // On Linux the file is Claude Code's store, with no keychain in front of it.
         assert_eq!(
-            at_limit_note(Front::Gnome, AtLimit::Switch, 95, true, 33).as_deref(),
+            at_limit_note(
+                Front::Gnome,
+                AtLimit::Switch,
+                95,
+                SwitchOrder::MostLeft,
+                true,
+                33
+            )
+            .as_deref(),
             Some(
                 "Pitboard switches Claude Code at 95%, but its running sessions don’t follow while \
                  a sign-in file is left behind the store it keeps its sign-in in."
@@ -804,9 +870,11 @@ mod tests {
              on."
         );
         let at = |percent| {
-            pitboard_core::watch_service::Switching::At(
-                pitboard_core::duty::autoswitch::Threshold::new(percent).expect("a share"),
-            )
+            pitboard_core::watch_service::Switching::At(pitboard_core::duty::autoswitch::Policy {
+                threshold: pitboard_core::duty::autoswitch::Threshold::new(percent)
+                    .expect("a share"),
+                order: pitboard_core::usage::Order::MostLeft,
+            })
         };
         assert_eq!(
             watch_service_about(Front::Gnome, at(95)),

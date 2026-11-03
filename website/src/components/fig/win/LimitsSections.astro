@@ -1,20 +1,20 @@
 ---
-// SettingsPage.xaml's Limits: When a limit reaches, open on its share, dimmed while nothing
-// happens at it, and Warm-up, open on its hours and accounts, what it does under its name
-// and its hours beside it, each a section live/limits.ts works, each with its icon. Each control is
-// named as the XAML names it; each expander's button shows and hides its items, and their ids start
-// `prefix`. Every choice's words are drawn, those of the choice not shown hidden. Is this allowed?
-// is the link alone, under When a limit reaches whatever is chosen. The time pickers' flyouts
-// open over the window, from the desk, where `flyouts` draws them alone.
+// SettingsPage.xaml's Limits: When a limit reaches, open on its share and Use first, both dimmed
+// while nothing happens at the share, and Warm-up, open on its hours and accounts, what it does
+// under its name and its hours beside it, each a section live/limits.ts works, each with its
+// icon. Each control is named as the XAML names it; each expander's button shows and hides its
+// items, and their ids start `prefix`. Every choice's words are drawn, those of the choice not
+// shown hidden. Is this allowed? is the link alone, under When a limit reaches whatever is chosen.
+// The time pickers' flyouts open over the window, from the desk, where `flyouts` draws them alone.
 import ComboBox from "./ComboBox.astro";
 import NumberBox from "./NumberBox.astro";
 import TimePicker from "./TimePicker.astro";
 import Toggle from "./Toggle.astro";
 import { settingsPage as page } from "../../../data/windows.ts";
-import { choices, heading } from "../../../data/limits.ts";
+import { choices, heading, orderLabel, orders } from "../../../data/limits.ts";
 import { DOCS } from "../../../data/site.ts";
 import { moments, share, warmUp } from "../../../data/world.ts";
-import type { AtLimit } from "../../../lib/model.ts";
+import type { AtLimit, Order } from "../../../lib/model.ts";
 import { atLimitNote } from "../../../lib/words.ts";
 import { toolAccounts } from "../../../lib/words.ts";
 
@@ -44,6 +44,7 @@ const toggle =
   "group/toggle flex size-32 shrink-0 items-center justify-center rounded-u-4 focus-win live:hover:bg-win-subtle";
 const chevron = "size-12 transition-transform group-aria-[expanded=false]/toggle:rotate-180";
 const drawn: AtLimit = "switch";
+const order: Order = "most-left";
 // the hours, and each Claude Code account with its id, which a working figure follows
 const hours = [
   ["From", "from", minutes(warmUp.from)],
@@ -80,7 +81,7 @@ const icon = "size-20 shrink-0";
           {choices.map((c) =>
             c.value === "nothing" ? null : (
               <span class:list={["block", caption]} data-note={c.value} hidden={c.value !== drawn}>
-                {atLimitNote({ atLimit: c.value, chosen: true, share })}
+                {atLimitNote({ atLimit: c.value, share, order })}
               </span>
             ),
           )}
@@ -113,10 +114,7 @@ const icon = "size-20 shrink-0";
       </div>
       <div id={items}>
         {/* a SettingsCard's header and description dim with it */}
-        <div
-          class:list={[item, "group/share rounded-b-u-4 has-[:disabled]:text-win-text-off"]}
-          data-share-card
-        >
+        <div class:list={[item, "group/share has-[:disabled]:text-win-text-off"]} data-share-card>
           <span class="min-w-0 flex-1">
             <span class="block">{page.share.header}</span>
             <span class:list={["block", caption, "group-has-[:disabled]/share:text-win-text-off"]}
@@ -124,6 +122,20 @@ const icon = "size-20 shrink-0";
             >
           </span>
           <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+        </div>
+        <div
+          class:list={[item, card, "has-[[aria-disabled=true]]:text-win-text-off"]}
+          data-order-card
+        >
+          <span class="min-w-0 flex-1">{orderLabel}</span>
+          <ComboBox
+            prefix={prefix}
+            name="order"
+            options={orders.map((o) => ({ value: o.value, title: o.win }))}
+            value={order}
+            label={orderLabel}
+            listLabel={orderLabel}
+          />
         </div>
       </div>
     </div>}

@@ -15,6 +15,8 @@ import {
   section as BEFORE_RUNNING_OUT,
   choices,
   heading as AT_LIMIT,
+  orderLabel,
+  orders,
   shareLabel,
   shareRange,
   terms,
@@ -52,6 +54,7 @@ import {
   SIGN_IN_EXPIRED,
   activity,
   atLimitNote as wordsAtLimitNote,
+  firstBy,
   hm,
   isInUse,
   limitRow,
@@ -66,7 +69,7 @@ import {
   warmsAgainNote,
   type LimitRow,
 } from "../lib/words.ts";
-import type { AtLimit, Preferences } from "../lib/model.ts";
+import type { AtLimit, Order, Preferences } from "../lib/model.ts";
 import type { Desktop } from "../lib/platform.ts";
 
 const FRONT = "gnome";
@@ -271,17 +274,17 @@ export const activityPage = {
 
 // What a desktop with no status item says, and one with one does not (present/words/setup.rs,
 // present/words/machine.rs): on stock GNOME, closing the window quits Pitboard, and the watch
-// service goes on switching at the share or never.
-const watchAbout = (switching: boolean, at = share) =>
+// service goes on switching at the share, and before it under Resets Soonest, or never.
+const watchAbout = (switching: boolean, at = share, order: Order = "most-left") =>
   switching
-    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code at ${at}% and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
+    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code at ${at}%${firstBy(order)} and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
     : `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on warming up the accounts ${WARM_UP_LABEL} turns on, from each login, and never switches Claude Code.`;
 
 // The at-limit note under Before an account runs out, then, where nothing keeps Pitboard running
 // once its window is closed, what goes on then: switching, or with the watch service on its
 // warm-ups alone (present/machine.rs `at_limit`).
 export function atLimitNote(
-  p: Pick<Preferences, "atLimit" | "share">,
+  p: Pick<Preferences, "atLimit" | "share" | "order">,
   statusItem: boolean,
   watched = false,
 ): string | null {
@@ -296,7 +299,7 @@ export function atLimitNote(
         : p.atLimit === "notify"
           ? "Once its window is closed, nothing notifies you, and the watch service only warms up."
           : "The watch service only warms up, and never switches.";
-  const said = [wordsAtLimitNote({ ...p, chosen: true }), closed].filter(Boolean);
+  const said = [wordsAtLimitNote(p), closed].filter(Boolean);
   return said.length ? said.join(" ") : null;
 }
 
@@ -322,6 +325,10 @@ export const prefs = {
     choices: choices.map((c) => [c.value, titled(FRONT, c.mac, c.win)] as [AtLimit, string]),
     standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
     share: { label: shareLabel, range: shareRange, at: share },
+    order: {
+      label: orderLabel,
+      orders: orders.map((o) => [o.value, titled(FRONT, o.mac, o.win)] as [Order, string]),
+    },
     terms,
     warm: {
       title: warm.title.gnome,

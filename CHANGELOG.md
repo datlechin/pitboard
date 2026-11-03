@@ -7,6 +7,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Use first** in the app's Limits settings, and `pitboard watch --order`, choose which account
+  Pitboard offers and switches to first: the one with the most room, or the one whose week resets
+  soonest.
+- Under **Resets Soonest**, automatic switching also switches before the share to an account whose
+  week resets sooner and has room, and **Notify Me** posts a notification for it instead.
+- `pitboard watch --json` gives `order`, and a `switched` event gives its `reason` and, for a
+  switch before the share, when both accounts' weeks reset.
+
+### Changed
+
+- **Breaking:** The public API of `pitboard-core` changes; [its
+  documentation](https://docs.rs/pitboard-core/0.19.0/pitboard_core/) shows the new one.
+
 ## [1.0.0-beta.8] - 2026-10-31
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

@@ -11,12 +11,12 @@
 use crate::model::state::in_its_app;
 use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
-    Abandoned, Account, Awaiting, FoundCommandLine, Front, Level, Parked, Schedule, Status, Usage,
+    Abandoned, Account, Awaiting, FoundCommandLine, Front, Level, Parked, Schedule, Status,
     Warning, WatchService, found_command_line,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
-use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
+use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Policy, Skip, Threshold, Why};
 use pitboard_core::duty::warm::{Overview, Range};
 use pitboard_core::duty::written::Written;
 use pitboard_core::provider::{self, ProviderId};
@@ -298,18 +298,15 @@ pub(crate) enum AutoSwitched {
         until: i64,
     },
     /// Claude Code was switched from `from` to `to`, which running sessions take as `adoption`
-    /// says, with what the switch warned of, and how much the account it left has used: "96%
-    /// of its 5-hour limit". `from` and `to` as the core types them, and `accounts` the two
-    /// they name.
+    /// says, with what the switch warned of, and why. `from` and `to` as the core types them,
+    /// and `accounts` the two they name.
     Switched {
         from: String,
         to: String,
         accounts: (Key, Key),
         adoption: Adoption,
         warnings: Vec<Warning>,
-        used: String,
-        // when the limit it left resets
-        resets_at: Option<i64>,
+        because: Because,
     },
     /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
     /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
@@ -331,6 +328,30 @@ pub(crate) enum AutoSwitched {
         why: String,
         until: Option<i64>,
     },
+}
+
+/// Why switching by itself switched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Because {
+    /// The account it left used this much of a limit, "96% of its 5-hour limit", which resets
+    /// at `resets_at`.
+    Limit {
+        used: String,
+        resets_at: Option<i64>,
+    },
+    /// The account it went to comes first by its week, which resets at `to`, before the week of
+    /// the account it left at `from`; `to` is `None` where it has no weekly limit.
+    ResetsFirst { to: Option<i64>, from: Option<i64> },
+}
+
+impl Because {
+    /// When the limit it left resets, where it left one.
+    pub(crate) fn resets_at(&self) -> Option<i64> {
+        match self {
+            Because::Limit { resets_at, .. } => *resets_at,
+            Because::ResetsFirst { .. } => None,
+        }
+    }
 }
 
 /// What the core's look at whether to switch Claude Code by itself came to, from its files
@@ -450,11 +471,7 @@ fn account(row: status::Row, now: i64) -> Account {
             refresh_expires_at: p.refresh_expires_at,
             session_expires_at: p.session_expires_at,
         }),
-        usage: row.usage.map(|u| Usage {
-            observed_at: u.observed_at,
-            lists_every_limit: u.lists_every_limit,
-            windows: u.windows,
-        }),
+        usage: row.usage,
         label: row.label,
         email: row.email,
         account_id: row.id,
@@ -542,7 +559,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
         Auto::Switched {
             from,
             to,
-            limit,
+            why,
             adoption,
         } => AutoSwitched::Switched {
             accounts: (Key::parse(&from), Key::parse(&to)),
@@ -550,8 +567,16 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             to,
             adoption,
             warnings,
-            used: words::share_of_limit(&limit),
-            resets_at: limit.resets_at,
+            because: match why {
+                Why::Limit(limit) => Because::Limit {
+                    used: words::share_of_limit(&limit),
+                    resets_at: limit.resets_at,
+                },
+                Why::ResetsFirst { to, from } => Because::ResetsFirst {
+                    to: to.resets_at(),
+                    from: from.resets_at(),
+                },
+            },
         },
         Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
             key: why.told_apart(&from, &limit),
@@ -1022,33 +1047,25 @@ impl AppCore {
         )
     }
 
-    /// Switches Claude Code by itself where a limit of the account in use has reached `at`%
-    /// and another account has room, as the core decides under its lock. `at` is taken as the
-    /// nearest share there can be.
-    pub(crate) fn auto_switch(&self, at: u8) -> Result<AutoSwitched, PitboardError> {
-        let threshold = Threshold::clamped(i64::from(at));
+    /// Switches Claude Code by itself where `policy` says to, as the core decides under its
+    /// lock.
+    pub(crate) fn auto_switch(&self, policy: Policy) -> Result<AutoSwitched, PitboardError> {
         changed(
             self.front,
-            self.core().core.auto_switch(threshold),
-            |auto, warnings| auto_switched(auto, warnings, threshold),
+            self.core().core.auto_switch(policy),
+            |auto, warnings| auto_switched(auto, warnings, policy.threshold),
         )
     }
 
-    /// What switching Claude Code by itself at `at`% would come to, from the core's files
+    /// What switching Claude Code by itself under `policy` would come to, from the core's files
     /// alone: what stands, or that only a decision under its lock can say. Takes no lock,
     /// reads no keychain and asks nobody, so the model asks it after every read and every half
     /// a minute.
-    pub(crate) fn auto_look(&self, at: u8) -> Result<AutoLooked, PitboardError> {
-        let threshold = Threshold::clamped(i64::from(at));
+    pub(crate) fn auto_look(&self, policy: Policy) -> Result<AutoLooked, PitboardError> {
         Ok(
-            match self
-                .readable()?
-                .core
-                .auto_look(threshold)
-                .said(self.front)?
-            {
+            match self.readable()?.core.auto_look(policy).said(self.front)? {
                 Look::Stands(auto) => {
-                    AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), threshold)))
+                    AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), policy.threshold)))
                 }
                 Look::Act => AutoLooked::Act,
             },

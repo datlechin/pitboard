@@ -5,9 +5,10 @@
 //! told, and the model's state keeps both and says what to post and what to keep.
 
 use crate::{Account, Status};
+use pitboard_core::duty::autoswitch::Policy;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
-use pitboard_core::usage::{self, Window, same_reset, whole};
+use pitboard_core::usage::{self, Order, Week, Window, same_reset, whole};
 use std::collections::BTreeMap;
 
 /// The share, as drawn, an account to offer must be below in every limit: one the app draws
@@ -39,13 +40,14 @@ pub(crate) struct Advice {
 }
 
 /// The account of the same tool that can be switched to at `now` for a switch away from
-/// `ran` of `current`, by the rule the automatic switch keeps at `share`, and what it has left
-/// of that kind of limit: none when none has room.
+/// `ran` of `current`, by the rule the automatic switch keeps at `share` in `order`, and what it
+/// has left of that kind of limit: none when none has room.
 fn spare(
     ran: &Window,
     current: &Account,
     mine: &[&Account],
     share: u8,
+    order: Order,
     now: i64,
 ) -> Option<(String, Option<i64>, Key)> {
     let in_use = current
@@ -53,20 +55,11 @@ fn spare(
         .as_ref()
         .map_or(&[][..], |usage| &usage.windows);
     let (spare, room) = usage::preferred(
-        mine.iter()
-            .filter(|account| account.standing.switchable() && account.key.is_some())
-            .filter_map(|account| {
-                let theirs = account.usage.as_ref()?;
-                let room = usage::room(
-                    &theirs.windows,
-                    theirs.lists_every_limit,
-                    in_use,
-                    ran,
-                    share,
-                    now,
-                )?;
-                Some((account, room))
-            }),
+        order,
+        switchable(mine).filter_map(|account| {
+            let room = usage::room(account.usage.as_ref()?, in_use, ran, share, now)?;
+            Some((account, room))
+        }),
     )?;
     Some((
         spare.label.clone()?,
@@ -100,7 +93,12 @@ impl Advice {
     /// Claude Code account has run out, and a switch between them is not a switch at all.
     /// A limit told about at a reset one minute from this one's, by the core's rule for one
     /// reset, has been told.
-    pub(crate) fn about(status: &Status, tools: &[ProviderId], told: &Told) -> Vec<Advice> {
+    pub(crate) fn about(
+        status: &Status,
+        tools: &[ProviderId],
+        told: &Told,
+        order: Order,
+    ) -> Vec<Advice> {
         in_use(status, tools)
             .into_iter()
             .filter_map(|found| {
@@ -111,7 +109,7 @@ impl Advice {
                         continue;
                     }
                     let Some((instead, left, switch_to)) =
-                        spare(limit, found.current, &found.mine, FULL, status.now)
+                        spare(limit, found.current, &found.mine, FULL, order, status.now)
                     else {
                         continue;
                     };
@@ -134,14 +132,15 @@ impl Advice {
     /// room again or is no longer in use, and otherwise offering the best account there is
     /// now. The one offered before may have been forgotten, renamed, expired or run out
     /// itself, and a menu item offering it would fail when chosen.
-    pub(crate) fn renewed(&self, status: &Status) -> Option<Advice> {
+    pub(crate) fn renewed(&self, status: &Status, order: Order) -> Option<Advice> {
         let current = self.still_out(status)?;
         let mine: Vec<&Account> = status
             .accounts
             .iter()
             .filter(|account| account.provider == self.provider)
             .collect();
-        let (instead, left, switch_to) = spare(&self.window, current, &mine, FULL, status.now)?;
+        let (instead, left, switch_to) =
+            spare(&self.window, current, &mine, FULL, order, status.now)?;
         Some(Advice {
             instead,
             left,
@@ -215,6 +214,7 @@ impl HeadsUp {
         tools: &[ProviderId],
         told: &Told,
         at: u8,
+        order: Order,
     ) -> Vec<HeadsUp> {
         in_use(status, tools)
             .into_iter()
@@ -232,11 +232,84 @@ impl HeadsUp {
                     tool: found.tool,
                     ran: ran.to_owned(),
                     window: limit.clone(),
-                    instead: spare(limit, found.current, &found.mine, at, status.now),
+                    instead: spare(limit, found.current, &found.mine, at, order, status.now),
                 })
             })
             .collect()
     }
+}
+
+/// Under Resets Soonest, the account the automatic switch would move to before the share, told
+/// once for the week it is about.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct First {
+    pub(crate) provider: ProviderId,
+    pub(crate) tool: Option<String>,
+    pub(crate) ran: String,
+    pub(crate) instead: String,
+    // whether `instead` has a weekly limit for all models
+    pub(crate) weekly: bool,
+    pub(crate) week: i64,
+    // of `instead`'s five-hour limit
+    pub(crate) five_hours: f64,
+    pub(crate) switch_to: Key,
+}
+
+impl First {
+    // One for each tool, of an account not told about in this week of it.
+    pub(crate) fn about(
+        status: &Status,
+        tools: &[ProviderId],
+        told: &Told,
+        policy: Policy,
+    ) -> Vec<First> {
+        if policy.order != Order::ResetsSoonest {
+            return Vec::new();
+        }
+        let share = policy.threshold.percent();
+        let now = status.now;
+        in_use(status, tools)
+            .into_iter()
+            .filter_map(|found| {
+                let ran = found.current.label.as_deref()?;
+                let mine = found.current.usage.as_ref()?;
+                if mine.windows.iter().any(|limit| limit.reached(share, now)) {
+                    return None;
+                }
+                let (account, room) = usage::preferred(
+                    Order::ResetsSoonest,
+                    switchable(&found.mine).filter_map(|account| {
+                        let room = usage::resets_first(account.usage.as_ref()?, mine, share, now)?;
+                        Some((account, room))
+                    }),
+                )?;
+                // Its own week, or for an account without one, the week of the account in use.
+                let week = room.week.resets_at().or(Week::of(mine, now).resets_at())?;
+                let first = First {
+                    provider: found.provider,
+                    tool: found.tool,
+                    ran: ran.to_owned(),
+                    instead: account.label.clone()?,
+                    weekly: room.week != Week::Free,
+                    week,
+                    five_hours: usage::five_hours(&account.usage.as_ref()?.windows, now),
+                    switch_to: account.key.clone()?,
+                };
+                let at = told.get(&first.key_of());
+                (at.is_none_or(|&at| !same_reset(at, week))).then_some(first)
+            })
+            .collect()
+    }
+
+    pub(crate) fn key_of(&self) -> String {
+        [self.provider.code(), &self.instead, "first", ""].join("/")
+    }
+}
+
+// The accounts of a tool that can be switched to now.
+fn switchable<'a>(mine: &'a [&'a Account]) -> impl Iterator<Item = &'a &'a Account> {
+    mine.iter()
+        .filter(|account| account.standing.switchable() && account.key.is_some())
 }
 
 struct InUse<'a> {
@@ -317,7 +390,7 @@ mod tests {
     }
 
     fn about(status: &Status, told: &Told) -> Vec<Advice> {
-        Advice::about(status, &[], told)
+        Advice::about(status, &[], told, Order::MostLeft)
     }
 
     #[test]
@@ -537,11 +610,17 @@ mod tests {
             codex("five-hour-only", vec![five_hours(10.0)]),
         ];
         assert!(
-            Advice::about(&status(not_offered.clone()), &both_tools(), &Told::new()).is_empty()
+            Advice::about(
+                &status(not_offered.clone()),
+                &both_tools(),
+                &Told::new(),
+                Order::MostLeft
+            )
+            .is_empty()
         );
         let spare = codex("spare", vec![five_hours(40.0), week(50.0)]);
         let read = status([not_offered, vec![spare]].concat());
-        let advice = Advice::about(&read, &both_tools(), &Told::new());
+        let advice = Advice::about(&read, &both_tools(), &Told::new(), Order::MostLeft);
         assert_eq!(
             advice
                 .first()
@@ -635,7 +714,7 @@ mod tests {
                 .limits(vec![window("five_hour", 0.0).length(18_000)])
                 .build(),
         ]);
-        assert!(Advice::about(&read, &both_tools(), &Told::new()).is_empty());
+        assert!(Advice::about(&read, &both_tools(), &Told::new(), Order::MostLeft).is_empty());
     }
 
     /// Each tool is advised about from its own accounts, and says which tool it is about.
@@ -661,7 +740,7 @@ mod tests {
                 .limits(vec![window("seven_day", 60.0).length(604_800)])
                 .build(),
         ]);
-        let advice = Advice::about(&read, &both_tools(), &Told::new());
+        let advice = Advice::about(&read, &both_tools(), &Told::new(), Order::MostLeft);
         let to: Vec<String> = advice.iter().map(|a| a.switch_to.qualified()).collect();
         assert_eq!(to, ["claude/personal", "codex/spare"]);
         let tools: Vec<Option<&str>> = advice.iter().map(|a| a.tool.as_deref()).collect();

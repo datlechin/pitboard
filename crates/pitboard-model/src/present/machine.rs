@@ -3,9 +3,10 @@
 use super::checks::{ChecksShown, checks};
 use super::{Seen, words};
 use crate::Front;
-use crate::model::AtLimit;
+use crate::launch::Because;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
+use crate::model::{AtLimit, SwitchOrder};
 use crate::{AccountKey, AutoSwitched, FoundCommandLine, Schedule, WatchService};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::state::Key;
@@ -92,9 +93,14 @@ pub struct AtLimitShown {
     pub at: u8,
     pub lowest: u8,
     pub highest: u8,
+    // which account goes first, which `Intent::SetOrder` takes back
+    pub order: SwitchOrder,
+    pub orders: Vec<OrderChoice>,
+    // "Use first", beside the order's choice
+    pub order_label: String,
     // not before the preferences are read, nor ever where they could not be
     pub enabled: bool,
-    // and while something happens at the share
+    // and while something happens at the share: of the share's control and the order's
     pub share_enabled: bool,
     // "When a limit reaches", beside the field that shows the share
     pub heading: String,
@@ -114,6 +120,12 @@ pub struct AtLimitShown {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AtLimitChoice {
     pub choice: AtLimit,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OrderChoice {
+    pub order: SwitchOrder,
     pub title: String,
 }
 
@@ -336,11 +348,13 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
     let choice = state.preferences.at_limit();
+    let order = SwitchOrder::from(state.preferences.order());
     let switching = choice == AtLimit::Switch;
     let note = words::at_limit_note(
         seen.front,
         choice,
         at,
+        order,
         state
             .warnings
             .iter()
@@ -368,6 +382,15 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         at,
         lowest: Threshold::LOWEST,
         highest: Threshold::HIGHEST,
+        order,
+        orders: [SwitchOrder::MostLeft, SwitchOrder::ResetsSoonest]
+            .into_iter()
+            .map(|order| OrderChoice {
+                order,
+                title: words::order_choice(seen.front, order),
+            })
+            .collect(),
+        order_label: words::USE_FIRST.into(),
         enabled: state.preferences_have_been_read(),
         share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
         heading: words::AT_LIMIT.into(),
@@ -403,8 +426,24 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
         AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => {
             pitboard_core::words::auto_waiting(&words::quoted(from), used, &seen.clock(*until))
         }
-        AutoStanding::Came(AutoSwitched::Switched { from, to, used, .. }) => {
-            pitboard_core::words::auto_switched(&words::quoted(from), &words::quoted(to), used)
+        AutoStanding::Came(AutoSwitched::Switched {
+            from, to, because, ..
+        }) => {
+            let (from, to) = (words::quoted(from), words::quoted(to));
+            use pitboard_core::words as said;
+            let because = match because {
+                Because::Limit { used, .. } => said::has_used(&from, used),
+                Because::ResetsFirst {
+                    to: Some(ahead),
+                    from: Some(behind),
+                } => said::resets_at_before(&to, &seen.clock(*ahead), &from, &seen.clock(*behind)),
+                Because::ResetsFirst {
+                    to: Some(_),
+                    from: None,
+                } => said::resets_before(&to, &from),
+                Because::ResetsFirst { to: None, .. } => said::no_weekly_limit(&to),
+            };
+            said::auto_switched(&from, &to, &because)
         }
         AutoStanding::Came(AutoSwitched::Skipped {
             from,

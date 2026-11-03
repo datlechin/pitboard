@@ -801,11 +801,11 @@ impl Worker {
                 account,
                 reopen: None,
             },
-            Job::AutoLook { at } => Answer::AutoLooked {
-                looked: core.auto_look(at),
+            Job::AutoLook { policy } => Answer::AutoLooked {
+                looked: core.auto_look(policy),
             },
-            Job::AutoSwitch { at } => Answer::AutoSwitched {
-                done: core.auto_switch(at),
+            Job::AutoSwitch { policy } => Answer::AutoSwitched {
+                done: core.auto_switch(policy),
             },
             Job::WarmUp => Answer::WarmedUp {
                 asked: None,
@@ -1341,8 +1341,9 @@ mod tests {
     /// change, made one at a time with every other.
     #[test]
     fn a_look_whether_to_switch_by_itself_runs_with_the_reads() {
-        assert_eq!(Job::AutoLook { at: 95 }.lane(), Lane::Reads);
-        assert_eq!(Job::AutoSwitch { at: 95 }.lane(), Lane::Changes);
+        let policy = pitboard_core::duty::autoswitch::Policy::default();
+        assert_eq!(Job::AutoLook { policy }.lane(), Lane::Reads);
+        assert_eq!(Job::AutoSwitch { policy }.lane(), Lane::Changes);
     }
 
     /// Only a running app holding the tool is asked about, on the real core, whose holder

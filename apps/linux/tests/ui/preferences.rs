@@ -7,7 +7,7 @@ use adw::prelude::*;
 use pitboard_linux::platform::autostart::StartAtSignIn;
 use pitboard_linux::platform::stand_in;
 use pitboard_linux::preferences::Preferences;
-use pitboard_model::{AtLimit, Front, Intent, Place, SettingsSection, Snapshot};
+use pitboard_model::{AtLimit, Front, Intent, Place, SettingsSection, Snapshot, SwitchOrder};
 
 use super::views::{Viewed, row};
 
@@ -38,9 +38,10 @@ fn a_setting_sends_only_a_value_that_differs() {
         shown.machine.at_limit.enabled && shown.machine.warm.enabled
     });
     let machine = shown_in(&viewed).machine;
-    let (heading, share_label) = (
+    let (heading, share_label, order_label) = (
         machine.at_limit.heading.clone(),
         machine.at_limit.share_label.clone(),
+        machine.at_limit.order_label.clone(),
     );
     let words = pitboard_model::app_words(Front::Gnome).settings;
     viewed.sent_since();
@@ -111,6 +112,34 @@ fn a_setting_sends_only_a_value_that_differs() {
         shown.machine.warm.from == from + 15
     });
     assert_eq!(viewed.sent_since(), [], "only what was set is sent");
+
+    // Which account goes first, under the share.
+    let order = row::<adw::ComboRow>(&preferences, &order_label);
+    let orders = shown_in(&viewed).machine.at_limit.orders;
+    let at = |wanted| {
+        (orders.iter())
+            .position(|listed| listed.order == wanted)
+            .unwrap() as u32
+    };
+    assert_eq!(order.selected(), at(SwitchOrder::MostLeft));
+    order.set_selected(at(SwitchOrder::MostLeft));
+    assert_eq!(viewed.sent_since(), []);
+    order.set_selected(at(SwitchOrder::ResetsSoonest));
+    assert_eq!(
+        viewed.sent_since(),
+        [Intent::SetOrder {
+            order: SwitchOrder::ResetsSoonest
+        }]
+    );
+    viewed.until("the order shown", |shown| {
+        shown.machine.at_limit.order == SwitchOrder::ResetsSoonest
+    });
+    assert_eq!(viewed.sent_since(), [], "the order shown sends nothing");
+    combo.set_selected(index(AtLimit::Nothing));
+    viewed.until("nothing at the share", |shown| {
+        shown.machine.at_limit.choice == AtLimit::Nothing
+    });
+    assert!(!order.is_visible(), "hidden with the share");
 }
 
 #[gtk::test]

@@ -8,15 +8,18 @@ use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, switched, watching};
-use super::{AtLimit, Intent, Notice, NoticeButton, NoticeButtonKind, Place};
+use super::{AtLimit, Intent, Notice, NoticeButton, NoticeButtonKind, Place, SwitchOrder};
 use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
+use crate::launch::Because;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
+use pitboard_core::duty::autoswitch::{Policy, Threshold};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
+use pitboard_core::usage::Order;
 use pitboard_core::words as said;
 use std::time::Duration;
 
@@ -74,8 +77,10 @@ fn switched_work_to_personal() -> Result<AutoSwitched, Refusal> {
         ),
         adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
-        used: "97% of its 5-hour limit".into(),
-        resets_at: Some(9_000),
+        because: Because::Limit {
+            used: "97% of its 5-hour limit".into(),
+            resets_at: Some(9_000),
+        },
     })
 }
 
@@ -177,7 +182,7 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
     let mut machine = Stub::reading(Ok(status(vec![work(94.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    assert_eq!(machine.looked_at, [95], "after the read");
+    assert_eq!(machine.looked_at, [Policy::default()], "after the read");
     assert_eq!(
         model.count(auto_switch),
         0,
@@ -202,7 +207,7 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
         "one switch at a time"
     );
     model.run(&mut machine);
-    assert_eq!(machine.auto_at, [95]);
+    assert_eq!(machine.auto_at, [Policy::default()]);
     assert!(!model.state.switch_under_way(), "nothing to do lets go");
     assert!(machine.posted.is_empty(), "and says nothing");
 }
@@ -373,14 +378,16 @@ fn the_settings_say_why_it_is_not_switching() {
                 ),
                 adoption: Adoption::PollingWithin(33),
                 warnings: Vec::new(),
-                used: "97% of its 5-hour limit".into(),
-                resets_at: Some(9_000),
+                because: Because::Limit {
+                    used: "97% of its 5-hour limit".into(),
+                    resets_at: Some(9_000),
+                },
             }
         ),
         words::typeset(&said::auto_switched(
             "work",
             "personal",
-            "97% of its 5-hour limit"
+            &said::has_used("work", "97% of its 5-hour limit")
         )),
         "as `pitboard watch` says it"
     );
@@ -479,8 +486,10 @@ fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> Notice {
         ),
         adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
-        used: "97% of its 5-hour limit".into(),
-        resets_at: Some(resets),
+        because: Because::Limit {
+            used: "97% of its 5-hour limit".into(),
+            resets_at: Some(resets),
+        },
     });
     model.send(Intent::Refresh { asked: false });
     model.run_but(machine, auto_switch);
@@ -671,7 +680,16 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    let note = |os, file_left| words::at_limit_note(os, AtLimit::Switch, 95, file_left, 33);
+    let note = |os, file_left| {
+        words::at_limit_note(
+            os,
+            AtLimit::Switch,
+            95,
+            SwitchOrder::MostLeft,
+            file_left,
+            33,
+        )
+    };
     assert_eq!(
         model.shown().machine.at_limit.note,
         note(Front::MacMenuBar, false)
@@ -1224,7 +1242,12 @@ fn turning_it_on_is_kept_and_looks_at_once() {
                     ..Preferences::default()
                 }
             },
-            Job::AutoLook { at: 90 },
+            Job::AutoLook {
+                policy: Policy {
+                    threshold: Threshold::new(90).expect("a share"),
+                    order: Order::MostLeft,
+                },
+            },
         ]
     );
     let shown = model.shown().machine.at_limit;
@@ -1250,5 +1273,61 @@ fn turning_it_on_is_kept_and_looks_at_once() {
         model.state.preferences.auto_switch_at,
         Some(99),
         "the nearest share there can be"
+    );
+}
+
+/// Under Resets Soonest the look and the switch are asked with that order, and a switch made
+/// before the share says the week that resets first, in the notification and in the settings.
+#[test]
+fn an_early_switch_is_asked_for_in_the_order_and_said_by_the_week_that_resets_first() {
+    let mut model = Hand::new();
+    let mut preferences = Preferences {
+        auto_switch: true,
+        ..Preferences::default()
+    };
+    preferences.set_order(SwitchOrder::ResetsSoonest);
+    model.give(Answer::Kept {
+        told: Told::new(),
+        preferences: Some((preferences, true)),
+        windows: None,
+    });
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
+    model.run(&mut machine);
+    machine.look = Ok(AutoLooked::Act);
+    machine.auto = Ok(AutoSwitched::Switched {
+        from: "work".into(),
+        to: "personal".into(),
+        accounts: (
+            Key::new(ProviderId::Claude, "work"),
+            Key::new(ProviderId::Claude, "personal"),
+        ),
+        adoption: Adoption::PollingWithin(33),
+        warnings: Vec::new(),
+        because: Because::ResetsFirst {
+            to: Some(100_000),
+            from: Some(500_000),
+        },
+    });
+    model.send(Intent::Refresh { asked: false });
+    model.run_but(&mut machine, auto_switch);
+    machine.answer = Ok(personal_in_use());
+    machine.look = Ok(AutoLooked::Stands(Box::new(watching("personal"))));
+    model.run(&mut machine);
+
+    let soonest = Policy {
+        threshold: Threshold::DEFAULT,
+        order: Order::ResetsSoonest,
+    };
+    assert_eq!(machine.auto_at, [soonest]);
+    assert!(machine.looked_at.iter().all(|policy| *policy == soonest));
+    assert_eq!(
+        machine.posted.first().map(|notice| notice.body.as_str()),
+        Some(
+            format!(
+                "personal’s week resets before work’s. {}",
+                words::follows(&Adoption::PollingWithin(33))
+            )
+            .as_str()
+        )
     );
 }

@@ -2189,7 +2189,10 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
                 Key::new(ProviderId::Claude, "personal"),
                 Key::new(ProviderId::Claude, "work")
             ),
-            "96% of its 5-hour limit",
+            &crate::launch::Because::Limit {
+                used: "96% of its 5-hour limit".into(),
+                resets_at: None,
+            },
             &at_renewal,
             NOON,
         )

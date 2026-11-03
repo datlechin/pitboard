@@ -76,6 +76,11 @@
               </object>
             </child>
             <child>
+              <object class="AdwComboRow" id="order">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
               <object class="AdwActionRow" id="terms">
                 <property name="use-markup">False</property>
                 <property name="activatable">True</property>

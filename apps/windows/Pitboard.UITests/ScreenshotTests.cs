@@ -328,6 +328,11 @@ public sealed partial class ScreenshotTests
         choice.Select(2);
         launched.Element("settings.autoSwitchStanding");
         KeepWindow(window, "windows-settings-limits-switch");
+        // The model's orders: Most left, Resets soonest.
+        var order = launched.Element("settings.atLimitOrder").AsComboBox();
+        order.Select(1);
+        KeepWindow(window, "windows-settings-limits-resets-soonest");
+        order.Select(0);
         choice.Select(0);
         Assert.IsTrue(Dims(share, true), "the share stayed on");
         KeepWindow(window, "windows-settings-limits-do-nothing");

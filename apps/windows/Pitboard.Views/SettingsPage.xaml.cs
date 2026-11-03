@@ -46,6 +46,11 @@ public sealed partial class SettingsPage : Page
                 AtLimitChoices.Items.Add(title);
             }
 
+            foreach (var title in ViewModel.OrderTitles)
+            {
+                OrderChoices.Items.Add(title);
+            }
+
             Bindings.Update();
             // After the bindings, so a failure's words are in place before Narrator is told of them.
             ViewModel.PropertyChanged += OnViewModelChanged;
@@ -127,6 +132,9 @@ public sealed partial class SettingsPage : Page
 
     private void OnAtLimitChosen(object sender, SelectionChangedEventArgs args) =>
         ViewModel?.ChooseAtLimit(((ComboBox)sender).SelectedIndex);
+
+    private void OnOrderChosen(object sender, SelectionChangedEventArgs args) =>
+        ViewModel?.ChooseOrder(((ComboBox)sender).SelectedIndex);
 
     private void OnOpenTerms(object sender, RoutedEventArgs args)
     {

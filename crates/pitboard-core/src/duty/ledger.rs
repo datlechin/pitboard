@@ -42,6 +42,11 @@ impl Tries {
         self.waits = self.waits.saturating_add(1);
     }
 
+    /// No attempt is made again.
+    pub(crate) fn spend(&mut self) {
+        self.attempts = self.attempts.max(ATTEMPTS);
+    }
+
     /// Whether as many attempts as are ever made came to nothing.
     pub(crate) fn spent(&self) -> bool {
         self.attempts >= ATTEMPTS

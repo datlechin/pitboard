@@ -3,8 +3,11 @@
 //! boundary, and a value that fails to normalise is dropped rather than drawn.
 
 pub(crate) mod budget;
+mod order;
 pub mod pace;
 pub(crate) mod readings;
+
+pub use order::{Order, Room, Week, five_hours, preferred, resets_first, room};
 
 use crate::time::{self, HOUR, WEEK};
 use serde_json::Value;
@@ -318,80 +321,6 @@ pub(crate) fn moved(known: &Snapshot, passed: &[Window], now: i64) -> Option<Sna
         windows,
         observed_at: Some(now),
         ..known.clone()
-    })
-}
-
-/// What an account with room for a switch away from one limit has used.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Room {
-    /// Of that limit. `None` where the account does not have it.
-    pub used: Option<f64>,
-    /// Of the fullest of its other limits.
-    pub fullest: f64,
-    /// Whether it has a weekly limit for all models, which keeps what it leaves unused in five
-    /// hours for later in the week. A reading that may leave limits out counts as having one.
-    pub weekly: bool,
-}
-
-/// The room an account whose reading holds `theirs` has for a switch away from `limit` of
-/// the account in use, whose limits are `mine`: `None` where any of `theirs` has reached
-/// `share` as it is drawn, or where nothing says what the account has used of one of `mine`.
-/// The automatic switch asks it with its share, and the app's advice with 100.
-///
-/// Where `theirs` are every limit the account has ([`Snapshot::lists_every_limit`]), one
-/// they leave out is one it does not have, so a plan without the limit that ran out, such as
-/// a Team seat with no weekly limit for all models, is a place to go. Any other reading says
-/// nothing of a limit it leaves out, which may be used up, as with no reading at all. Only a
-/// model's limit other than `limit` may be left out of one that gives the five-hour and
-/// weekly limits: the older named shape names no model's, and plans limit models apart.
-pub fn room(
-    theirs: &[Window],
-    lists_every_limit: bool,
-    mine: &[Window],
-    limit: &Window,
-    share: u8,
-    now: i64,
-) -> Option<Room> {
-    if theirs.is_empty() || theirs.iter().any(|window| reached(window.used(now), share)) {
-        return None;
-    }
-    let given = |had: &Window| theirs.iter().find(|window| window.same_limit(had));
-    let gives = |kind: LimitKind| {
-        theirs
-            .iter()
-            .any(|window| window.scope.is_none() && window.kind == kind)
-    };
-    if !lists_every_limit {
-        let overall = gives(LimitKind::Session) && gives(LimitKind::WeeklyAll);
-        let unknown = |had: &Window| {
-            given(had).is_none() && !(overall && had.scope.is_some() && !had.same_limit(limit))
-        };
-        if std::iter::once(limit).chain(mine).any(unknown) {
-            return None;
-        }
-    }
-    let fullest = theirs
-        .iter()
-        .filter(|window| !window.same_limit(limit))
-        .map(|window| window.used(now))
-        .fold(0.0, f64::max);
-    Some(Room {
-        used: given(limit).map(|window| window.used(now)),
-        fullest,
-        weekly: !lists_every_limit || gives(LimitKind::WeeklyAll),
-    })
-}
-
-/// The candidate to switch to. One without a weekly limit for all models comes first, since
-/// what it leaves unused in five hours is lost at the reset. Then the least used of the
-/// limit, one without it as one with none used, then the least full in its others. The first
-/// of those alike.
-pub fn preferred<T>(candidates: impl IntoIterator<Item = (T, Room)>) -> Option<(T, Room)> {
-    candidates.into_iter().min_by(|(_, a), (_, b)| {
-        a.weekly
-            .cmp(&b.weekly)
-            .then_with(|| a.used.unwrap_or(0.0).total_cmp(&b.used.unwrap_or(0.0)))
-            .then_with(|| a.fullest.total_cmp(&b.fullest))
     })
 }
 

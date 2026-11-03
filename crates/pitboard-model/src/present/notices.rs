@@ -7,7 +7,8 @@ use super::{
     AccountsShown, Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen,
     Severity,
 };
-use crate::model::advice::HeadsUp;
+use crate::launch::Because;
+use crate::model::advice::{First, HeadsUp};
 use crate::model::state::in_its_app;
 use crate::model::{Doing, Intent, LastSwitch, Opens, Place, Sheet, SignedIn};
 use crate::model::{Notice, NoticeButton, NoticeButtonKind, NoticeButtonOffer};
@@ -676,13 +677,36 @@ pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> Not
     }
 }
 
+// Its id names the account offered and its week: one notification for each.
+pub(crate) fn first_notice(front: Front, first: &First) -> Notice {
+    let body = format!(
+        "{} {}",
+        words::resets_first(&first.instead, &first.ran, first.weekly),
+        words::five_hours_used(&said::figure(first.five_hours))
+    );
+    Notice {
+        button: button(
+            NoticeButtonKind::SwitchTo,
+            words::switch_button(front, &first.instead),
+            &Clicked::Switch(first.switch_to.clone()),
+        ),
+        ..posted(
+            format!("{}-{}", first.key_of(), first.week),
+            words::of_tool(first.tool.as_deref(), &words::resets_first_title(front)),
+            Some(first.provider),
+            body,
+            &Clicked::Accounts,
+        )
+    }
+}
+
 // `from` and `to` as the core types them, and `accounts` the two they name.
 pub(crate) fn auto_switched_notice(
     front: Front,
     from: &str,
     to: &str,
     accounts: &(Key, Key),
-    used: &str,
+    because: &Because,
     adoption: &Adoption,
     at: i64,
 ) -> Notice {
@@ -701,7 +725,16 @@ pub(crate) fn auto_switched_notice(
             format!("auto/{from}/{to}/{at}"),
             words::switched_to(None, &put.label),
             Some(ProviderId::Claude),
-            words::used_then(from, used, &words::follows(adoption)),
+            match because {
+                Because::Limit { used, .. } => {
+                    words::used_then(from, used, &words::follows(adoption))
+                }
+                Because::ResetsFirst { to: ahead, .. } => format!(
+                    "{} {}",
+                    words::resets_first(to, from, ahead.is_some()),
+                    words::follows(adoption)
+                ),
+            },
             &Clicked::Accounts,
         )
     }

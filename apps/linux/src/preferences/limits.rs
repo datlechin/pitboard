@@ -1,6 +1,6 @@
-//! Limits: what Pitboard does once a limit of the account in use reaches a share, the share, and
-//! whether Anthropic's and OpenAI's terms allow it; then the warm-up's hours and each Claude Code
-//! account's switch.
+//! Limits: what Pitboard does once a limit of the account in use reaches a share, the share, which
+//! account goes first, and whether Anthropic's and OpenAI's terms allow it; then the warm-up's
+//! hours and each Claude Code account's switch.
 //!
 //! libadwaita 1.7 has no time picker, so each of the warm-up's hours is a spin row over the
 //! minutes of the day, a quarter of an hour a step, which says its time as the person's clock
@@ -40,6 +40,12 @@ pub(super) fn follow(preferences: &Preferences) {
     imp.share.connect_value_notify(move |_| {
         if let Some(preferences) = weak.upgrade() {
             chosen(&preferences);
+        }
+    });
+    let weak = preferences.downgrade();
+    imp.order.connect_selected_notify(move |_| {
+        if let Some(preferences) = weak.upgrade() {
+            ordered(&preferences);
         }
     });
     let weak = preferences.downgrade();
@@ -86,24 +92,14 @@ pub(super) fn show(preferences: &Preferences, machine: &MachineShown) {
         .set_description(escaped(at_limit.note.as_deref()).as_deref());
     imp.at_limit_group.set_sensitive(at_limit.enabled);
     imp.at_limit.set_title(&at_limit.heading);
-    let titles: Vec<&str> = (at_limit.choices.iter())
-        .map(|choice| choice.title.as_str())
-        .collect();
-    let listed = imp
-        .at_limit
-        .model()
-        .and_downcast::<gtk::StringList>()
-        .is_some_and(|list| {
-            (0..list.n_items())
-                .map(|i| list.string(i).unwrap_or_default())
-                .eq(titles.iter().copied())
-        });
-    if !listed {
-        imp.at_limit.set_model(Some(&gtk::StringList::new(&titles)));
-    }
-    let chosen = (at_limit.choices.iter()).position(|choice| choice.choice == at_limit.choice);
-    imp.at_limit
-        .set_selected(chosen.map_or(gtk::INVALID_LIST_POSITION, |i| i as u32));
+    let choices = at_limit.choices.iter();
+    listed(
+        &imp.at_limit,
+        choices.clone().map(|choice| choice.title.as_str()),
+        choices
+            .clone()
+            .position(|choice| choice.choice == at_limit.choice),
+    );
     imp.at_limit
         .set_subtitle(at_limit.standing.as_deref().unwrap_or_default());
     imp.share.set_title(&at_limit.share_label);
@@ -116,6 +112,17 @@ pub(super) fn show(preferences: &Preferences, machine: &MachineShown) {
         .update_property(&[gtk::accessible::Property::Label(&at_limit.at_label)]);
     imp.share.set_visible(at_limit.choice != AtLimit::Nothing);
     imp.share.set_sensitive(at_limit.share_enabled);
+    imp.order.set_title(&at_limit.order_label);
+    let orders = at_limit.orders.iter();
+    listed(
+        &imp.order,
+        orders.clone().map(|order| order.title.as_str()),
+        orders
+            .clone()
+            .position(|order| order.order == at_limit.order),
+    );
+    imp.order.set_visible(at_limit.choice != AtLimit::Nothing);
+    imp.order.set_sensitive(at_limit.share_enabled);
     imp.terms.set_title(&at_limit.terms.link_title);
     imp.terms.set_subtitle(&at_limit.terms.sentence);
 
@@ -132,6 +139,28 @@ pub(super) fn show(preferences: &Preferences, machine: &MachineShown) {
     imp.none_to_warm.set_visible(warm.none_enrolled.is_some());
     accounts(preferences, machine);
     say(&imp.warm_standing, &[warm.standing.as_deref()]);
+}
+
+// `row` lists `titles`, made again only where they change, with the one at `selected` chosen. The
+// change it makes is the model's, and sends nothing back: each handler compares with what is shown.
+fn listed<'a>(
+    row: &adw::ComboRow,
+    titles: impl Iterator<Item = &'a str> + Clone,
+    selected: Option<usize>,
+) {
+    let same = row
+        .model()
+        .and_downcast::<gtk::StringList>()
+        .is_some_and(|list| {
+            (0..list.n_items())
+                .map(|i| list.string(i).unwrap_or_default())
+                .eq(titles.clone())
+        });
+    if !same {
+        let titles: Vec<&str> = titles.collect();
+        row.set_model(Some(&gtk::StringList::new(&titles)));
+    }
+    row.set_selected(selected.map_or(gtk::INVALID_LIST_POSITION, |i| i as u32));
 }
 
 // A switch for each account, made again only where the accounts listed change.
@@ -186,6 +215,20 @@ fn chosen(preferences: &Preferences) {
     let at = imp.share.value() as u8;
     if (choice, at) != (at_limit.choice, at_limit.at) {
         preferences.host().send(Intent::SetAtLimit { choice, at });
+    }
+}
+
+// Which account goes first, chosen by the person.
+fn ordered(preferences: &Preferences) {
+    let Some(machine) = preferences.machine() else {
+        return;
+    };
+    let at_limit = &machine.at_limit;
+    let selected = preferences.imp().order.selected() as usize;
+    if let Some(order) = (at_limit.orders.get(selected)).map(|order| order.order)
+        && order != at_limit.order
+    {
+        preferences.host().send(Intent::SetOrder { order });
     }
 }
 

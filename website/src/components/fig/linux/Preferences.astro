@@ -36,18 +36,22 @@ const world = moments.after;
 // it, and in Warm-Up's the one the page starts at. Each choice's note is drawn, the others hidden,
 // so live code keeps to the state by what it shows; then, where no status item keeps Pitboard
 // running, what follows the note.
-const { atLimit: starts, share } = start().preferences;
+const { atLimit: starts, share, order } = start().preferences;
 const chosen: AtLimit = show === "switch" ? "switch" : starts;
 const notes = limits.choices.flatMap(([value]) => {
-  const said = atLimitNote({ atLimit: value, share }, true);
+  const said = atLimitNote({ atLimit: value, share, order }, true);
   return said ? [[value, said] as const] : [];
 });
-const note = atLimitNote({ atLimit: chosen, share }, true);
-const whole = atLimitNote({ atLimit: chosen, share }, false);
+const note = atLimitNote({ atLimit: chosen, share, order }, true);
+const whole = atLimitNote({ atLimit: chosen, share, order }, false);
 const closed = whole && note ? whole.slice(note.length).trim() : (whole ?? "");
 const tab =
   "group/tab flex h-34 items-center justify-center gap-6 rounded-u-9 px-12 font-bold whitespace-nowrap outline-none focus-adw aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/7 live:aria-selected:hover:bg-current/15";
 const caption = "mt-12 adw-caption opacity-55";
+const popover =
+  "absolute top-(--y) right-24 z-3 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 shadow-adw-popover";
+const option =
+  "group/option flex h-32 items-center gap-6 rounded-u-9 px-12 whitespace-nowrap aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/10";
 ---
 
 <div class="desk flex items-center justify-center py-32 desk-px-680">
@@ -184,6 +188,33 @@ const caption = "mt-12 adw-caption opacity-55";
                   typed
                   part="share"
                 />
+                {/* Use first, an AdwComboRow as When a limit reaches is, which Do Nothing hides */}
+                <Row
+                  title={limits.order.label}
+                  titleId={id("order-heading")}
+                  data-part="order-row"
+                  hidden={chosen === "nothing"}
+                >
+                  <button
+                    slot="suffix"
+                    class="flex items-center gap-6 outline-none focus-adw live:cursor-default"
+                    type="button"
+                    role="combobox"
+                    aria-labelledby={id("order-heading")}
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-controls={id("order-choices")}
+                    data-part="order"
+                  >
+                    {limits.order.orders.map(([value, title]) => <span
+                      data-value={value}
+                      hidden={value !== order}
+                    >
+                      {title}
+                    </span>)}
+                    <Symbolic name="pan-down" />
+                  </button>
+                </Row>
                 <a
                   class="flex text-inherit no-underline outline-none focus-adw live:cursor-default live:hover:bg-current/3 live:active:bg-current/8"
                   href={limits.terms.href}
@@ -285,20 +316,42 @@ const caption = "mt-12 adw-caption opacity-55";
             </Group>
           </div>
         </div>
-        {/* GtkDropDown's list, under the combo row, the one chosen checked */}
+        {/* GtkDropDown's list, under each combo row, the one chosen checked */}
         <div
-          class="absolute top-(--y) right-24 z-3 rounded-u-15 border border-black/14 bg-adw-popover bg-clip-padding p-6 shadow-adw-popover"
+          class={popover}
           id={id("at-limit-choices")}
           role="listbox"
           aria-labelledby={id("at-limit-heading")}
           hidden
         >
           {limits.choices.map(([value, title]) => <div
-            class="group/option flex h-32 items-center gap-6 rounded-u-9 px-12 whitespace-nowrap aria-selected:bg-current/10 live:cursor-default live:hover:bg-current/10"
+            class={option}
             id={id(`at-limit-${value}`)}
             role="option"
             aria-selected={value === chosen ? "true" : "false"}
             aria-checked={value === chosen ? "true" : "false"}
+            data-value={value}
+          >
+            {title}
+            <Symbolic
+              name="object-select"
+              class="invisible size-16 group-aria-checked/option:visible"
+            />
+          </div>)}
+        </div>
+        <div
+          class={popover}
+          id={id("order-choices")}
+          role="listbox"
+          aria-labelledby={id("order-heading")}
+          hidden
+        >
+          {limits.order.orders.map(([value, title]) => <div
+            class={option}
+            id={id(`order-${value}`)}
+            role="option"
+            aria-selected={value === order ? "true" : "false"}
+            aria-checked={value === order ? "true" : "false"}
             data-value={value}
           >
             {title}

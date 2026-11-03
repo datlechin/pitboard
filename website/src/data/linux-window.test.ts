@@ -22,7 +22,7 @@ import {
   type Icon,
 } from "./linux-window.ts";
 import { shortcuts } from "./linux.ts";
-import type { AtLimit } from "../lib/model.ts";
+import type { AtLimit, Order } from "../lib/model.ts";
 import { account, accounts, moments } from "./world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -258,7 +258,7 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
     machine,
     "Once its window is closed, nothing switches it unless {WATCH_IN_THE_BACKGROUND} is on.",
   );
-  const at = (atLimit: AtLimit) => ({ atLimit, share: 95 });
+  const at = (atLimit: AtLimit, order: Order = "most-left") => ({ atLimit, share: 95, order });
   assert.equal(atLimitNote(at("nothing"), true), null);
   assert.equal(atLimitNote(at("switch"), true)?.endsWith("33 seconds."), true);
   assert.equal(
@@ -276,6 +276,30 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
     atLimitNote(at("switch"), false, true)?.endsWith("the watch service goes on switching it."),
     true,
   );
+  // Use first, a combo row after At and before the terms, titled as GNOME titles a choice, and
+  // hidden under Do Nothing as At is
+  const ui = linux("data/ui/preferences.ui");
+  const rows = ['class="AdwSpinRow" id="share"', 'class="AdwComboRow" id="order"', 'id="terms"'];
+  const placed = rows.map((r) => ui.indexOf(r));
+  assert.ok(
+    0 <= placed[0] && placed[0] < placed[1] && placed[1] < placed[2],
+    "share, order, terms",
+  );
+  const shows = linux("src/preferences/limits.rs");
+  assert.ok(shows.includes("imp.order.set_title(&at_limit.order_label);"));
+  assert.ok(shows.includes("imp.order.set_visible(at_limit.choice != AtLimit::Nothing);"));
+  assert.ok(shows.includes("imp.order.set_sensitive(at_limit.share_enabled);"));
+  assert.equal(prefs.limits.order.label, "Use first");
+  assert.deepEqual(prefs.limits.order.orders, [
+    ["most-left", "Most Left"],
+    ["resets-soonest", "Resets Soonest"],
+  ]);
+  // Resets Soonest's sentence comes before what goes on once the window is closed
+  assert.equal(
+    atLimitNote(at("switch", "resets-soonest"), false),
+    "Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. Before then, it switches to an account whose week resets sooner, if that account has room and as much of its 5-hour limit left. Once its window is closed, nothing switches it unless Watch in the Background is on.",
+  );
+  says(present("machine.rs"), "let said: Vec<String> = note.into_iter().chain(closed).collect();");
   assert.equal(atLimitNote(at("notify"), true, true)?.endsWith("while the app is open."), true);
   assert.equal(
     atLimitNote(at("nothing"), false, true),
@@ -293,11 +317,16 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
   );
   says(
     machine,
-    "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}% and warming up the accounts {} turns on, from each login.",
+    "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}%{} and warming up the accounts {} turns on, from each login.",
   );
+  says(machine, "pitboard_core::words::first_by(policy.order),");
   assert.equal(
     prefs.advanced.watchAbout(true),
     "Pitboard quits once its window is closed. Turned on, this computer goes on switching Claude Code at 95% and warming up the accounts Warm-Up turns on, from each login.",
+  );
+  assert.equal(
+    prefs.advanced.watchAbout(true, 95, "resets-soonest"),
+    "Pitboard quits once its window is closed. Turned on, this computer goes on switching Claude Code at 95%, or before then to the account whose week resets soonest and warming up the accounts Warm-Up turns on, from each login.",
   );
   says(machine, `(Front::Gnome, true) => {\n            "${prefs.advanced.updateNote}"\n        }`);
   says(machine, `pub(crate) const UNINSTALL_QUESTION: &str = "${prefs.uninstallQuestion.title}";`);

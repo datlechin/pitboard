@@ -450,6 +450,23 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   // At, dimmed while nothing happens at the share
   assert.ok(!xaml.includes("ShowsShare") && !shell("SettingsViewModel.cs").includes("ShowsShare"));
   assert.ok(xaml.includes('IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}"'));
+  // Use first, a card after At's with a ComboBox named by its header, dimmed with it
+  const order = xaml.slice(xaml.indexOf("ViewModel.ShareTitle"), xaml.indexOf("WarmUp"));
+  assert.ok(order.includes('Header="{x:Bind ViewModel.OrderTitle, Mode=OneWay}"'));
+  assert.ok(order.includes('x:Name="OrderChoices"\n                  MinWidth="200"'));
+  assert.ok(
+    order.includes('AutomationProperties.Name="{x:Bind ViewModel.OrderTitle, Mode=OneWay}"'),
+  );
+  assert.equal(
+    order.match(/IsEnabled="\{x:Bind ViewModel\.CanSetShare, Mode=OneWay\}"/g)?.length,
+    4,
+  );
+  assert.ok(shell("SettingsViewModel.cs").includes("OrderTitle => AtLimit.OrderLabel;"));
+  assert.ok(
+    shell("SettingsViewModel.cs").includes(
+      "OrderTitles => [.. AtLimit.Orders.Select(order => order.Title)];",
+    ),
+  );
   assert.ok(
     machine.includes(
       "share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,",

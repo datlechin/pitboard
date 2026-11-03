@@ -3,29 +3,36 @@
 //! the person's sign-in.
 
 use crate::context::Context;
-use crate::duty::autoswitch::Threshold;
+use crate::duty::autoswitch::{Policy, Threshold};
 use crate::error::{Error, Result};
 use crate::permit::Permit;
 use crate::schedule::{self, Job, Location};
+use crate::usage::Order;
 use std::path::PathBuf;
 
 /// What the watch service does at a limit of the account in use. Either way it warms up the
 /// accounts `pitboard warm on` turned on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Switching {
-    /// It switches Claude Code once a limit reaches this share.
-    At(Threshold),
+    /// It switches Claude Code as this says: once a limit reaches its share, and to the
+    /// account its order puts first.
+    At(Policy),
     /// It never switches.
     Never,
 }
 
 impl Switching {
-    /// The share it switches at, `None` where it never does.
-    pub fn at(self) -> Option<Threshold> {
+    /// How it switches, `None` where it never does.
+    pub fn policy(self) -> Option<Policy> {
         match self {
-            Switching::At(at) => Some(at),
+            Switching::At(policy) => Some(policy),
             Switching::Never => None,
         }
+    }
+
+    /// The share it switches at, `None` where it never does.
+    pub fn at(self) -> Option<Threshold> {
+        self.policy().map(|policy| policy.threshold)
     }
 }
 
@@ -117,21 +124,32 @@ pub(crate) fn taken_away(ctx: &Context, permit: Permit) -> Result<bool> {
 
 const VERB: &str = "watch-service";
 
-// `pitboard watch`'s own options, after the job's marker.
+// `pitboard watch`'s own options, after the job's marker. The order is written only where it
+// is not the default, so a service that switches as an earlier Pitboard did is written as it
+// wrote it.
 fn options(switching: Switching) -> Vec<String> {
     match switching {
-        Switching::At(at) => vec!["--at".to_string(), at.percent().to_string()],
+        Switching::At(Policy { threshold, order }) => {
+            let mut options = vec!["--at".to_string(), threshold.percent().to_string()];
+            if order != Order::default() {
+                options.extend(["--order".to_string(), order.code().to_string()]);
+            }
+            options
+        }
         Switching::Never => vec!["--no-switch".to_string()],
     }
 }
 
 fn switching(options: &[String]) -> Option<Switching> {
+    let threshold = |percent: &String| percent.parse().ok().and_then(Threshold::new);
+    let at = |threshold, order| Switching::At(Policy { threshold, order });
     match options {
-        [at, percent] if at == "--at" => percent
-            .parse()
-            .ok()
-            .and_then(Threshold::new)
-            .map(Switching::At),
+        [at_flag, percent] if at_flag == "--at" => {
+            threshold(percent).map(|threshold| at(threshold, Order::default()))
+        }
+        [at_flag, percent, order_flag, order] if at_flag == "--at" && order_flag == "--order" => {
+            Some(at(threshold(percent)?, Order::from_code(order)?))
+        }
         [never] if never == "--no-switch" => Some(Switching::Never),
         _ => None,
     }
@@ -196,7 +214,17 @@ mod tests {
     const SID: &str = "S-1-5-21-1004-1005-1006-1001";
 
     fn at(percent: u8) -> Switching {
-        Switching::At(Threshold::new(percent).expect("a share there can be"))
+        Switching::At(Policy {
+            threshold: Threshold::new(percent).expect("a share there can be"),
+            order: Order::MostLeft,
+        })
+    }
+
+    fn soonest(percent: u8) -> Switching {
+        Switching::At(Policy {
+            threshold: Threshold::new(percent).expect("a share there can be"),
+            order: Order::ResetsSoonest,
+        })
     }
 
     /// Installed, the service runs `pitboard watch` with its marker and the share it was
@@ -461,11 +489,29 @@ mod tests {
     fn only_what_pitboard_writes_is_read() {
         let given = |words: &[&str]| words.iter().map(|o| (*o).to_string()).collect::<Vec<_>>();
         assert_eq!(switching(&given(&["--at", "90"])), Some(at(90)));
+        assert_eq!(
+            switching(&given(&["--at", "90", "--order", "resets-soonest"])),
+            Some(soonest(90))
+        );
+        assert_eq!(
+            switching(&given(&["--at", "90", "--order", "most-left"])),
+            Some(at(90))
+        );
         assert_eq!(switching(&given(&["--no-switch"])), Some(Switching::Never));
-        for written in [at(90), Switching::Never] {
+        for written in [at(90), soonest(90), Switching::Never] {
             assert_eq!(switching(&options(written)), Some(written), "{written:?}");
         }
+        assert_eq!(
+            options(at(90)),
+            given(&["--at", "90"]),
+            "written as an earlier Pitboard wrote it"
+        );
         for unread in [
+            &["--order", "resets-soonest"][..],
+            &["--at", "90", "--order", "soon"],
+            &["--at", "90", "--order"],
+            &["--order", "resets-soonest", "--at", "90"],
+            &["--no-switch", "--order", "most-left"],
             &["--at", "100"][..],
             &["--at", "ninety"],
             &["--at"],

@@ -1311,7 +1311,7 @@ where
     // the global `--json` beside too.
     if let Some(("watch", watch)) = matches.subcommand()
         && let Some((what, _)) = watch.subcommand()
-        && let Some(given) = ["at", "no_switch", "once", "scheduled"]
+        && let Some(given) = ["at", "order", "no_switch", "once", "scheduled"]
             .into_iter()
             .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
     {
@@ -1408,7 +1408,7 @@ fn main() -> ExitCode {
             scheduled,
             ..
         } => return watch::run(&pitboard, share.switching(), scheduled, cli.json),
-        Command::Watch { share, .. } => watch::once(&pitboard, share.threshold()),
+        Command::Watch { share, .. } => watch::once(&pitboard, share.policy()),
         Command::Enroll {
             label,
             sign_in: true,
@@ -1977,7 +1977,21 @@ mod tests {
         else {
             panic!("watch install");
         };
-        assert_eq!(share.threshold().percent(), 80);
+        assert_eq!(share.policy().threshold.percent(), 80);
+        assert_eq!(share.policy().order, pitboard_core::usage::Order::MostLeft);
+        let cli = command_line(["pitboard", "watch", "install", "--order", "resets-soonest"])
+            .expect("parsed");
+        let Some(Command::Watch {
+            what: Some(watch::WatchCommand::Install { share }),
+            ..
+        }) = cli.command
+        else {
+            panic!("watch install --order resets-soonest");
+        };
+        assert_eq!(
+            share.policy().order,
+            pitboard_core::usage::Order::ResetsSoonest
+        );
         let cli = command_line(["pitboard", "watch", "install", "--no-switch"]).expect("parsed");
         let Some(Command::Watch {
             what: Some(watch::WatchCommand::Install { share }),
@@ -1998,6 +2012,15 @@ mod tests {
             &["watch", "--no-switch", "--at", "80"],
             &["watch", "install", "--at", "80", "--no-switch"],
             &["watch", "--once", "--no-switch"],
+            &["watch", "--order", "resets-soonest", "install"],
+            &[
+                "watch",
+                "install",
+                "--order",
+                "resets-soonest",
+                "--no-switch",
+            ],
+            &["watch", "--no-switch", "--order", "most-left"],
         ] {
             let refused = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
                 .err()
