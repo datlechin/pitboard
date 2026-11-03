@@ -58,7 +58,8 @@ internal static class Snapshots
             Title: "Before an account runs out",
             Choice: AtLimit.Notify,
             Choices: AtLimitChoices,
-            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
+            At: 95, Lowest: 50, Highest: 99, Order: SwitchOrder.MostLeft, Orders: OrderChoices, OrderLabel: "Use first",
+            Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
             ShareLabel: "At", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms),
         Warm: new WarmShown(
@@ -71,6 +72,11 @@ internal static class Snapshots
     private static readonly AtLimitChoice[] AtLimitChoices =
     [
         new(AtLimit.Nothing, "Do nothing"), new(AtLimit.Notify, "Notify me"), new(AtLimit.Switch, "Switch automatically"),
+    ];
+
+    private static readonly OrderChoice[] OrderChoices =
+    [
+        new(SwitchOrder.MostLeft, "Most left"), new(SwitchOrder.ResetsSoonest, "Resets soonest"),
     ];
 
     public static readonly TermsShown Terms = new(

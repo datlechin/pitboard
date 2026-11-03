@@ -109,6 +109,12 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanSetShare => AtLimit.ShareEnabled;
 
+    public string OrderTitle => AtLimit.OrderLabel;
+
+    public string[] OrderTitles => [.. AtLimit.Orders.Select(order => order.Title)];
+
+    public int OrderIndex => Array.FindIndex(AtLimit.Orders, order => order.Order == AtLimit.Order);
+
     public string WarmRange => Warm.RangeLabel;
 
     public string WarmStanding => Warm.Standing ?? "";
@@ -249,6 +255,14 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         if (index >= 0 && index < AtLimit.Choices.Length && AtLimit.Choices[index].Choice != AtLimit.Choice)
         {
             _model.Send(new Intent.SetAtLimit(AtLimit.Choices[index].Choice, AtLimit.At));
+        }
+    }
+
+    public void ChooseOrder(int index)
+    {
+        if (index >= 0 && index < AtLimit.Orders.Length && AtLimit.Orders[index].Order != AtLimit.Order)
+        {
+            _model.Send(new Intent.SetOrder(AtLimit.Orders[index].Order));
         }
     }
 

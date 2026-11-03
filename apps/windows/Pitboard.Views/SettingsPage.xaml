@@ -163,6 +163,18 @@
                   AutomationProperties.Name="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"
                   ValueChanged="OnShareChanged" />
             </toolkit:SettingsCard>
+            <toolkit:SettingsCard
+                Header="{x:Bind ViewModel.OrderTitle, Mode=OneWay}"
+                IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}">
+              <ComboBox
+                  x:Name="OrderChoices"
+                  MinWidth="200"
+                  SelectedIndex="{x:Bind ViewModel.OrderIndex, Mode=OneWay}"
+                  IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}"
+                  AutomationProperties.AutomationId="settings.atLimitOrder"
+                  AutomationProperties.Name="{x:Bind ViewModel.OrderTitle, Mode=OneWay}"
+                  SelectionChanged="OnOrderChosen" />
+            </toolkit:SettingsCard>
           </toolkit:SettingsExpander.Items>
         </toolkit:SettingsExpander>
         <!-- What a warm-up does under its name and its hours beside it, as the approved mockup draws it. -->

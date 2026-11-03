@@ -35,6 +35,7 @@ public sealed class SettingsTests
     private const int DoNothing = 0;
     private const int Notify = 1;
     private const int SwitchAutomatically = 2;
+    private const int ResetsSoonest = 1;
 
     private static int Chosen(ComboBox choice)
     {
@@ -106,8 +107,16 @@ public sealed class SettingsTests
         share.Patterns.RangeValue.Pattern.SetValue(96);
         Assert.IsTrue(Names(choice, 96), "the model did not take the share");
 
+        var order = Control(launched, "settings.atLimitOrder").AsComboBox();
+        order.Select(ResetsSoonest);
+        Assert.IsTrue(Says(
+            launched,
+            "Pitboard switches Claude Code at 96%, and its running sessions follow within about 33 seconds. Before then, it switches",
+            Shortly));
+
         choice.Select(DoNothing);
         Assert.IsTrue(Enables(share, false), "the share takes a value while nothing happens at it");
+        Assert.IsTrue(Enables(order, false), "nothing is switched to first while nothing happens at the share");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }
 

@@ -261,6 +261,23 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(shown.HasAtLimitNote);
     }
 
+    // Which account goes first sits under the share, in the model's words, and is sent once changed.
+    [TestMethod]
+    public void TheOrderIsTheModelsAndSentOnceChanged()
+    {
+        var (shown, model, _) = Over(With(1, machine => machine with { AtLimit = Switching }));
+
+        Assert.AreEqual("Use first", shown.OrderTitle);
+        CollectionAssert.AreEqual(new[] { "Most left", "Resets soonest" }, shown.OrderTitles);
+        Assert.AreEqual(0, shown.OrderIndex);
+
+        shown.ChooseOrder(0);
+        shown.ChooseOrder(-1);
+        shown.ChooseOrder(1);
+
+        CollectionAssert.AreEqual(new Intent[] { new Intent.SetOrder(SwitchOrder.ResetsSoonest) }, model.Sent.ToArray());
+    }
+
     [TestMethod]
     public void TheTermsAreTheModelsLink()
     {
