@@ -30,7 +30,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.0.0-beta.9"
+version = "1.0.0-beta.10"
 edition = "2024"
 rust-version = "1.91"
 license = "Apache-2.0"
@@ -61,8 +61,10 @@ mockito = "1.7.2"
 serde = { version = "1", features = ["derive"] }
 # raw_value: a settings file's untouched values are written back byte for byte.
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
-# Claude's cookie jar is SQLite: the system's, never a bundled build. 0.40 needs a Rust past 1.91.
-rusqlite = { version = "0.41.0", default-features = false }
+# Claude's cookie jar is SQLite: the system's, never a bundled build. Not 0.41, which links
+# sqlite3_set_clientdata, from SQLite 3.44: macOS 15's SDK has none (release run 41632367798),
+# and macOS 14 and 15, which Pitboard runs on, would refuse to start the app.
+rusqlite = { version = "0.40.2", default-features = false }
 sha2 = "0.11"
 tempfile = "3.27"
 thiserror = "2"
