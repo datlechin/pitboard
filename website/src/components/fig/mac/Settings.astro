@@ -41,14 +41,15 @@ const tabs = [
 ];
 const heights = { switch: "h-324.5", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
-// under Resets Soonest needs at least, and Warm-Up as its accounts make it. The cut stays 8 points
-// below, the desk's border counted as a static height counts it.
+// under Resets Soonest needs at least, a line of 17 more where a font wraps it once more, as
+// Linux's does, and Warm-Up as its accounts make it. The cut stays 8 points below, the desk's
+// border counted as a static height counts it.
 // Once another tab is shown, the desk keeps its height and cuts the window as it grows.
 const live = {
   switch: "[&:defined]:h-(--locked,auto)",
   warm: "[&:defined]:h-(--locked,auto)",
 };
-const frame = { switch: "live:min-h-384.5", warm: "" };
+const frame = { switch: "live:min-h-401.5", warm: "" };
 const drawn: AtLimit = "switch";
 const order: Order = "most-left";
 const minutes = (at: string) => {
