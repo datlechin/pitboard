@@ -212,7 +212,10 @@ test.describe("Notification Center", () => {
     const clock = fig.locator('[data-does="center"]');
     await expect(clock).toHaveAccessibleName("14 Oct 05:53");
     await fig.scrollIntoViewIfNeeded();
-    await expect(fig.locator("[data-banner]")).toBeVisible();
+    const banner = fig.locator("[data-banner]");
+    await expect(banner).toBeVisible();
+    // the banner slides in over the clock, where a press during the slide lands on it
+    await banner.evaluate((el) => Promise.all(el.getAnimations().map((slide) => slide.finished)));
     await clock.click();
     // the date menu's opening puts the banner away
     await expect(fig.locator("[data-banner]")).toBeHidden();
