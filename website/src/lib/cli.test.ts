@@ -119,7 +119,8 @@ test("help keeps clap's styles: headings and usage bold and underlined, literals
   assert.ok(lines.includes("<b><u>Commands:</u></b>"));
   assert.ok(lines.includes("<b><u>Usage:</u></b> <b>pitboard watch</b> [OPTIONS] [COMMAND]"));
   assert.ok(lines.some((l) => l.startsWith("  <b>install</b>    Have this")));
-  assert.ok(lines.some((l) => l.startsWith("      <b>--at</b> &lt;PERCENT&gt;  Switch")));
+  assert.ok(lines.some((l) => l.startsWith("      <b>--at</b> &lt;PERCENT&gt;   Switch")));
+  assert.ok(lines.some((l) => l.startsWith("      <b>--order</b> &lt;ORDER&gt;  Which account")));
   assert.ok(lines.some((l) => l.startsWith("  <b>-h</b>, <b>--help</b>")));
   const examples = helpLines(g, ["pitboard"]);
   assert.ok(
@@ -450,6 +451,22 @@ test("pitboard watch install, status and uninstall keep the watch service in the
     "Pitboard watches Claude Code in the background, and switches once a limit of the account in use reaches 90%.",
     "\\Pitboard\\Watch S-1-5-21-1004-1005-1006-1001",
   ]);
+  // under --order resets-soonest, words.rs `first_by` after the share
+  const soonest = await said("macos", "watch install --at 90 --order resets-soonest");
+  assert.ok(
+    soonest[0].includes(
+      "reaches 90%, or before then to the account whose week resets soonest, and warms up",
+    ),
+  );
+  assert.deepEqual(
+    (await said("macos", "watch status"))[0].split("90%")[1],
+    ", or before then to the account whose week resets soonest.",
+  );
+  assert.ok(
+    joined("crates/pitboard-core/src/words.rs").includes(
+      'Order::ResetsSoonest => ", or before then to the account whose week resets soonest",',
+    ),
+  );
   assert.deepEqual(await said("macos", "watch uninstall"), [
     "Stopped watching Claude Code in the background.",
   ]);
@@ -461,7 +478,7 @@ test("pitboard watch install, status and uninstall keep the watch service in the
     '"Nothing watches Claude Code in the background here.\\n{}\\n",',
     '"Run `pitboard watch install` to change that.".to_string()',
     '"Pitboard watches Claude Code in the background{}.\\n{location}\\n{}",',
-    '", and switches once a limit of the account in use reaches {}%",',
+    '", and switches once a limit of the account in use reaches {}%{}",',
     '"Stopped watching Claude Code in the background.\\n".to_string()',
     '"Nothing was watching Claude Code in the background.\\n".to_string()',
   ])
@@ -474,7 +491,7 @@ test("pitboard watch says what it decides as watch.rs does, and switches at its 
   assert.deepEqual(text(step.lines), [
     "Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 70%, and warms up personal from 07:00 to 23:00. Stop with Ctrl-C.",
   ]);
-  assert.equal(model.get().watching, 70);
+  assert.deepEqual(model.get().watching, { at: 70, order: "most-left" });
   advance(clock.menuBar + 30);
   const lines = text(step.runs!.next(model.get()));
   assert.deepEqual(lines, [
@@ -493,12 +510,13 @@ test("pitboard watch says what it decides as watch.rs does, and switches at its 
   const watch = joined("crates/pitboard/src/watch.rs");
   assert.ok(
     watch.includes(
-      '"Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches {}%{}. {}\\n",',
+      '"Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches {}%{}{}. {}\\n",',
     ),
   );
   assert.ok(watch.includes('", and warms up {} from {}",'));
   const words = joined("crates/pitboard-core/src/words.rs");
-  assert.ok(words.includes('"Switched Claude Code from {from} to {to}: {}.",'));
+  assert.ok(words.includes('format!("Switched Claude Code from {from} to {to}: {because}.")'));
+  assert.ok(watch.includes("words::has_used(&from_bold, &words::share_of_limit(&limit))"));
 });
 
 test("pitboard watch --once decides once, as the watch does", async () => {
@@ -510,6 +528,37 @@ test("pitboard watch --once decides once, as the watch does", async () => {
     "Switched Claude Code from personal to work: personal has used 73% of its weekly limit. Claude Code sessions already running follow within 33 seconds.",
   ]);
   assert.equal(model.get().inUse.claude, "work");
+});
+
+test("pitboard watch --order resets-soonest moves before the share and says each week's reset", async () => {
+  reset();
+  const early =
+    "Switched Claude Code from personal to work: work's week resets at Oct 16 01:00, before personal's at Oct 19 14:50. Claude Code sessions already running follow within 33 seconds.";
+  assert.deepEqual(await said("macos", "watch --once --order resets-soonest"), [early]);
+  assert.equal(model.get().inUse.claude, "work");
+  // once this week: put back, personal stays
+  await said("macos", "use personal");
+  assert.deepEqual(await said("macos", "watch --once --order resets-soonest"), [
+    "Watching personal: 73% of its weekly limit, as of 20:50.",
+  ]);
+  reset();
+  const step = await run(machine("macos"), ["watch", "--order", "resets-soonest"]);
+  advance(clock.menuBar + 30);
+  assert.deepEqual(text(step.runs!.next(model.get())), [`20:51:30 ${early}`]);
+  step.runs!.stop();
+  const watch = joined("crates/pitboard/src/watch.rs");
+  for (const words of [
+    'data["reason"] = json!("resets_first");',
+    "(Some(to_at), Some(from_at)) => words::resets_at_before(",
+    "(Some(_), None) => words::resets_before(&to_bold, &from_bold),",
+    "(None, _) => words::no_weekly_limit(&to_bold),",
+  ])
+    assert.ok(watch.includes(words), words);
+  const core = joined("crates/pitboard-core/src/words.rs");
+  assert.ok(
+    core.includes(`format!("{to}'s week resets at {to_at}, before {from}'s at {from_at}")`),
+  );
+  assert.ok(core.includes(`format!("{to}'s week resets before {from}'s")`));
 });
 
 test("pitboard enroll --sign-in says what it opens, and waits", async () => {

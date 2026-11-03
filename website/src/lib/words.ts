@@ -18,7 +18,7 @@ import {
   type Tool,
   type World,
 } from "../data/world.ts";
-import type { AutoStanding, Preferences, Skip, WarmStanding } from "./model.ts";
+import type { AutoStanding, Order, Preferences, Skip, WarmStanding } from "./model.ts";
 import { fronts, type Front, type Platform } from "./platform.ts";
 
 // autoswitch.rs `SETTLING_SECONDS` and switch/mod.rs `ADOPTION_CEILING_SECONDS`, which the model's
@@ -801,8 +801,27 @@ export const sentence = (text: string) => {
   return /[.!?…]$/.test(said) ? said : `${said}.`;
 };
 
-// What the line under the setting says (words.rs `watching`, `auto_switched`, `auto_skipped`).
-export function autoStandingSaid(standing: AutoStanding): string {
+// words.rs `resets_before`, `resets_at_before` and `no_weekly_limit`, as clauses
+export const resetsBefore = (to: string, from: string) => `${to}'s week resets before ${from}'s`;
+export const resetsAtBefore = (to: string, toAt: string, from: string, fromAt: string) =>
+  `${to}'s week resets at ${toAt}, before ${from}'s at ${fromAt}`;
+export const noWeeklyLimit = (account: string) =>
+  `${account} has no weekly limit, so what it leaves unused is lost at each 5-hour reset`;
+
+// present/words/mod.rs `typeset`: the core's apostrophes curled, the names kept as typed
+const curled = (said: string, ...names: string[]) => {
+  let out = said.replace(/'/g, "’");
+  for (const name of names) out = out.replaceAll(name.replace(/'/g, "’"), name);
+  return out;
+};
+
+// present/words/notices.rs `resets_first` and `five_hours_used`
+export const resetsFirstSaid = (to: string, from: string, weekly: boolean) =>
+  `${curled(weekly ? resetsBefore(to, from) : noWeeklyLimit(to), to, from)}.`;
+export const fiveHoursUsed = (figure: string) => `It has used ${figure} of its 5-hour limit.`;
+
+// machine.rs `auto_standing`: the line under the setting, its clock times as of `now`.
+export function autoStandingSaid(standing: AutoStanding, now: number): string {
   switch (standing.came) {
     case "watching": {
       let said = `Watching ${standing.account}`;
@@ -810,8 +829,18 @@ export function autoStandingSaid(standing: AutoStanding): string {
       if (standing.asOf !== null) said += `, as of ${hm(standing.asOf)}`;
       return `${said}.`;
     }
-    case "switched":
-      return `Switched Claude Code from ${standing.from} to ${standing.to}: ${standing.from} has used ${standing.used}.`;
+    case "switched": {
+      const { from, to, because } = standing;
+      const why =
+        "used" in because
+          ? `${from} has used ${because.used}`
+          : because.to === null
+            ? noWeeklyLimit(to)
+            : because.from === null
+              ? resetsBefore(to, from)
+              : resetsAtBefore(to, clockAt(because.to, now), from, clockAt(because.from, now));
+      return curled(`Switched Claude Code from ${from} to ${to}: ${why}.`, from, to);
+    }
     case "skipped": {
       const said = `${standing.from} has used ${standing.used}. Pitboard is not switching: ${standing.why}.`;
       return standing.until === null ? said : `${said} It decides again at ${hm(standing.until)}.`;
@@ -821,17 +850,30 @@ export function autoStandingSaid(standing: AutoStanding): string {
   }
 }
 
-// present/machine.rs `at_limit`'s note under the choice.
-export function atLimitNote(p: Preferences): string | null {
+// present/words/machine.rs `at_limit_note`: the note under the choice.
+export function atLimitNote(p: Pick<Preferences, "atLimit" | "share" | "order">): string | null {
+  const first = p.order === "resets-soonest";
   switch (p.atLimit) {
     case "nothing":
       return null;
-    case "notify":
-      return `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
-    case "switch":
-      return `Pitboard switches Claude Code at ${p.share}%, and its running sessions follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
+    case "notify": {
+      const note = `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
+      return first
+        ? `${note} It also tells you when another account’s week resets sooner and that account has room.`
+        : note;
+    }
+    case "switch": {
+      const note = `Pitboard switches Claude Code at ${p.share}%, and its running sessions follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
+      return first
+        ? `${note} Before then, it switches to an account whose week resets sooner, if that account has room and as much of its 5-hour limit left.`
+        : note;
+    }
   }
 }
+
+// words.rs `first_by`: the clause after the share under Resets Soonest.
+export const firstBy = (order: Order) =>
+  order === "resets-soonest" ? ", or before then to the account whose week resets soonest" : "";
 
 // words.rs `after_a_switch`, for what a switch means to what already runs.
 export function afterSwitch(tool: Tool, sessions: string): string {

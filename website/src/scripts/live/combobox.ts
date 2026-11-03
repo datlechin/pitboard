@@ -38,6 +38,11 @@ export function combobox(
 
   const isOpen = () => !list.hidden;
   const chosen = () => values.indexOf(value);
+  // a disabled box, as WinUI dims one, takes neither the pointer, the focus nor a key
+  const off = () => box.getAttribute("aria-disabled") === "true";
+  box.addEventListener("mousedown", (e) => {
+    if (off()) e.preventDefault();
+  });
 
   function activate(i: number) {
     active = i;
@@ -126,7 +131,7 @@ export function combobox(
 
   if (kind === "popup") {
     box.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || busy) return;
+      if (e.button !== 0 || busy || off()) return;
       e.preventDefault();
       box.focus({ preventScroll: true });
       if (isOpen()) return close();
@@ -143,6 +148,7 @@ export function combobox(
     document.addEventListener("pointercancel", () => (press = null));
   } else {
     box.addEventListener("click", () => {
+      if (off()) return;
       box.focus({ preventScroll: true });
       if (isOpen()) close();
       else open();
@@ -176,6 +182,7 @@ export function combobox(
 
   box.addEventListener("keydown", (e) => {
     if (busy) return e.preventDefault();
+    if (off()) return;
     const typing = e.key.length === 1 && e.key !== " " && !e.metaKey && !e.ctrlKey && !e.altKey;
     if (!isOpen()) {
       if (kind !== "combobox") {

@@ -36,16 +36,22 @@ import {
   warmStanding,
   warmUp,
   watchInTerminal,
+  type Because,
   type Decision,
+  type Order,
   type State,
   type WarmStanding,
 } from "./model.ts";
 import {
   escaped,
+  firstBy,
   joined,
   moment,
+  noWeeklyLimit,
   notSwitching,
   renewalDue,
+  resetsAtBefore,
+  resetsBefore,
   shareOfLimit,
   stamp,
   statusHeading,
@@ -671,13 +677,13 @@ function warmRange(from: string, to: string): Report {
 }
 
 // watch.rs `service`
-function watchInstall(m: Machine, at: number): Report {
-  installWatch(at, "cli");
+function watchInstall(m: Machine, at: number, order: Order): Report {
+  installWatch(at, "cli", order);
   return done(
     "watch",
-    located(m.platform, "watch", { threshold: at }),
+    located(m.platform, "watch", { threshold: at, order }),
     plain(
-      `Pitboard watches Claude Code in the background from now on, and at each sign-in. It switches once a limit of the account in use reaches ${at}%, and warms up the accounts \`pitboard warm on\` turned on.`,
+      `Pitboard watches Claude Code in the background from now on, and at each sign-in. It switches once a limit of the account in use reaches ${at}%${firstBy(order)}, and warms up the accounts \`pitboard warm on\` turned on.`,
     ),
     ...(m.platform === "linux"
       ? [
@@ -702,8 +708,8 @@ function watchStatus(m: Machine, s: State): Report {
     );
   return done(
     "watch",
-    located(m.platform, "watch", { threshold: s.watchService.at }),
-    `Pitboard watches Claude Code in the background, and switches once a limit of the account in use reaches ${s.watchService.at}%.`,
+    located(m.platform, "watch", { threshold: s.watchService.at, order: s.watchService.order }),
+    `Pitboard watches Claude Code in the background, and switches once a limit of the account in use reaches ${s.watchService.at}%${firstBy(s.watchService.order)}.`,
     plain(location(m.platform, "watch")[1]),
   );
 }
@@ -742,8 +748,19 @@ function decisionLine(d: Decision, s: State, share: number): string | null {
   }
 }
 
-const switchedLine = (from: string, to: string, limit: string) =>
-  `Switched Claude Code from ${b(from)} to ${b(to)}: ${b(from)} has used ${plain(limit)}. Claude Code sessions already running follow within ${ADOPTION_CEILING_SECONDS} seconds.`;
+// watch.rs `event`'s switch: why it went, then that sessions follow
+function switchedLine(s: State, from: string, to: string, because: Because): string {
+  const at = (t: number) => moment(t, s.now);
+  const why =
+    "used" in because
+      ? `${b(from)} has used ${plain(because.used)}`
+      : because.to === null
+        ? noWeeklyLimit(b(to))
+        : because.from === null
+          ? resetsBefore(b(to), b(from))
+          : resetsAtBefore(b(to), at(because.to), b(from), at(because.from));
+  return `Switched Claude Code from ${b(from)} to ${b(to)}: ${why}. Claude Code sessions already running follow within ${ADOPTION_CEILING_SECONDS} seconds.`;
+}
 
 // watch.rs `stamp`
 const stamped = (s: State, line: string) => {
@@ -754,7 +771,7 @@ const stamped = (s: State, line: string) => {
 
 // `pitboard watch`: what it decides, said whenever it says something new, until Ctrl+C. While
 // it runs the model switches Claude Code at its share, as the watch service does.
-function watchRun(s: State, share: number): Step {
+function watchRun(s: State, share: number, order: Order): Step {
   const on = s.accounts.filter((a) => a.tool === "claude" && s.warm.on.includes(a.id));
   const warms = on.length
     ? `, and warms up ${joined(on.map((a) => b(a.label)))} from ${span(s)}`
@@ -764,20 +781,14 @@ function watchRun(s: State, share: number): Step {
   let watching: string | null = null;
   let decidedAt: number | null = null;
   let logged = s.log.length;
-  watchInTerminal(share);
+  watchInTerminal({ at: share, order });
   const say = (state: State): string[] => {
     const out: string[] = [];
     for (const e of state.log.slice(logged)) {
       if (e.caller !== "cli" || e.outcome !== "ok") continue;
       if (e.verb === "auto-switch") {
         const last = state.lastSwitch.claude!;
-        const from = state.accounts.find((a) => a.tool === "claude" && a.label === last.from);
-        const limit = from?.limits
-          .filter((l) => whole(l.percent) >= share)
-          .sort((x, y) => y.percent - x.percent)[0];
-        out.push(
-          stamped(state, switchedLine(last.from, last.to, limit ? shareOfLimit(limit) : "")),
-        );
+        out.push(stamped(state, switchedLine(state, last.from, last.to, last.because!)));
         told = new Set();
         watching = null;
         // the pass that switched says nothing more; the next says what it watches
@@ -799,7 +810,7 @@ function watchRun(s: State, share: number): Step {
     logged = state.log.length;
     if (state.decidedAt !== decidedAt) {
       decidedAt = state.decidedAt;
-      const d = decide(state, share);
+      const d = decide(state, share, order);
       const line = decisionLine(d, state, share);
       if (line && d.decided === "below") {
         if (watching !== state.inUse.claude) out.push(stamped(state, line));
@@ -818,7 +829,7 @@ function watchRun(s: State, share: number): Step {
   };
   return {
     lines: [
-      `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches ${share}%${warms}. Stop with Ctrl-C.`,
+      `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches ${share}%${firstBy(order)}${warms}. Stop with Ctrl-C.`,
       ...say(model.get()),
     ],
     runs: { next: say, stop: () => watchInTerminal(null) },
@@ -826,12 +837,12 @@ function watchRun(s: State, share: number): Step {
 }
 
 // `pitboard watch --once`: one decision from what was last read, which may switch.
-function watchOnce(s: State, share: number): string[] {
-  const d = decide(s, share);
+function watchOnce(s: State, share: number, order: Order): string[] {
+  const d = decide(s, share, order);
   if (d.decided !== "switch") return [decisionLine(d, s, share) ?? ""];
   const from = s.inUse.claude;
-  decideOnce(share);
-  return [switchedLine(from, d.to.label, shareOfLimit(d.limit))];
+  decideOnce(share, order);
+  return [switchedLine(s, from, d.to.label, model.get().lastSwitch.claude!.because!)];
 }
 
 // main.rs `schedule`
@@ -996,6 +1007,7 @@ export async function run(m: Machine, words: string[]): Promise<Step> {
   const s = model.get();
   const out = (r: Report): Step => ({ lines: emit(r, json), failed: !!(r.error ?? r.failure) });
   const at = () => Number(value(leaf, "at"));
+  const order = () => value(leaf, "order") as Order;
   switch (path) {
     case "":
       return out(status(m, s, false));
@@ -1033,9 +1045,11 @@ export async function run(m: Machine, words: string[]): Promise<Step> {
     case "warm range":
       return out(warmRange(value(leaf, "from"), value(leaf, "to")));
     case "watch":
-      return flag(leaf, "once") ? { lines: watchOnce(s, at()) } : watchRun(s, at());
+      return flag(leaf, "once")
+        ? { lines: watchOnce(s, at(), order()) }
+        : watchRun(s, at(), order());
     case "watch install":
-      return out(watchInstall(m, at()));
+      return out(watchInstall(m, at(), order()));
     case "watch status":
       return out(watchStatus(m, s));
     case "watch uninstall":

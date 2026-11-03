@@ -17,6 +17,7 @@ import {
   quit,
   setChoice,
   setGeneral,
+  setOrder,
   setSchedule,
   setShare,
   setWarmRange,
@@ -25,6 +26,7 @@ import {
   uninstallWatch,
   warmNote,
   type AtLimit,
+  type Order,
   type State,
 } from "../../lib/model.ts";
 import { systemOf } from "../../lib/platform.ts";
@@ -45,6 +47,7 @@ class LinuxPreferences extends LiveFigure {
   #first: Page = "limits";
   #scrolled = 0;
   #choice!: Combobox;
+  #order!: Combobox;
   #share!: Spin;
   #from!: Spin;
   #to!: Spin;
@@ -79,12 +82,16 @@ class LinuxPreferences extends LiveFigure {
       tab.addEventListener("click", () => this.#show(tab.dataset.page as Page, true));
       tab.addEventListener("keydown", (e) => this.#tabKey(e, tab));
     }
-    const box = this.#part<HTMLButtonElement>("choice");
-    const list = this.#byId("at-limit-choices");
-    // the list opens under the row's button, wherever the page is scrolled
-    for (const type of ["pointerdown", "keydown"])
-      box.addEventListener(type, () => this.#placeList(box, list), true);
-    this.#choice = combobox(box, list, "dropdown", (v) => setChoice(v as AtLimit));
+    // each list opens under its row's button, wherever the page is scrolled
+    const dropdown = (part: string, listed: string, choose: (v: string) => void) => {
+      const box = this.#part<HTMLButtonElement>(part);
+      const list = this.#byId(listed);
+      for (const type of ["pointerdown", "keydown"])
+        box.addEventListener(type, () => this.#placeList(box, list), true);
+      return combobox(box, list, "dropdown", choose);
+    };
+    this.#choice = dropdown("choice", "at-limit-choices", (v) => setChoice(v as AtLimit));
+    this.#order = dropdown("order", "order-choices", (v) => setOrder(v as Order));
     const spin = (row: string) => {
       const el = this.#part(row);
       return [
@@ -163,6 +170,7 @@ class LinuxPreferences extends LiveFigure {
     if (page !== this.#page) {
       this.#page = page;
       this.#choice.close();
+      this.#order.close();
       for (const t of this.#tabs) {
         const on = t.dataset.page === page;
         attr(t, "aria-selected", String(on));
@@ -209,6 +217,7 @@ class LinuxPreferences extends LiveFigure {
   // Close and Escape put Preferences away, and focus goes back to the window
   #close() {
     this.#choice.close();
+    this.#order.close();
     this.#open(false);
     this.#window
       .querySelector<HTMLElement>('[data-page="accounts"] [data-does="main-menu"]')
@@ -234,7 +243,7 @@ class LinuxPreferences extends LiveFigure {
         return void setSchedule(!s.schedule, "app");
       case "watch":
         if (s.watchService) uninstallWatch("app");
-        else installWatch(s.preferences.share, "app");
+        else installWatch(s.preferences.share, "app", s.preferences.order);
     }
   }
 
@@ -275,6 +284,7 @@ class LinuxPreferences extends LiveFigure {
 
   protected restart() {
     this.#choice.close();
+    this.#order.close();
     this.#open(true);
     this.#show(this.#first);
     this.#part("scroller").scrollTop = this.#scrolled;
@@ -296,17 +306,25 @@ class LinuxPreferences extends LiveFigure {
     set("watch", !!s.watchService, s.watching === null);
     text(
       this.#part("watch-row").querySelector('[data-part="subtitle"]'),
-      prefs.advanced.watchAbout(p.atLimit === "switch", s.watchService?.at ?? p.share),
+      prefs.advanced.watchAbout(
+        p.atLimit === "switch",
+        s.watchService?.at ?? p.share,
+        s.watchService?.order ?? p.order,
+      ),
     );
-    // Limits: the choice and its standing, the share where something happens at it, and the note
+    // Limits: the choice and its standing, the share and Use first where something happens at the
+    // share, and the note
     this.#choice.set(p.atLimit);
     // what is hidden keeps its words, so the drawing stays as Astro drew it
     const standing = p.atLimit === "switch" ? s.autoStanding : null;
     const said = this.#part("at-limit-row").querySelector<HTMLElement>('[data-part="subtitle"]');
     shown(said, !!standing);
-    if (standing) text(said, autoStandingSaid(standing));
+    if (standing) text(said, autoStandingSaid(standing, s.now));
     this.#share.set(p.share, true);
     shown(this.#part("share"), p.atLimit !== "nothing");
+    this.#order.set(p.order);
+    if (p.atLimit === "nothing") this.#order.close();
+    shown(this.#part("order-row"), p.atLimit !== "nothing");
     const note = atLimitNote(p, true);
     const whole = atLimitNote(p, statusItem, watched);
     const description = this.#part("note").closest<HTMLElement>('[data-part="description"]');

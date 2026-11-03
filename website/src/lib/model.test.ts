@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   ADOPTION_CEILING_SECONDS,
   DECIDE_EVERY_SECONDS,
+  FRESH,
   FULL,
   HIGHEST,
   LOWEST,
@@ -20,6 +21,7 @@ import {
   cancelSignIn,
   clamped,
   closeAppWindow,
+  comesBefore,
   countdown,
   decide,
   declineSecond,
@@ -29,12 +31,16 @@ import {
   nameProblem,
   named,
   nextWarmUp,
+  preferred,
   quit,
   refresh,
   refreshFromApp,
   rename,
   reset,
+  resetsFirst,
+  room,
   setChoice,
+  setOrder,
   setShare,
   settle,
   showAppWindow,
@@ -49,6 +55,8 @@ import {
   warmNote,
   warmStanding,
   warmUp,
+  weekOf,
+  type AtLimit,
   type Decision,
   type Skip,
   type State,
@@ -57,6 +65,8 @@ import {
 import {
   afterSwitch,
   appWarmSaid,
+  fiveHoursUsed,
+  resetsFirstSaid,
   atLimitNote,
   autoStandingSaid,
   notSwitching,
@@ -136,13 +146,20 @@ test("the page starts on the hero's first frame, with the app's default choice m
   assert.equal(s.now, clock.menuBar);
   assert.equal(s.readAt, clock.read);
   assert.deepEqual(s.inUse, { claude: "personal", codex: "main", desktop: "home" });
-  assert.deepEqual(s.preferences, { atLimit: "notify", chosen: true, share: 95 });
+  assert.deepEqual(s.preferences, {
+    atLimit: "notify",
+    chosen: true,
+    share: 95,
+    order: "most-left",
+  });
   const preferences = ffi("model/preferences.rs");
   assert.ok(
     preferences.includes(
       "_ if self.auto_switch => AtLimit::Switch,\n            _ => AtLimit::Notify,",
     ),
   );
+  // none written reads as Most Left
+  assert.ok(preferences.includes(".and_then(Order::from_code)\n            .unwrap_or_default()"));
   assert.ok(!s.log.some((e) => e.at === clock.switched), "the demo makes the switch to work");
   assert.deepEqual([s.warm.from, s.warm.to], [7 * 60, 23 * 60]);
   assert.equal(menuBarTitle(s), "personal 73%");
@@ -188,7 +205,7 @@ test("a_limit_below_the_share_is_left_alone_and_one_at_it_switches", () => {
   assert.equal(below.decided === "below" && below.nearest?.percent, 94.4);
   const at = decide(rows(workAt(95), spare()), 95);
   assert.equal(to(at), "spare");
-  assert.equal(at.decided === "switch" && at.limit.lengthSeconds, 5 * HOUR);
+  assert.equal(at.decided === "switch" && at.limit?.lengthSeconds, 5 * HOUR);
   assert.equal(to(decide(rows(workAt(94.5), spare()), 95)), "spare", "drawn at 95%");
 });
 
@@ -244,6 +261,147 @@ test("a_limit_switched_away_from_is_switched_away_from_again_in_its_next_window"
   assert.equal(again.decided === "hold" && again.why.code, "already_switched");
   s.accounts[0].limits[0].resetsAt = NOW + 3 * HOUR;
   assert.equal(to(decide(s, 95)), "spare");
+});
+
+const order = core("usage/order.rs");
+// a week `percent` used resetting `days` from now, and an account with its five hours at `session`
+const week = (percent: number, days: number): Limit => ({
+  percent,
+  resetsAt: NOW + days * DAY,
+  lengthSeconds: WEEK,
+});
+const weeks = (label: string, used: number, days: number) =>
+  row(label, [session(used), week(40, days)]);
+const seat = (label: string, used: number) => row(label, [session(used), scoped("Fable", 0)]);
+const fresh = (theirs: Account, mine: Account, now = NOW, readAt = NOW) =>
+  resetsFirst(theirs.limits, mine.limits, true, 95, now, readAt);
+
+test("a_week_that_resets_a_minute_sooner_comes_first_and_59_seconds_do_not", () => {
+  answersTo(order, "a_week_that_resets_a_minute_sooner_comes_first_and_59_seconds_do_not");
+  const later = NOW + DAY;
+  assert.ok(comesBefore(later - 60, later));
+  assert.ok(!comesBefore(later - 59, later));
+  assert.ok(comesBefore("free", later) && comesBefore("free", "unknown"));
+  assert.ok(!comesBefore("free", "free"), "two seats lose alike");
+  assert.ok(!comesBefore(NOW, "unknown") && !comesBefore("unknown", later));
+  assert.ok(!comesBefore(later, "free"));
+  assert.equal(weekOf([session(0), week(40, -1)], true, NOW), "unknown", "a reset gone by");
+  assert.equal(weekOf([session(0)], false, NOW), "unknown", "it may have one");
+  assert.equal(weekOf([scoped("Fable", 10)], true, NOW), "free");
+});
+
+test("most_left_keeps_the_most_room_and_resets_soonest_the_sooner_week", () => {
+  answersTo(order, "most_left_keeps_the_most_room_and_resets_soonest_the_sooner_week");
+  answersTo(order, "a_seat_comes_first_in_either_order_and_an_unknown_week_last");
+  const limit = session(96, NOW + HOUR);
+  const roomOf = (a: Account) => room(a.limits, true, [limit], limit, 95, NOW)!;
+  const candidates = (...accounts: Account[]): [string, ReturnType<typeof roomOf>][] =>
+    accounts.map((a) => [a.label, roomOf(a)]);
+  const two = candidates(weeks("soon", 60, 1), weeks("roomy", 10, 5));
+  assert.equal(preferred("most-left", two)![0], "roomy");
+  assert.equal(preferred("resets-soonest", two)![0], "soon");
+  const unread = row("unread", [session(0), { ...week(40, 1), resetsAt: null }]);
+  const all = candidates(unread, weeks("soon", 50, 1), seat("seat", 80));
+  for (const by of ["most-left", "resets-soonest"] as const)
+    assert.equal(preferred(by, all)![0], "seat");
+  assert.equal(preferred("resets-soonest", all.slice(0, 2))![0], "soon");
+  assert.equal(preferred("most-left", all.slice(0, 2))![0], "unread", "room alone");
+});
+
+test("resets_first_needs_a_sooner_week_room_and_as_much_five_hour_room", () => {
+  answersTo(order, "resets_first_needs_a_sooner_week_room_and_as_much_five_hour_room");
+  answersTo(order, "a_seat_resets_first_from_a_week_and_never_from_another_seat");
+  answersTo(order, "resets_first_wants_a_reading_anthropic_gave_lately");
+  assert.ok(order.includes("const FRESH: i64 = budget::UNREACHABLE_MOST;"));
+  assert.ok(core("usage/budget.rs").includes(`pub(super) const UNREACHABLE_MOST: i64 = ${FRESH};`));
+  const mine = weeks("work", 30, 5);
+  assert.ok(fresh(weeks("soon", 30, 1), mine));
+  assert.equal(fresh(weeks("soon", 31, 1), mine), null, "less five-hour room");
+  assert.equal(fresh(weeks("soon", 0, 5), mine), null, "the same week");
+  assert.equal(fresh(row("full", [session(0), week(95, 1)]), mine), null, "no room");
+  assert.ok(fresh(seat("seat", 10), weeks("work", 30, 1)));
+  assert.equal(fresh(seat("seat", 0), seat("work", 30)), null);
+  assert.equal(fresh(weeks("soon", 0, 1), seat("work", 30)), null);
+  const reset = row("soon", [session(80, NOW - 60), week(40, 1)]);
+  assert.ok(fresh(reset, mine), "a five-hour limit that reset counts as unused");
+  assert.equal(fresh(weeks("soon", 0, 1), mine, NOW, NOW - FRESH - 1), null);
+  assert.ok(fresh(weeks("soon", 0, 1), mine, NOW, NOW - FRESH));
+});
+
+const early = (d: Decision) => (d.decided === "switch" && d.limit === null ? d : null);
+
+test("under_resets_soonest_an_account_whose_week_resets_sooner_is_moved_to_below_the_share", () => {
+  answersTo(
+    autoswitch,
+    "under_resets_soonest_an_account_whose_week_resets_sooner_is_moved_to_below_the_share",
+  );
+  const s = rows(weeks("work", 30, 5), weeks("later", 0, 3), weeks("soon", 10, 1));
+  const moved = early(decide(s, 95, "resets-soonest"));
+  assert.equal(moved?.to.label, "soon");
+  assert.deepEqual(moved?.first, { to: NOW + DAY, from: NOW + 5 * DAY });
+  assert.equal(decide(s, 95).decided, "below", "most left waits for the share");
+});
+
+test("an_account_with_less_five_hour_room_is_passed_for_the_next_that_resets_first", () => {
+  answersTo(
+    autoswitch,
+    "an_account_with_less_five_hour_room_is_passed_for_the_next_that_resets_first",
+  );
+  const s = rows(weeks("work", 30, 5), weeks("soon", 50, 1), weeks("next", 0, 3));
+  assert.equal(to(decide(s, 95, "resets-soonest")), "next");
+  const only = rows(weeks("work", 30, 5), weeks("soon", 50, 1));
+  assert.equal(decide(only, 95, "resets-soonest").decided, "below");
+});
+
+test("a_team_seat_is_moved_to_early_from_a_weekly_account_and_never_from_another_seat", () => {
+  answersTo(
+    autoswitch,
+    "a_team_seat_is_moved_to_early_from_a_weekly_account_and_never_from_another_seat",
+  );
+  const s = rows(weeks("work", 30, 1), weeks("soon", 0, 0), seat("seat", 20));
+  const moved = early(decide(s, 95, "resets-soonest"));
+  assert.equal(moved?.to.label, "seat");
+  assert.deepEqual(moved?.first, { to: "free", from: NOW + DAY });
+  const seats = rows(seat("work", 30), seat("other", 0));
+  assert.equal(decide(seats, 95, "resets-soonest").decided, "below");
+});
+
+test("at_the_share_resets_soonest_chooses_the_week_that_resets_first", () => {
+  answersTo(autoswitch, "at_the_share_resets_soonest_chooses_the_week_that_resets_first");
+  const s = rows(
+    row("work", [session(96), week(20, 5)]),
+    weeks("roomy", 0, 6),
+    weeks("soon", 60, 2),
+  );
+  assert.equal(to(decide(s, 95)), "roomy");
+  const at = decide(s, 95, "resets-soonest");
+  assert.equal(to(at), "soon");
+  assert.ok(at.decided === "switch" && at.limit, "away from the limit");
+});
+
+test("an_early_move_waits_while_the_account_in_use_settles", () => {
+  answersTo(autoswitch, "an_early_move_waits_while_the_account_in_use_settles");
+  answersTo(autoswitch, "codex_is_never_moved_to_early");
+  const s = rows(weeks("work", 30, 5), weeks("soon", 0, 1));
+  s.lastUsedAt.work = NOW - 60;
+  assert.equal(decide(s, 95, "resets-soonest").decided, "below");
+  s.now = NOW + 240;
+  assert.equal(to(decide(s, 95, "resets-soonest")), "soon");
+});
+
+test("an_account_moved_to_early_is_not_again_until_it_meets_a_limit_or_its_week_resets", () => {
+  answersTo(
+    autoswitch,
+    "an_account_moved_to_early_is_not_again_until_it_meets_a_limit_or_its_week_resets",
+  );
+  assert.ok(core("switch/auto.rs").includes("let met = at_a_limit && ledger.met_a_limit(&id);"));
+  const s = rows(weeks("work", 30, 5), weeks("soon", 0, 1));
+  s.early.soon = { week: NOW + DAY, at: NOW - 600 };
+  assert.equal(decide(s, 95, "resets-soonest").decided, "below");
+  s.early.soon = { week: NOW - 6 * DAY, at: NOW - 7 * DAY };
+  assert.equal(to(decide(s, 95, "resets-soonest")), "soon", "an earlier week's");
+  delete s.early.soon;
+  assert.equal(to(decide(s, 95, "resets-soonest")), "soon", "once it met a limit");
 });
 
 // The page's own state, with the limits of the Claude Code accounts set.
@@ -346,7 +504,7 @@ test("do_nothing_notifies_nothing", () => {
 test("switch_notifies_of_codex_alone, and Codex Plus has no room against Pro's weekly limit", () => {
   answersTo(advising, "switch_notifies_of_codex_alone");
   assert.ok(core("provider/codex/api.rs").includes("lists_every_limit: false,"));
-  assert.ok(core("usage/mod.rs").includes("if !lists_every_limit {"));
+  assert.ok(core("usage/order.rs").includes("if !theirs.lists_every_limit {"));
   reset();
   setChoice("switch");
   reading({
@@ -361,6 +519,191 @@ test("switch_notifies_of_codex_alone, and Codex Plus has no room against Pro's w
   );
   assert.equal(model.get().inUse.claude, "work", "Claude Code was switched instead");
   assert.ok(model.get().posted.some((p) => p.title.macos === "Switched to work"));
+});
+
+// The page's world under Resets Soonest: personal in use, its week resetting after work's.
+const worldWeeks = () => {
+  const s = start();
+  const [personal, work] = ["personal", "work"].map(
+    (label) => s.accounts.find((a) => a.label === label)!.limits[1].resetsAt!,
+  );
+  return { personal, work };
+};
+
+test("an_account_whose_week_resets_first_is_told_of_once_for_that_week", () => {
+  answersTo(advising, "an_account_whose_week_resets_first_is_told_of_once_for_that_week");
+  const { work } = worldWeeks();
+  reset();
+  setOrder("resets-soonest");
+  const told = [
+    [
+      "Another Account Resets First",
+      "Claude Code",
+      "work’s week resets before personal’s. It has used 12% of its 5-hour limit.",
+      "work",
+    ],
+  ];
+  assert.deepEqual(posted(), told);
+  const [notice] = model.get().posted;
+  assert.equal(notice.id, `claude/work/first/-${work}`);
+  assert.equal(notice.title.windows, "Another account resets first");
+  assert.equal(notice.opens, "accounts");
+  assert.ok(ffi("present/notices.rs").includes('format!("{}-{}", first.key_of(), first.week),'));
+  refresh();
+  assert.deepEqual(posted(), told, "once for that week");
+  assert.deepEqual(model.get().advice, [], "nothing ran out");
+  // at another reset of its week it is told of again
+  reading({ "claude/work": [session(12), { ...weekly(40), resetsAt: work - DAY }] });
+  refresh();
+  assert.equal(posted().length, 2);
+  for (const [choice, by] of [
+    ["notify", "most-left"],
+    ["nothing", "resets-soonest"],
+  ] as const) {
+    reset();
+    setChoice(choice);
+    setOrder(by);
+    refresh();
+    assert.deepEqual(posted(), [], `${choice} ${by}`);
+  }
+});
+
+test("a_seat_is_told_of_as_losing_what_it_leaves_unused", () => {
+  answersTo(advising, "a_seat_is_told_of_as_losing_what_it_leaves_unused");
+  answersTo(advising, "a_seat_is_not_told_of_while_no_week_is_known");
+  const { personal } = worldWeeks();
+  reset();
+  reading({ "claude/work": [session(10), scoped("Fable", 0)] });
+  setOrder("resets-soonest");
+  assert.deepEqual(posted(), [
+    [
+      "Another Account Resets First",
+      "Claude Code",
+      "work has no weekly limit, so what it leaves unused is lost at each 5-hour reset. It has used 10% of its 5-hour limit.",
+      "work",
+    ],
+  ]);
+  assert.equal(model.get().posted[0].id, `claude/work/first/-${personal}`, "the week in use");
+  reset();
+  reading({
+    "claude/personal": [session(30), { ...weekly(40), resetsAt: null }],
+    "claude/work": [session(10)],
+  });
+  setOrder("resets-soonest");
+  assert.deepEqual(posted(), [], "no week known");
+});
+
+test("under_switch_only_codex_is_told_its_week_resets_first", () => {
+  answersTo(advising, "under_switch_only_codex_is_told_its_week_resets_first");
+  reset();
+  reading({ "codex/spare": [{ ...weekly(10), resetsAt: NOW + DAY }] });
+  setChoice("switch");
+  setOrder("resets-soonest");
+  const codex = model.get().posted.filter((p) => p.subtitle === "Codex");
+  assert.deepEqual(
+    codex.map((p) => [p.title.windows, p.body]),
+    [
+      [
+        "Another account resets first",
+        "spare’s week resets before main’s. It has used 0% of its 5-hour limit.",
+      ],
+    ],
+  );
+  assert.ok(
+    !model
+      .get()
+      .posted.some(
+        (p) => p.title.macos === "Another Account Resets First" && p.subtitle === "Claude Code",
+      ),
+  );
+});
+
+test("resets_soonest_offers_the_account_whose_week_resets_first", () => {
+  answersTo(advising, "resets_soonest_offers_the_account_whose_week_resets_first");
+  for (const [by, offered] of [
+    ["most-left", "roomy"],
+    ["resets-soonest", "soon"],
+  ] as const) {
+    reset();
+    setChoice("nothing");
+    setOrder(by);
+    add("claude");
+    add("claude");
+    refresh();
+    const [, , roomy, soon] = model.get().accounts.filter((a) => a.tool === "claude");
+    rename("claude", roomy.label, "roomy");
+    rename("claude", soon.label, "soon");
+    reading({
+      "claude/personal": [session(100), { ...weekly(20), resetsAt: NOW + 5 * DAY }],
+      "claude/work": [session(0), { ...weekly(40), resetsAt: NOW + 6 * DAY }],
+      "claude/roomy": [session(0), { ...weekly(10), resetsAt: NOW + 4 * DAY }],
+      "claude/soon": [session(50), { ...weekly(40), resetsAt: NOW + DAY }],
+    });
+    refresh();
+    assert.deepEqual(
+      model.get().advice.map((a) => a.instead),
+      [offered],
+      by,
+    );
+  }
+});
+
+test("an_early_switch_is_asked_for_in_the_order_and_said_by_the_week_that_resets_first", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  answersTo(
+    ffi("model/automatic.rs"),
+    "an_early_switch_is_asked_for_in_the_order_and_said_by_the_week_that_resets_first",
+  );
+  answersTo(core("switch/auto.rs"), "a_person_who_switches_back_after_an_early_move_is_left_there");
+  const { work, personal } = worldWeeks();
+  reset();
+  setOrder("resets-soonest");
+  setChoice("switch");
+  const s = model.get();
+  assert.equal(s.inUse.claude, "work", "moved before the share");
+  assert.deepEqual(posted().at(-1), [
+    "Switched to work",
+    "Claude Code",
+    "work’s week resets before personal’s. Sessions already running follow within 33 seconds.",
+    "personal",
+  ]);
+  assert.equal(
+    autoStandingSaid(s.autoStanding!, s.now),
+    "Switched Claude Code from personal to work: work’s week resets at Fri 01:00, before personal’s at Mon 14:50.",
+  );
+  assert.deepEqual(s.lastSwitch.claude?.back, { resetsAt: null }, "no limit to reset");
+  assert.deepEqual(s.early, { work: { week: work, at: NOW } });
+  assert.ok(personal > work);
+  assert.equal(s.log.at(-1)?.verb, "auto-switch");
+  // put back, personal stays: work was moved to once this week
+  advance(NOW + SETTLING_SECONDS);
+  switchBackFromApp("macos");
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().inUse.claude, "personal");
+  advance(model.get().now + 2 * SETTLING_SECONDS);
+  assert.equal(model.get().inUse.claude, "personal");
+  assert.equal(model.get().autoStanding?.came, "watching");
+});
+
+test("an_account_left_at_a_limit_is_moved_back_to_before_the_share_once_it_resets", () => {
+  answersTo(
+    core("switch/auto.rs"),
+    "an_account_left_at_a_limit_is_moved_back_to_before_the_share_once_it_resets",
+  );
+  reset();
+  setOrder("resets-soonest");
+  setChoice("switch");
+  assert.equal(model.get().inUse.claude, "work");
+  advance(NOW + SETTLING_SECONDS);
+  // work at its five-hour limit is left, and that reopens it to a move before the share
+  reading({ "claude/work": [session(96, NOW + HOUR), weekly(40)] });
+  refresh();
+  assert.equal(model.get().inUse.claude, "personal");
+  assert.deepEqual(model.get().early, {});
+  advance(model.get().now + SETTLING_SECONDS);
+  reading({ "claude/work": [session(0, NOW + 3 * HOUR), weekly(40)] });
+  refresh();
+  assert.equal(model.get().inUse.claude, "work", "moved back to");
 });
 
 test("one limit of each tool is notified a pass, the 5-hour first, the weekly at the next read", () => {
@@ -402,7 +745,7 @@ test("Pitboard switches by itself only once the account has settled, then never 
     null,
   ]);
   assert.equal(
-    autoStandingSaid(s.autoStanding!),
+    autoStandingSaid(s.autoStanding!, s.now),
     `personal has used 73% of its weekly limit. Pitboard is not switching: the account was put in use less than 5 minutes ago. It decides again at ${hm(putBack + SETTLING_SECONDS)}.`,
   );
   const told = model.get().posted.length;
@@ -429,7 +772,7 @@ test("Pitboard switches by itself only once the account has settled, then never 
   );
   advance(after.now + DECIDE_EVERY_SECONDS);
   assert.equal(
-    autoStandingSaid(model.get().autoStanding!),
+    autoStandingSaid(model.get().autoStanding!, model.get().now),
     `Watching work: 40% of its weekly limit, as of ${hm(model.get().readAt)}.`,
   );
 });
@@ -460,10 +803,16 @@ test("Switch Back goes back to the account a switch by itself left, and nothing 
   assert.equal(model.get().lastSwitch.claude?.back, undefined, "a switch asked for offers none");
   // the account just put back in use settles, said under the setting alone
   advance(model.get().now + DECIDE_EVERY_SECONDS);
-  assert.match(autoStandingSaid(model.get().autoStanding!), /less than 5 minutes ago/);
+  assert.match(
+    autoStandingSaid(model.get().autoStanding!, model.get().now),
+    /less than 5 minutes ago/,
+  );
   // and the weekly limit it was switched away from
   setShare(70);
-  assert.match(autoStandingSaid(model.get().autoStanding!), /switched away from once already/);
+  assert.match(
+    autoStandingSaid(model.get().autoStanding!, model.get().now),
+    /switched away from once already/,
+  );
   assert.equal(model.get().posted.length, told);
   assert.equal(model.get().inUse.claude, "personal");
 });
@@ -674,10 +1023,46 @@ test("a share is clamped to 50 to 99, and every change of it is a choice made", 
   );
   assert.ok(ffi("present/machine.rs").includes("let note = words::at_limit_note("));
   assert.equal(
-    atLimitNote({ atLimit: "notify", chosen: true, share: 90 }),
+    atLimitNote({ atLimit: "notify", share: 90, order: "most-left" }),
     "Pitboard notifies you once a limit of the account in use reaches 90%, while the app is open.",
   );
-  assert.equal(atLimitNote({ atLimit: "nothing", chosen: true, share: 90 }), null);
+  assert.equal(atLimitNote({ atLimit: "nothing", share: 90, order: "most-left" }), null);
+});
+
+test("Use first is kept at once and says under Resets Soonest what Pitboard does before the share", () => {
+  reset();
+  const words = catalogue.replace(/\\\n\s*/g, "");
+  const notify =
+    "It also tells you when another account’s week resets sooner and that account has room.";
+  const switching =
+    "Before then, it switches to an account whose week resets sooner, if that account has room and as much of its 5-hour limit left.";
+  for (const said of [notify, switching]) assert.ok(words.includes(said), said);
+  assert.ok(words.includes('Some(first) => format!("{note} {first}"),'));
+  assert.ok(
+    words.includes(
+      "(SwitchOrder::MostLeft, _) | (SwitchOrder::ResetsSoonest, AtLimit::Nothing) => None,",
+    ),
+  );
+  const note = (atLimit: AtLimit) => atLimitNote({ ...model.get().preferences, atLimit });
+  assert.ok(!note("notify")!.includes(notify));
+  setOrder("resets-soonest");
+  const s = model.get();
+  assert.equal(s.preferences.order, "resets-soonest");
+  assert.equal(s.changed, true);
+  assert.equal(
+    note("notify"),
+    `Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open. ${notify}`,
+  );
+  assert.equal(
+    note("switch"),
+    `Pitboard switches Claude Code at 95%, and its running sessions follow within about 33 seconds. ${switching}`,
+  );
+  assert.equal(note("nothing"), null);
+  // state.rs `order_set` keeps it without making a choice of When a limit reaches
+  assert.ok(ffi("model/state.rs").includes("self.preferences.set_order(order);"));
+  assert.equal(s.preferences.atLimit, "notify");
+  reset();
+  assert.equal(model.get().preferences.order, "most-left");
 });
 
 test("Quit stops the app's reads and notifications, and Reset brings every figure back", () => {
@@ -727,7 +1112,7 @@ function everything(): { said: string[]; printed: string[] } {
       [...Object.values(p.title), p.subtitle ?? "", p.body]
         .concat(Object.values(p.button?.title ?? {}))
         .forEach((t) => said.add(t));
-    if (s.autoStanding) said.add(autoStandingSaid(s.autoStanding));
+    if (s.autoStanding) said.add(autoStandingSaid(s.autoStanding, s.now));
     const note = atLimitNote(s.preferences);
     if (note) said.add(note);
     const next = nextWarmUp(s);
@@ -825,24 +1210,40 @@ function everything(): { said: string[]; printed: string[] } {
   for (const why of skips) {
     const used = shareOfLimit(limit);
     said.add(
-      autoStandingSaid({
-        came: "skipped",
-        from: "personal",
-        used,
-        why: notSwitching(why, 95),
-        until: why.code === "settling" ? why.until : null,
-      }),
+      autoStandingSaid(
+        {
+          came: "skipped",
+          from: "personal",
+          used,
+          why: notSwitching(why, 95),
+          until: why.code === "settling" ? why.until : null,
+        },
+        NOW,
+      ),
     );
   }
-  said.add(autoStandingSaid({ came: "watching", account: "work", used: null, asOf: null }));
+  said.add(autoStandingSaid({ came: "watching", account: "work", used: null, asOf: null }, NOW));
   said.add(
-    autoStandingSaid({
-      came: "not-watching",
-      why: "there is no reading of side from Anthropic yet",
-    }),
+    autoStandingSaid(
+      {
+        came: "not-watching",
+        why: "there is no reading of side from Anthropic yet",
+      },
+      NOW,
+    ),
   );
+  // each reason a switch before the share is said by
+  for (const because of [
+    { to: NOW + DAY, from: NOW + 5 * DAY },
+    { to: NOW + DAY, from: null },
+    { to: null, from: NOW + DAY },
+  ])
+    said.add(autoStandingSaid({ came: "switched", from: "personal", to: "work", because }, NOW));
+  said.add(`${resetsFirstSaid("work", "personal", true)} ${fiveHoursUsed("20%")}`);
+  said.add(resetsFirstSaid("seat", "personal", false));
   for (const atLimit of ["nothing", "notify", "switch"] as const)
-    said.add(atLimitNote({ atLimit, chosen: true, share: 95 }) ?? "");
+    for (const order of ["most-left", "resets-soonest"] as const)
+      said.add(atLimitNote({ atLimit, share: 95, order }) ?? "");
   for (const tool of ["claude", "codex", "desktop"] as const)
     said.add(afterSwitch(tool, "Claude Code sessions"));
   [0, 33, HOUR + 5].forEach((left) => said.add(countdown(NOW + left, NOW)));

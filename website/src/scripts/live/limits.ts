@@ -2,6 +2,7 @@
 // are machine.rs's for the state.
 import { combobox, type Combobox } from "./combobox.ts";
 import { disclosure } from "./disclosure.ts";
+import { attr } from "./draw.ts";
 import { macShare, numberBox, type Share } from "./spin.ts";
 import { datePicker, timePicker, type Time } from "./time.ts";
 import { atLabel, warmHours } from "../../data/limits.ts";
@@ -9,11 +10,13 @@ import {
   model,
   nextWarmUp,
   setChoice,
+  setOrder,
   setShare,
   setWarmRange,
   turnWarmUp,
   warmNote,
   type AtLimit,
+  type Order,
   type State,
 } from "../../lib/model.ts";
 import { atLimitNote, autoStandingSaid } from "../../lib/words.ts";
@@ -37,7 +40,9 @@ function expander(root: HTMLElement, id: string): (() => void) | null {
 export class AtLimitControls {
   #choice: Combobox;
   #share: Share;
+  #order: Combobox;
   #box: HTMLElement;
+  #orderBox: HTMLElement;
   #expander: (() => void) | null = null;
 
   constructor(
@@ -47,13 +52,17 @@ export class AtLimitControls {
     const part = <T extends Element = HTMLElement>(name: string) =>
       document.getElementById(`${prefix}-${name}`) as unknown as T;
     this.#box = part("at");
+    this.#orderBox = part("order");
     const stepper = part<SVGElement>("stepper");
     const choose = (v: string) => setChoice(v as AtLimit);
+    const order = (v: string) => setOrder(v as Order);
     if (stepper) {
       this.#choice = combobox(this.#box, part("choices"), "popup", choose);
       this.#share = macShare(part<HTMLInputElement>("share"), stepper, setShare);
+      this.#order = combobox(this.#orderBox, part("order-choices"), "popup", order);
     } else {
       this.#choice = combobox(this.#box, part("choices"), "combobox", choose);
+      this.#order = combobox(this.#orderBox, part("order-choices"), "combobox", order);
       this.#share = numberBox(
         part<HTMLInputElement>("share"),
         root.querySelector("[data-spin=up]")!,
@@ -66,27 +75,33 @@ export class AtLimitControls {
 
   restart() {
     this.#choice.close();
+    this.#order.close();
     this.#expander?.();
   }
 
   render(s: State) {
     const p = s.preferences;
+    const acts = p.atLimit !== "nothing";
     this.#choice.set(p.atLimit);
-    this.#share.set(p.share, p.atLimit !== "nothing");
+    this.#share.set(p.share, acts);
+    this.#order.set(p.order);
+    // Windows dims Use first with At, out of the Tab order as a disabled control is
+    if (!acts) this.#order.close();
+    attr(this.#orderBox, "aria-disabled", acts ? null : "true");
+    attr(this.#orderBox, "tabindex", acts ? "0" : "-1");
     // Windows' ComboBox says the share in its name; macOS's pop-up is named by its row
     if (
       this.#box.hasAttribute("aria-label") &&
       this.#box.getAttribute("aria-label") !== atLabel(p.share)
     )
       this.#box.setAttribute("aria-label", atLabel(p.share));
-    // macOS leaves the share's row out under Do Nothing
-    for (const el of this.root.querySelectorAll<HTMLElement>("[data-share-row]"))
-      el.hidden = p.atLimit === "nothing";
+    // macOS leaves the share's row and Use first out under Do Nothing
+    for (const el of this.root.querySelectorAll<HTMLElement>("[data-share-row]")) el.hidden = !acts;
     // under Switch Automatically, what switching by itself last came to
     const standing = p.atLimit === "switch" ? s.autoStanding : null;
     for (const el of this.root.querySelectorAll<HTMLElement>("[data-standing]")) {
       el.hidden = standing === null;
-      if (standing) said(el.querySelector("[data-said]") ?? el, autoStandingSaid(standing));
+      if (standing) said(el.querySelector("[data-said]") ?? el, autoStandingSaid(standing, s.now));
     }
     for (const el of this.root.querySelectorAll<HTMLElement>("[data-note]")) {
       el.hidden = el.dataset.note !== p.atLimit;

@@ -1,10 +1,10 @@
 ---
 // The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
 // LimitsSettings.swift; each height cuts the window 8 points below its first group, and a working
-// figure 8 points below the footer of When a limit reaches at its tallest, Switch Automatically's,
-// under the menu bar the app puts up while Settings is in front. Its controls carry the names
-// machine.rs gives them, and their ids start `prefix`. Every choice's words are drawn, those of the
-// choice not shown hidden.
+// figure 8 points below the footer of When a limit reaches at its tallest, Switch Automatically's
+// under Resets Soonest, under the menu bar the app puts up while Settings is in front. Its
+// controls carry the names machine.rs gives them, and their ids start `prefix`. Every choice's
+// words are drawn, those of the choice not shown hidden.
 import Advanced from "./Advanced.astro";
 import AppMenuBar from "./AppMenuBar.astro";
 import General from "./General.astro";
@@ -12,8 +12,17 @@ import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock, moments, share, warmUp } from "../../../data/world.ts";
 import { settingsPage as page } from "../../../data/windows.ts";
-import { choices, heading, shareLabel, terms, timeOfDay, warm } from "../../../data/limits.ts";
-import type { AtLimit } from "../../../lib/model.ts";
+import {
+  choices,
+  heading,
+  orderLabel,
+  orders,
+  shareLabel,
+  terms,
+  timeOfDay,
+  warm,
+} from "../../../data/limits.ts";
+import type { AtLimit, Order } from "../../../lib/model.ts";
 import { atLimitNote } from "../../../lib/words.ts";
 import { hm, menuBarClock, toolAccounts } from "../../../lib/words.ts";
 
@@ -30,17 +39,18 @@ const tabs = [
   ["limits", "Limits", "sf-gauge"],
   ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-285.5", warm: "h-378.5" };
+const heights = { switch: "h-324.5", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
-// needs at least, and Warm-Up as its accounts make it. The cut stays 8 points below, the
-// desk's border counted as a static height counts it.
+// under Resets Soonest needs at least, and Warm-Up as its accounts make it. The cut stays 8 points
+// below, the desk's border counted as a static height counts it.
 // Once another tab is shown, the desk keeps its height and cuts the window as it grows.
 const live = {
   switch: "[&:defined]:h-(--locked,auto)",
   warm: "[&:defined]:h-(--locked,auto)",
 };
-const frame = { switch: "live:min-h-328.5", warm: "" };
+const frame = { switch: "live:min-h-384.5", warm: "" };
 const drawn: AtLimit = "switch";
+const order: Order = "most-left";
 const minutes = (at: string) => {
   const [h, m] = at.split(":").map(Number);
   return h * 60 + m;
@@ -230,6 +240,59 @@ const menuRow =
                 <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
               </svg>
             </div>
+            {/* Use first, a pop-up as When a limit reaches is, which Do Nothing leaves out too */}
+            <div class:list={[row, ruled, "h-39 items-center pr-14"]} data-share-row>
+              <span class="flex-1" id={`${prefix}-order-label`}>{orderLabel}</span>
+              <span class="relative flex">
+                <span
+                  class="flex items-center rounded-u-6 focus-mac focus-visible:outline-offset-[calc(var(--u)*2)]"
+                  id={`${prefix}-order`}
+                  role="combobox"
+                  tabindex="0"
+                  aria-labelledby={`${prefix}-order-label`}
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls={`${prefix}-order-choices`}
+                >
+                  {orders.map((o) => <span
+                    class="whitespace-nowrap"
+                    data-value={o.value}
+                    hidden={o.value !== order}
+                  >
+                    {o.mac}
+                  </span>)}
+                  <span
+                    class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                  </span>
+                </span>
+                <span
+                  class="absolute top-[calc(var(--u)*(-6.25_-_24*var(--at,0)))] -left-30 z-10 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
+                  id={`${prefix}-order-choices`}
+                  role="listbox"
+                  aria-labelledby={`${prefix}-order-label`}
+                  hidden
+                >
+                  {orders.map((o) => <span
+                    class:list={[menuRow, "group/option"]}
+                    id={`${prefix}-order-${o.value}`}
+                    role="option"
+                    aria-selected="false"
+                    aria-checked={o.value === order ? "true" : "false"}
+                    data-value={o.value}
+                  >
+                    <svg
+                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
+                    >
+                      <use href="#sf-check-heavy" />
+                    </svg>
+                    {o.mac}
+                  </span>)}
+                </span>
+              </span>
+            </div>
             <div class:list={[row, ruled, "min-h-37.5 items-center pb-1.5"]} data-standing>
               <span class={small} data-said
                 >Watching work: 40% of its weekly limit, as of {hm(clock.read)}.</span
@@ -250,7 +313,7 @@ const menuRow =
             {choices.map((c) =>
               c.value === "nothing" ? null : (
                 <p data-note={c.value} hidden={c.value !== drawn}>
-                  {atLimitNote({ atLimit: c.value, chosen: true, share })}
+                  {atLimitNote({ atLimit: c.value, share, order })}
                 </p>
               ),
             )}

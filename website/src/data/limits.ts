@@ -1,8 +1,8 @@
 // The Limits settings' words on both systems, as present/machine.rs `at_limit` and `warm` give
-// them: each choice titled as macOS titles a menu item and in sentence case on Windows, the
-// controls' names, the warm-up's hours, and the terms. limits.test.ts finds each in its source.
+// them: each choice and order titled as macOS titles a menu item and in sentence case on Windows,
+// the controls' names, the warm-up's hours, and the terms. limits.test.ts finds each in its source.
 import { DOCS } from "./site.ts";
-import type { AtLimit } from "../lib/model.ts";
+import type { AtLimit, Order } from "../lib/model.ts";
 import { eachFront, titled } from "../lib/words.ts";
 
 export const section = "Before an account runs out";
@@ -19,6 +19,13 @@ export const atLabel = (share: number) => `${heading} ${share}%`;
 // present/words/machine.rs `AT`: the share's field, beside When a limit reaches
 export const shareLabel = "At";
 export const shareRange = "From 50% to 99%";
+
+// present/words/machine.rs `USE_FIRST` and `order_choice`: which account goes first, under At
+export const orderLabel = "Use first";
+export const orders: { value: Order; mac: string; win: string }[] = [
+  { value: "most-left", mac: "Most Left", win: "Most left" },
+  { value: "resets-soonest", mac: "Resets Soonest", win: "Resets soonest" },
+];
 
 export const terms = {
   sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
