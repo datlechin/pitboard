@@ -214,13 +214,13 @@ export const settingsPage = {
   atLimit: {
     header: "When a limit reaches",
     // the ComboBox's name, machine.rs's `at_label`
-    label: `When a limit reaches ${share}%`,
+    label: `5-hour limit ${share}%`,
     choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
     note: `Pitboard switches Claude Code at ${share}%, and its running sessions follow within about 33 seconds.`,
     link: "Is this allowed?",
   },
-  share: { header: "At", range: "From 50% to 99%", value: share },
+  share: { header: "5-hour limit", range: "From 50% to 99%", value: share },
   warm: {
     header: "Warm-up",
     note: "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, while it’s open.",

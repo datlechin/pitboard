@@ -175,6 +175,33 @@
                   ValueChanged="OnShareChanged" />
             </toolkit:SettingsCard>
             <toolkit:SettingsCard
+                Header="{x:Bind ViewModel.WeeklyLimitTitle, Mode=OneWay}"
+                Description="{x:Bind ViewModel.WeeklyLimitNote, Mode=OneWay}">
+              <ToggleSwitch
+                  IsOn="{x:Bind ViewModel.UsesWeeklyLimit, Mode=OneWay}"
+                  IsEnabled="{x:Bind ViewModel.CanChooseWeeklyLimit, Mode=OneWay}"
+                  AutomationProperties.AutomationId="settings.weeklyLimit"
+                  AutomationProperties.Name="{x:Bind ViewModel.WeeklyLimitTitle, Mode=OneWay}"
+                  Toggled="OnWeeklyLimitToggled" />
+            </toolkit:SettingsCard>
+            <toolkit:SettingsCard
+                Header="{x:Bind ViewModel.WeeklyShareTitle, Mode=OneWay}"
+                Description="{x:Bind ViewModel.WeeklyShareRange, Mode=OneWay}"
+                IsEnabled="{x:Bind ViewModel.CanSetWeeklyShare, Mode=OneWay}">
+              <NumberBox
+                  MinWidth="120"
+                  Minimum="{x:Bind ViewModel.LowestShare, Mode=OneWay}"
+                  Maximum="{x:Bind ViewModel.HighestShare, Mode=OneWay}"
+                  Value="{x:Bind ViewModel.WeeklyShare, Mode=OneWay}"
+                  IsEnabled="{x:Bind ViewModel.CanSetWeeklyShare, Mode=OneWay}"
+                  SmallChange="1"
+                  LargeChange="5"
+                  SpinButtonPlacementMode="Inline"
+                  AutomationProperties.AutomationId="settings.weeklyLimitShare"
+                  AutomationProperties.Name="{x:Bind ViewModel.WeeklyShareLabel, Mode=OneWay}"
+                  ValueChanged="OnWeeklyShareChanged" />
+            </toolkit:SettingsCard>
+            <toolkit:SettingsCard
                 Header="{x:Bind ViewModel.OrderTitle, Mode=OneWay}"
                 IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}">
               <ComboBox

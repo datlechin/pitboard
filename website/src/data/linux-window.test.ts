@@ -246,13 +246,10 @@ test("Preferences says machine.rs's words, with a tray and without", () => {
     present("words/setup.rs"),
     `"${prefs.general.startAtLogin}",\n            "${prefs.general.startNote}",`,
   );
+  says(machine, "Pitboard notifies you once {}, while the app is open.");
   says(
     machine,
-    "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app is open.",
-  );
-  says(
-    machine,
-    "Pitboard switches Claude Code at {at}%, and its running sessions follow within about {seconds} seconds.",
+    "Pitboard switches Claude Code {when}, and its running sessions follow within about {seconds} seconds.",
   );
   says(
     machine,

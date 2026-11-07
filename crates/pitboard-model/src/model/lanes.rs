@@ -802,9 +802,11 @@ impl Worker {
                 reopen: None,
             },
             Job::AutoLook { policy } => Answer::AutoLooked {
+                policy,
                 looked: core.auto_look(policy),
             },
             Job::AutoSwitch { policy } => Answer::AutoSwitched {
+                policy,
                 done: core.auto_switch(policy),
             },
             Job::WarmUp => Answer::WarmedUp {

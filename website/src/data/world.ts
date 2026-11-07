@@ -31,6 +31,7 @@ const at = (local: string) => Date.parse(`${local}+07:00`) / 1000;
 // A reading of one limit (core::usage::Window): the share used, when it resets, where a period
 // runs, how long it runs, and the model it is limited to, where it is one model's.
 export interface Limit {
+  kind?: string;
   percent: number;
   resetsAt: number | null;
   lengthSeconds: number;

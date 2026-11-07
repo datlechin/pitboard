@@ -157,8 +157,12 @@ public sealed class ModelTests
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Order: SwitchOrder.MostLeft, Orders: OrderChoices, OrderLabel: "Use first",
             Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
-            AtLabel: "When a limit reaches 95%",
-            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms),
+            AtLabel: "5-hour limit 95%",
+            ShareLabel: "5-hour limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms,
+            Weekly: new WeeklyLimitShown(
+                On: true, At: 95, Title: "Use weekly limits", ShareLabel: "Weekly limits", AtLabel: "Weekly limits 95%",
+                Range: "From 50% to 99%", Note: "The same threshold applies to overall and model-specific weekly limits.",
+                Enabled: true, ShareEnabled: true)),
         Warm: new WarmShown(
             Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
             NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false));

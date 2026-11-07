@@ -1085,11 +1085,64 @@ fn service_machine(name: &str) -> World {
     world
 }
 
+fn split_at(percent: u8) -> Switching {
+    Switching::At(Policy {
+        threshold: Threshold::new(percent).expect("a share"),
+        weekly: Some(Threshold::DEFAULT),
+        order: pitboard_core::usage::Order::MostLeft,
+    })
+}
+
 fn switch_at(percent: u8) -> Switching {
     Switching::At(Policy {
         threshold: Threshold::new(percent).expect("a share"),
+        weekly: Some(Threshold::new(percent).expect("a share")),
         order: pitboard_core::usage::Order::MostLeft,
     })
+}
+
+#[test]
+fn the_watch_service_follows_weekly_only_edits_and_reads_them_back_once() {
+    let world = service_machine("watch-service-weekly-share");
+    let lanes = worker(world.core_on(Front::Gnome));
+    let mut model = Hand::on(Front::Gnome);
+    model.give(Answer::Kept {
+        told: Told::new(),
+        preferences: Some((
+            Preferences {
+                auto_switch: true,
+                has_been_seen: true,
+                ..Preferences::default()
+            },
+            true,
+        )),
+        windows: None,
+    });
+    model.send(Intent::SetWatchService { on: true });
+    model.run_by(|job| lanes.work(job));
+    for on in [true, false, true] {
+        let jobs = model.send(Intent::SetWeeklyLimit { on, at: 99 });
+        let expected = Switching::At(Policy {
+            threshold: Threshold::DEFAULT,
+            weekly: on.then(|| Threshold::new(99).expect("a share")),
+            order: pitboard_core::usage::Order::MostLeft,
+        });
+        assert!(jobs.contains(&Job::SetWatchService {
+            on: true,
+            switching: expected
+        }));
+        model.run_by(|job| lanes.work(job));
+        let Installed::Yes { switching, .. } = world.elsewhere().watch_service() else {
+            panic!("installed in the scratch machine");
+        };
+        assert_eq!(switching, Some(expected));
+        assert!(
+            model.send(Intent::SetWeeklyLimit { on, at: 99 }).is_empty(),
+            "read-back does not reinstall the same policy"
+        );
+        assert_eq!(model.shown().machine.at_limit.at, 95);
+        assert_eq!(model.shown().machine.at_limit.weekly.at, 99);
+    }
 }
 
 /// What GNOME's app shows of the watch service now.
@@ -1245,14 +1298,14 @@ fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
     let about = |model: &Hand| watch_service(model).map(|shown| shown.about);
 
     let jobs = set(&mut model, AtLimit::Switch, 80);
-    assert_eq!(reinstalls(&jobs), reinstall(switch_at(80)));
+    assert_eq!(reinstalls(&jobs), reinstall(split_at(80)));
     let jobs = set(&mut model, AtLimit::Switch, 85);
     assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
     model.run_by(|job| lanes.work(job));
-    assert_eq!(installed(), Some(switch_at(85)));
+    assert_eq!(installed(), Some(split_at(85)));
     assert_eq!(
         about(&model),
-        Some(words::watch_service_about(Front::Gnome, switch_at(85)))
+        Some(words::watch_service_about(Front::Gnome, split_at(85)))
     );
     assert!(
         note(&model).ends_with(&words::switching_once_closed(true)),
@@ -1280,7 +1333,7 @@ fn the_watch_service_follows_the_share_and_limits_says_what_it_does() {
     assert_eq!(note(&model), words::ONLY_WARMING_UP);
 
     let jobs = set(&mut model, AtLimit::Switch, 70);
-    assert_eq!(reinstalls(&jobs), reinstall(switch_at(70)));
+    assert_eq!(reinstalls(&jobs), reinstall(split_at(70)));
     let jobs = set(&mut model, AtLimit::Nothing, 70);
     assert_eq!(reinstalls(&jobs), [], "a change to it is under way");
     model.run_by(|job| lanes.work(job));

@@ -777,10 +777,15 @@ export const shareOfLimit = (l: Limit) => `${figure(l.percent)} of its ${scopedL
 export const joined = (names: string[]) =>
   names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
-export function notSwitching(why: Skip, share: number): string {
+export function notSwitching(why: Skip, share: number, weekly: number | null = share): string {
   switch (why.code) {
     case "no_room": {
-      const room = `no other Claude Code account has room below ${share}% in every limit`;
+      const room =
+        weekly === share
+          ? `no other Claude Code account has room below ${share}% in every limit`
+          : weekly === null
+            ? `no other Claude Code account has room below ${share}% in its 5-hour and other limits with no weekly limit used up`
+            : `no other Claude Code account has room below ${share}% in its 5-hour and other limits and below ${weekly}% in its weekly limits`;
       return why.unread.length
         ? `${room}, and there is no reading of ${joined(why.unread)} from Anthropic yet`
         : room;
@@ -851,19 +856,35 @@ export function autoStandingSaid(standing: AutoStanding, now: number): string {
 }
 
 // present/words/machine.rs `at_limit_note`: the note under the choice.
-export function atLimitNote(p: Pick<Preferences, "atLimit" | "share" | "order">): string | null {
+export function limitPolicy(share: number, weekly: number | null = share): string {
+  if (weekly === share) return `a limit reaches ${share}%`;
+  return `${limitTrigger(share, weekly)}${weekly === null ? " (weekly triggers are off)" : ""}`;
+}
+
+export function limitTrigger(share: number, weekly: number | null = share): string {
+  if (weekly === share) return `a limit of the account in use reaches ${share}%`;
+  if (weekly === null) return `a 5-hour limit reaches ${share}%`;
+  return `a 5-hour limit reaches ${share}% or a weekly limit reaches ${weekly}%`;
+}
+
+export function atLimitNote(
+  p: Pick<Preferences, "atLimit" | "share" | "order" | "weeklyShare" | "weeklyOff">,
+): string | null {
+  const weekly = p.weeklyOff ? null : (p.weeklyShare ?? p.share);
+  const trigger = limitTrigger(p.share, weekly);
+  const when = weekly === p.share ? `at ${p.share}%` : `once ${trigger}`;
   const first = p.order === "resets-soonest";
   switch (p.atLimit) {
     case "nothing":
       return null;
     case "notify": {
-      const note = `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
+      const note = `Pitboard notifies you once ${trigger}, while the app is open.`;
       return first
         ? `${note} It also tells you when another account’s week resets sooner and that account has room.`
         : note;
     }
     case "switch": {
-      const note = `Pitboard switches Claude Code at ${p.share}%, and its running sessions follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
+      const note = `Pitboard switches Claude Code ${when}, and its running sessions follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
       return first
         ? `${note} Before then, it switches to an account whose week resets sooner, if that account has room and as much of its 5-hour limit left.`
         : note;

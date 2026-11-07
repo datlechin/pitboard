@@ -1,8 +1,8 @@
 //! Preferences, an Adwaita preferences dialog of three pages: General ([`general`]), Limits
 //! ([`limits`]) and Advanced ([`advanced`]), each over what the model shows of this machine.
 //!
-//! A control sends its intent only for a value that differs from what the model shows, and the
-//! model's own values drawn into the controls send nothing. Advanced asks the model to read the
+//! A control sends the field the person changed, and the model's own values drawn into the
+//! controls send nothing. Advanced asks the model to read the
 //! schedule, the watch service and the command line each time it is shown, since a terminal can
 //! change any of them while the app runs. What Uninstall takes back once the model has removed
 //! Pitboard is [`advanced`]'s too.
@@ -54,6 +54,10 @@ mod imp {
         pub(super) at_limit: TemplateChild<adw::ComboRow>,
         #[template_child]
         pub(super) share: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub(super) weekly_limit: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub(super) weekly_share: TemplateChild<adw::SpinRow>,
         #[template_child]
         pub(super) order: TemplateChild<adw::ComboRow>,
         #[template_child]

@@ -1311,7 +1311,7 @@ where
     // the global `--json` beside too.
     if let Some(("watch", watch)) = matches.subcommand()
         && let Some((what, _)) = watch.subcommand()
-        && let Some(given) = ["at", "order", "no_switch", "once", "scheduled"]
+        && let Some(given) = ["at", "weekly_at", "order", "no_switch", "once", "scheduled"]
             .into_iter()
             .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
     {
@@ -2006,6 +2006,7 @@ mod tests {
         );
         for args in [
             &["watch", "--at", "80", "install"][..],
+            &["watch", "--weekly-at", "99", "install"],
             &["watch", "--no-switch", "install"],
             &["watch", "--once", "status"],
             &["watch", "--scheduled", "uninstall"],
@@ -2030,6 +2031,37 @@ mod tests {
                 clap::error::ErrorKind::ArgumentConflict,
                 "{args:?}"
             );
+        }
+    }
+
+    #[test]
+    fn weekly_share_is_optional_independent_and_validated_for_runs_and_services() {
+        for prefix in [
+            vec!["pitboard", "watch"],
+            vec!["pitboard", "watch", "install"],
+        ] {
+            for (weekly, expected) in [("50", Some(50)), ("99", Some(99)), ("off", None)] {
+                let args = [prefix.as_slice(), &["--at", "93", "--weekly-at", weekly]].concat();
+                let cli = command_line(args).expect("independent shares parse");
+                let share = match cli.command.expect("watch") {
+                    Command::Watch {
+                        what: Some(watch::WatchCommand::Install { share }),
+                        ..
+                    }
+                    | Command::Watch {
+                        what: None, share, ..
+                    } => share,
+                    _ => panic!("watch or install"),
+                };
+                assert_eq!(share.policy().threshold.percent(), 93);
+                assert_eq!(share.policy().weekly.map(|at| at.percent()), expected);
+            }
+            for weekly in ["49", "100", "-1", "93.5", "no", "256"] {
+                let args = [prefix.as_slice(), &["--weekly-at", weekly]].concat();
+                assert!(command_line(args).is_err(), "{prefix:?} {weekly}");
+            }
+            let args = [prefix.as_slice(), &["--weekly-at", "off", "--no-switch"]].concat();
+            assert!(command_line(args).is_err());
         }
     }
 

@@ -102,12 +102,17 @@ package func snapshot(
                     OrderChoice(order: .resetsSoonest, title: "Resets Soonest"),
                 ], orderLabel: "Use first", enabled: true, shareEnabled: true,
                 heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
-                shareLabel: "Share of a limit", shareRange: "From 50% to 99%", note: nil,
+                shareLabel: "5-hour limit", shareRange: "From 50% to 99%", note: nil,
                 standing: nil,
                 terms: TermsShown(
                     sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
                     linkTitle: "Is this allowed?",
-                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed")),
+                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"),
+                weekly: WeeklyLimitShown(
+                    on: true, at: 95, title: "Use Weekly Limits", shareLabel: "Weekly limits",
+                    atLabel: "When a weekly limit reaches 95%", range: "From 50% to 99%",
+                    note: "Includes weekly limits for individual models.", enabled: true,
+                    shareEnabled: true)),
             pace: PaceShown(
                 on: false, enabled: true, title: "Show Pace",
                 note: "Compare use with an even pace and estimate when a limit will run out."),

@@ -13,6 +13,7 @@ namespace Pitboard.Views;
 public sealed partial class SettingsPage : Page
 {
     private PaneContext? _context;
+    private bool _restoringShare;
 
     public SettingsPage()
     {
@@ -136,6 +137,9 @@ public sealed partial class SettingsPage : Page
     private void OnAtLimitChosen(object sender, SelectionChangedEventArgs args) =>
         ViewModel?.ChooseAtLimit(((ComboBox)sender).SelectedIndex);
 
+    private void OnWeeklyLimitToggled(object sender, RoutedEventArgs args) =>
+        ViewModel?.SetWeeklyLimit(((ToggleSwitch)sender).IsOn);
+
     private void OnOrderChosen(object sender, SelectionChangedEventArgs args) =>
         ViewModel?.ChooseOrder(((ComboBox)sender).SelectedIndex);
 
@@ -150,10 +154,34 @@ public sealed partial class SettingsPage : Page
     // A cleared box shows the share again once its change has run.
     private void OnShareChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
     {
-        if (ViewModel is { } shown && !shown.SetShare(args.NewValue))
+        if (!_restoringShare && ViewModel is { } shown && !shown.SetShare(args.NewValue))
         {
-            DispatcherQueue.TryEnqueue(Ui.Guarded(() => sender.Value = shown.Share));
+            RestoreShare(sender, () => shown.Share);
         }
+    }
+
+    private void OnWeeklyShareChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (!_restoringShare && ViewModel is { } shown && !shown.SetWeeklyShare(args.NewValue))
+        {
+            RestoreShare(sender, () => shown.WeeklyShare);
+        }
+    }
+
+    private void RestoreShare(NumberBox sender, Func<double> value)
+    {
+        DispatcherQueue.TryEnqueue(Ui.Guarded(() =>
+        {
+            _restoringShare = true;
+            try
+            {
+                sender.Value = value();
+            }
+            finally
+            {
+                _restoringShare = false;
+            }
+        }));
     }
 
     private void OnWarmRangeChanged(TimePicker sender, TimePickerSelectedValueChangedEventArgs args)

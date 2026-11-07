@@ -7,7 +7,7 @@ mod order;
 pub mod pace;
 pub(crate) mod readings;
 
-pub use order::{Order, Room, Week, five_hours, preferred, resets_first, room};
+pub use order::{Order, Room, Shares, Week, five_hours, preferred, resets_first, room};
 
 use crate::time::{self, HOUR, WEEK};
 use serde_json::Value;

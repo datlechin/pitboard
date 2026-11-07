@@ -1,5 +1,5 @@
-//! Preferences: each control sends what the person set only where it differs from what the model
-//! shows, and what the model shows sends nothing; Advanced reads again what a terminal can
+//! Preferences: each control sends what the person changed, including a reversal before the
+//! model answers, and what the model shows sends nothing; Advanced reads again what a terminal can
 //! change each time it is shown; and start at sign-in is the app's own to turn on, after which
 //! the model is told what the desktop has.
 
@@ -122,20 +122,13 @@ fn a_setting_sends_only_a_value_that_differs() {
     combo.set_selected(index(AtLimit::Switch));
     assert_eq!(viewed.sent_since(), []);
     share.set_value(91.0);
-    assert_eq!(
-        viewed.sent_since(),
-        [Intent::SetAtLimit {
-            choice: AtLimit::Switch,
-            at: 91
-        }]
-    );
+    assert_eq!(viewed.sent_since(), [Intent::SetAtLimitShare { at: 91 }]);
     viewed.until("the share shown", |shown| shown.machine.at_limit.at == 91);
     combo.set_selected(index(AtLimit::Notify));
     assert_eq!(
         viewed.sent_since(),
-        [Intent::SetAtLimit {
-            choice: AtLimit::Notify,
-            at: 91
+        [Intent::SetAtLimitChoice {
+            choice: AtLimit::Notify
         }]
     );
     viewed.until("the choice shown", |shown| {
@@ -181,6 +174,194 @@ fn a_setting_sends_only_a_value_that_differs() {
         shown.machine.at_limit.choice == AtLimit::Nothing
     });
     assert!(!order.is_visible(), "hidden with the share");
+}
+
+#[gtk::test]
+fn weekly_controls_preserve_the_other_period_and_remember_the_disabled_share() {
+    let viewed = Viewed::of("oneTool");
+    let preferences = opened(&viewed);
+    viewed.until("the preferences read", |shown| {
+        shown.machine.at_limit.enabled
+    });
+    viewed.tell(Intent::SetAtLimit {
+        choice: AtLimit::Notify,
+        at: 93,
+    });
+    viewed.tell(Intent::SetWeeklyLimit { on: true, at: 99 });
+    viewed.until("independent shares shown", |shown| {
+        shown.machine.at_limit.at == 93 && shown.machine.at_limit.weekly.at == 99
+    });
+    let shown = shown_in(&viewed).machine.at_limit;
+    let share = row::<adw::SpinRow>(&preferences, &shown.share_label);
+    let weekly = row::<adw::SwitchRow>(&preferences, &shown.weekly.title);
+    let weekly_share = row::<adw::SpinRow>(&preferences, &shown.weekly.share_label);
+    assert_eq!(
+        weekly.subtitle().as_deref(),
+        Some(shown.weekly.note.as_str())
+    );
+    assert_eq!(
+        weekly_share.subtitle().as_deref(),
+        Some(shown.weekly.range.as_str())
+    );
+    viewed.sent_since();
+
+    share.set_value(94.0);
+    assert_eq!(viewed.sent_since(), [Intent::SetAtLimitShare { at: 94 }]);
+    viewed.until("short share changed", |shown| {
+        shown.machine.at_limit.at == 94
+    });
+    assert_eq!(weekly_share.value(), 99.0);
+    assert_eq!(shown_in(&viewed).machine.at_limit.weekly.at, 99);
+    weekly_share.set_value(98.0);
+    assert_eq!(
+        viewed.sent_since(),
+        [Intent::SetWeeklyLimitShare { at: 98 }]
+    );
+    viewed.until("weekly share changed", |shown| {
+        shown.machine.at_limit.weekly.at == 98
+    });
+    assert_eq!(share.value(), 94.0);
+    assert_eq!(shown_in(&viewed).machine.at_limit.at, 94);
+    weekly_share.set_value(98.0);
+    weekly.set_active(true);
+    assert!(
+        viewed.sent_since().is_empty(),
+        "unchanged controls send nothing"
+    );
+
+    weekly.set_active(false);
+    assert_eq!(
+        viewed.sent_since(),
+        [Intent::SetWeeklyLimitEnabled { on: false }]
+    );
+    viewed.until("weekly trigger disabled", |shown| {
+        !shown.machine.at_limit.weekly.on
+    });
+    assert!(!weekly_share.is_sensitive());
+    assert_eq!(weekly_share.value(), 98.0);
+    assert!(weekly.is_sensitive());
+    weekly.set_active(true);
+    assert_eq!(
+        viewed.sent_since(),
+        [Intent::SetWeeklyLimitEnabled { on: true }]
+    );
+    viewed.until("weekly trigger enabled again", |shown| {
+        shown.machine.at_limit.weekly.on
+    });
+    assert!(weekly_share.is_sensitive());
+    assert_eq!(weekly_share.value(), 98.0);
+
+    viewed.tell(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 94,
+    });
+    viewed.until("nothing at either limit", |shown| {
+        shown.machine.at_limit.choice == AtLimit::Nothing
+    });
+    assert!(!weekly.is_visible() && !weekly_share.is_visible());
+    assert_eq!(weekly_share.value(), 98.0);
+    viewed.tell(Intent::SetAtLimit {
+        choice: AtLimit::Notify,
+        at: 94,
+    });
+    viewed.until("limit controls restored", |shown| {
+        shown.machine.at_limit.choice == AtLimit::Notify
+    });
+    assert!(weekly.is_visible() && weekly_share.is_visible());
+    assert_eq!(weekly_share.value(), 98.0);
+    assert_eq!(share.value(), 94.0);
+    assert!(
+        viewed.sent_since().is_empty(),
+        "model changes are not sent back"
+    );
+}
+
+#[gtk::test]
+fn weekly_controls_send_nothing_while_drawing_or_before_preferences_are_read() {
+    let viewed = Viewed::of("oneTool");
+    let preferences = opened(&viewed);
+    viewed.until("the preferences read", |shown| {
+        shown.machine.at_limit.enabled
+    });
+    let mut snapshot = shown_in(&viewed);
+    let weekly = row::<adw::SwitchRow>(&preferences, &snapshot.machine.at_limit.weekly.title);
+    let share = row::<adw::SpinRow>(&preferences, &snapshot.machine.at_limit.weekly.share_label);
+    viewed.sent_since();
+
+    snapshot.machine.at_limit.weekly.on = false;
+    snapshot.machine.at_limit.weekly.at = 99;
+    snapshot.machine.at_limit.weekly.share_enabled = false;
+    preferences.show(&snapshot);
+    assert_eq!(share.value(), 99.0);
+    assert!(!weekly.is_active() && !share.is_sensitive());
+    assert!(viewed.sent_since().is_empty(), "drawing sends nothing");
+    share.set_value(98.0);
+    assert!(
+        viewed.sent_since().is_empty(),
+        "a disabled number sends nothing"
+    );
+
+    snapshot.machine.at_limit.enabled = false;
+    snapshot.machine.at_limit.weekly.enabled = false;
+    preferences.show(&snapshot);
+    assert!(!weekly.is_sensitive() && !share.is_sensitive());
+    weekly.set_active(true);
+    share.set_value(97.0);
+    assert!(
+        viewed.sent_since().is_empty(),
+        "unread preferences send nothing"
+    );
+}
+
+#[gtk::test]
+fn limit_controls_send_rapid_reversals_before_any_snapshot_returns() {
+    let viewed = Viewed::of("oneTool");
+    let preferences = opened(&viewed);
+    viewed.until("the preferences read", |shown| {
+        shown.machine.at_limit.enabled
+    });
+    let shown = shown_in(&viewed).machine.at_limit;
+    let choice = row::<adw::ComboRow>(&preferences, &shown.heading);
+    let share = row::<adw::SpinRow>(&preferences, &shown.share_label);
+    let weekly = row::<adw::SwitchRow>(&preferences, &shown.weekly.title);
+    let weekly_share = row::<adw::SpinRow>(&preferences, &shown.weekly.share_label);
+    let index = |choice| {
+        shown
+            .choices
+            .iter()
+            .position(|listed| listed.choice == choice)
+            .unwrap() as u32
+    };
+    viewed.sent_since();
+
+    // Do not iterate the main context between events: listener snapshots remain queued.
+    weekly_share.set_value(99.0);
+    weekly.set_active(false);
+    weekly.set_active(true);
+    weekly_share.set_value(f64::from(shown.weekly.at));
+    share.set_value(80.0);
+    choice.set_selected(index(AtLimit::Nothing));
+    share.set_value(f64::from(shown.at));
+    choice.set_selected(index(shown.choice));
+    assert_eq!(
+        viewed.sent_since(),
+        [
+            Intent::SetWeeklyLimitShare { at: 99 },
+            Intent::SetWeeklyLimitEnabled { on: false },
+            Intent::SetWeeklyLimitEnabled { on: true },
+            Intent::SetWeeklyLimitShare {
+                at: shown.weekly.at
+            },
+            Intent::SetAtLimitShare { at: 80 },
+            Intent::SetAtLimitChoice {
+                choice: AtLimit::Nothing
+            },
+            Intent::SetAtLimitShare { at: shown.at },
+            Intent::SetAtLimitChoice {
+                choice: shown.choice
+            },
+        ]
+    );
 }
 
 #[gtk::test]

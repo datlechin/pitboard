@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { noticeMoment } from "./moment.ts";
-import { forget, model, quit, rename, reset, setChoice, setShare, type State } from "./model.ts";
+import {
+  forget,
+  model,
+  quit,
+  rename,
+  reset,
+  setChoice,
+  setShare,
+  setWeeklyLimit,
+  type State,
+} from "./model.ts";
 import { headsUp, hm, menuBarClock, menuBarTitle } from "./words.ts";
 import { clock } from "../data/world.ts";
 
@@ -26,6 +36,7 @@ test("at the page's start the row's moment is the static figure's: 05:53, and No
 
 test("a lower share comes sooner at the same pace, and one already read comes at once, the 5-hour first", () => {
   reset();
+  setWeeklyLimit(true, 90);
   setShare(90);
   assert.deepEqual(said(model.get()), {
     at: "Wed 14 Oct 03:50",
@@ -37,6 +48,7 @@ test("a lower share comes sooner at the same pace, and one already read comes at
       "work",
     ],
   });
+  setWeeklyLimit(true, 70);
   setShare(70);
   assert.deepEqual(said(model.get()).posted?.slice(0, 3), [
     "Weekly Limit Almost Reached",
@@ -44,6 +56,7 @@ test("a lower share comes sooner at the same pace, and one already read comes at
     "personal has used 73%. work has used 40%.",
   ]);
   assert.equal(hm(noticeMoment(model.get())!.at), hm(clock.menuBar));
+  setWeeklyLimit(true, 55);
   setShare(55);
   assert.deepEqual(said(model.get()).posted, [
     "5-Hour Limit Almost Reached",
@@ -82,5 +95,18 @@ test("the moment names accounts as the page does, and a quit app posts nothing",
   reset();
   quit();
   assert.equal(said(model.get()).posted, null);
+  reset();
+});
+
+test("the notice moment uses the independent weekly line and ignores it when off", () => {
+  reset();
+  setShare(93);
+  setWeeklyLimit(true, 99);
+  const later = noticeMoment(model.get())!;
+  assert.ok(later.at > clock.warned);
+  assert.ok(later.posted?.body.includes("99%"));
+  setWeeklyLimit(false, 99);
+  const short = noticeMoment(model.get());
+  assert.ok(!short?.posted || !short.posted.title.macos.includes("Weekly"));
   reset();
 });

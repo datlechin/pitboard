@@ -61,8 +61,12 @@ internal static class Snapshots
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Order: SwitchOrder.MostLeft, Orders: OrderChoices, OrderLabel: "Use first",
             Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
-            AtLabel: "When a limit reaches 95%",
-            ShareLabel: "At", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms),
+            AtLabel: "5-hour limit 95%",
+            ShareLabel: "5-hour limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms,
+            Weekly: new WeeklyLimitShown(
+                On: true, At: 95, Title: "Use weekly limits", ShareLabel: "Weekly limits", AtLabel: "Weekly limits 95%",
+                Range: "From 50% to 99%", Note: "The same threshold applies to overall and model-specific weekly limits.",
+                Enabled: true, ShareEnabled: true)),
         Warm: new WarmShown(
             Title: "Warm-up", From: 360, To: 1320, RangeLabel: "6:00 AM to 10:00 PM", Accounts: [],
             NoneEnrolled: "Add a Claude Code account to warm it up.", Standing: null,

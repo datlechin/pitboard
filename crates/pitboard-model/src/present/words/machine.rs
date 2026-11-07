@@ -6,6 +6,7 @@ use super::{
 };
 use crate::Front;
 use crate::model::{AtLimit, SwitchOrder};
+use pitboard_core::duty::autoswitch::Policy;
 use pitboard_core::status::Standing;
 use pitboard_core::words::capitalised;
 
@@ -96,11 +97,19 @@ pub(crate) fn watch_service_about(
 ) -> String {
     use pitboard_core::watch_service::Switching;
     match switching {
-        Switching::At(policy) => format!(
+        Switching::At(policy) if policy.weekly == Some(policy.threshold) => format!(
             "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {}%{} and warming up \
              the accounts {} turns on, from each login.",
             this_machine(front),
             policy.threshold.percent(),
+            pitboard_core::words::first_by(policy.order),
+            warm_up(front)
+        ),
+        Switching::At(policy) => format!(
+            "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code once {}{} and warming \
+             up the accounts {} turns on, from each login.",
+            this_machine(front),
+            limit_trigger(policy),
             pitboard_core::words::first_by(policy.order),
             warm_up(front)
         ),
@@ -139,13 +148,46 @@ pub(crate) const BEFORE_RUNNING_OUT: &str = "Before an account runs out";
 
 pub(crate) const AT_LIMIT: &str = "When a limit reaches";
 
-// "When a limit reaches 95%", the choice's name for VoiceOver and Narrator.
+// The five-hour field's name for VoiceOver and Narrator.
 pub(crate) fn at_limit_label(at: u8) -> String {
-    format!("{AT_LIMIT} {at}%")
+    format!("{AT} {at}%")
 }
 
 // The share's field, beside "When a limit reaches".
-pub(crate) const AT: &str = "At";
+pub(crate) const AT: &str = "5-hour limit";
+
+pub(crate) const WEEKLY_LIMITS: &str = "Weekly limits";
+
+pub(crate) fn weekly_limit_title(front: Front) -> String {
+    titled(front, "Use Weekly Limits", "Use weekly limits")
+}
+
+pub(crate) fn weekly_limit_label(at: u8) -> String {
+    format!("{WEEKLY_LIMITS} {at}%")
+}
+
+pub(crate) fn weekly_limit_note(on: bool, order: SwitchOrder) -> String {
+    let note = if on {
+        "The same threshold applies to overall and model-specific weekly limits."
+    } else {
+        "Weekly usage does not trigger notifications or automatic switches. Accounts with no \
+         weekly usage left are still unavailable."
+    };
+    if order == SwitchOrder::ResetsSoonest {
+        format!("{note} Resets Soonest can still choose an account whose week resets earlier.")
+    } else {
+        note.into()
+    }
+}
+
+// Weekly off is explained beside its switch; this clause keeps the surrounding sentence whole.
+pub(crate) fn limit_trigger(policy: Policy) -> String {
+    if policy.weekly.is_none() {
+        format!("a 5-hour limit reaches {}%", policy.threshold.percent())
+    } else {
+        pitboard_core::words::limit_policy(policy)
+    }
+}
 
 // The order's choice, under the share.
 pub(crate) const USE_FIRST: &str = "Use first";
@@ -170,24 +212,34 @@ pub(crate) fn at_limit_choice(front: Front, choice: AtLimit) -> String {
 pub(crate) fn at_limit_note(
     front: Front,
     choice: AtLimit,
-    at: u8,
+    policy: Policy,
     order: SwitchOrder,
     file_left: bool,
     seconds: u32,
 ) -> Option<String> {
+    let at = policy.threshold.percent();
+    let when = if policy.weekly == Some(policy.threshold) {
+        format!("at {at}%")
+    } else {
+        format!("once {}", limit_trigger(policy))
+    };
     let note = match choice {
         AtLimit::Nothing => return None,
         AtLimit::Notify => format!(
-            "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
-             is open."
+            "Pitboard notifies you once {}, while the app is open.",
+            if policy.weekly == Some(policy.threshold) {
+                format!("a limit of the account in use reaches {at}%")
+            } else {
+                limit_trigger(policy)
+            }
         ),
         AtLimit::Switch if file_left => format!(
-            "Pitboard switches Claude Code at {at}%, but its running sessions don’t follow while a \
+            "Pitboard switches Claude Code {when}, but its running sessions don’t follow while a \
              sign-in file is left behind {}.",
             store_in_front(front)
         ),
         AtLimit::Switch => format!(
-            "Pitboard switches Claude Code at {at}%, and its running sessions follow within about \
+            "Pitboard switches Claude Code {when}, and its running sessions follow within about \
              {seconds} seconds."
         ),
     };
@@ -730,8 +782,8 @@ mod tests {
         );
         assert_eq!(BEFORE_RUNNING_OUT, "Before an account runs out");
         assert_eq!(AT_LIMIT, "When a limit reaches");
-        assert_eq!(at_limit_label(95), "When a limit reaches 95%");
-        assert_eq!(AT, "At");
+        assert_eq!(at_limit_label(95), "5-hour limit 95%");
+        assert_eq!(AT, "5-hour limit");
         let both = |choice| {
             (
                 at_limit_choice(Front::MacMenuBar, choice),
@@ -754,7 +806,7 @@ mod tests {
             at_limit_note(
                 Front::MacMenuBar,
                 AtLimit::Nothing,
-                95,
+                Policy::default(),
                 SwitchOrder::MostLeft,
                 false,
                 33
@@ -765,7 +817,7 @@ mod tests {
             at_limit_note(
                 Front::MacMenuBar,
                 AtLimit::Notify,
-                95,
+                Policy::default(),
                 SwitchOrder::MostLeft,
                 true,
                 33
@@ -780,7 +832,7 @@ mod tests {
             at_limit_note(
                 Front::MacMenuBar,
                 AtLimit::Switch,
-                95,
+                Policy::default(),
                 SwitchOrder::MostLeft,
                 false,
                 33
@@ -795,7 +847,7 @@ mod tests {
             at_limit_note(
                 Front::MacMenuBar,
                 AtLimit::Switch,
-                95,
+                Policy::default(),
                 SwitchOrder::MostLeft,
                 true,
                 33
@@ -811,7 +863,7 @@ mod tests {
             at_limit_note(
                 Front::Gnome,
                 AtLimit::Switch,
-                95,
+                Policy::default(),
                 SwitchOrder::MostLeft,
                 true,
                 33
@@ -874,9 +926,12 @@ mod tests {
              on."
         );
         let at = |percent| {
-            pitboard_core::watch_service::Switching::At(pitboard_core::duty::autoswitch::Policy {
+            pitboard_core::watch_service::Switching::At(Policy {
                 threshold: pitboard_core::duty::autoswitch::Threshold::new(percent)
                     .expect("a share"),
+                weekly: Some(
+                    pitboard_core::duty::autoswitch::Threshold::new(percent).expect("a share"),
+                ),
                 order: pitboard_core::usage::Order::MostLeft,
             })
         };
@@ -1142,6 +1197,57 @@ mod tests {
             warming_halted(&Halt::SwitchInterrupted),
             "Pitboard isn’t warming up accounts: a switch didn’t finish, and the next change you \
              make finishes it."
+        );
+    }
+
+    #[test]
+    fn split_and_disabled_weekly_limits_are_explained_without_a_single_share_promise() {
+        use pitboard_core::duty::autoswitch::Threshold;
+        let policy = Policy {
+            threshold: Threshold::new(93).expect("a share"),
+            weekly: Threshold::new(99),
+            order: pitboard_core::usage::Order::MostLeft,
+        };
+        let note = at_limit_note(
+            Front::MacMenuBar,
+            AtLimit::Switch,
+            policy,
+            SwitchOrder::MostLeft,
+            false,
+            33,
+        )
+        .expect("a note");
+        assert_eq!(
+            note,
+            "Pitboard switches Claude Code once a 5-hour limit reaches 93% or a weekly limit reaches 99%, and its running sessions follow within about 33 seconds."
+        );
+        let off = Policy {
+            weekly: None,
+            ..policy
+        };
+        let note = at_limit_note(
+            Front::MacMenuBar,
+            AtLimit::Notify,
+            off,
+            SwitchOrder::MostLeft,
+            false,
+            33,
+        )
+        .expect("a note");
+        assert_eq!(
+            note,
+            "Pitboard notifies you once a 5-hour limit reaches 93%, while the app is open."
+        );
+        assert_eq!(
+            weekly_limit_title(Front::WindowsNotificationArea),
+            "Use weekly limits"
+        );
+        assert_eq!(weekly_limit_title(Front::MacMenuBar), "Use Weekly Limits");
+        assert_eq!(weekly_limit_label(95), "Weekly limits 95%");
+        assert_eq!(weekly_limit_label(99), "Weekly limits 99%");
+        assert!(
+            weekly_limit_note(false, SwitchOrder::ResetsSoonest)
+                .ends_with("Resets Soonest can still choose an account whose week resets earlier.")
         );
     }
 }

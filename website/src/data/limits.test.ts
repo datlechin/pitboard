@@ -13,6 +13,9 @@ import {
   terms,
   timeOfDay,
   warm,
+  weeklyLabel,
+  weeklyToggle,
+  weeklyNote,
 } from "./limits.ts";
 import { HIGHEST, LOWEST } from "../lib/model.ts";
 
@@ -33,8 +36,8 @@ test("the Limits settings say what machine.rs gives LimitsSettings.swift and Set
   assert.ok(machine.includes("heading: words::AT_LIMIT.into(),"));
   assert.ok(words.includes(`pub(crate) const AT_LIMIT: &str = "${heading}";`));
   assert.ok(machine.includes("at_label: words::at_limit_label(at),"));
-  assert.ok(words.includes('format!("{AT_LIMIT} {at}%")'));
-  assert.equal(atLabel(90), "When a limit reaches 90%");
+  assert.ok(words.includes('format!("{AT} {at}%")'));
+  assert.equal(atLabel(90), "5-hour limit 90%");
   assert.ok(machine.includes("share_label: words::AT.into(),"));
   assert.ok(words.includes(`pub(crate) const AT: &str = "${shareLabel}";`));
   assert.ok(words.includes('format!("From {lowest}% to {highest}%")'));
@@ -101,4 +104,13 @@ test("Warm-Up is titled as machine.rs's `warm` titles it, its times as `clock` s
     ),
   );
   assert.deepEqual([timeOfDay(420), timeOfDay(1380), timeOfDay(1440)], ["07:00", "23:00", "00:00"]);
+});
+
+test("weekly controls share the native model's labels and explain off without hiding exhaustion", () => {
+  assert.ok(words.includes(`pub(crate) const WEEKLY_LIMITS: &str = "${weeklyLabel}";`));
+  assert.ok(words.includes(`titled(front, "${weeklyToggle.mac}", "${weeklyToggle.win}")`));
+  for (const on of [false, true]) assert.ok(words.includes(weeklyNote(on, "most-left")));
+  assert.ok(
+    weeklyNote(false, "resets-soonest").includes("Resets Soonest can still choose an account"),
+  );
 });

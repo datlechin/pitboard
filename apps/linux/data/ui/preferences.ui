@@ -85,6 +85,23 @@
               </object>
             </child>
             <child>
+              <object class="AdwSwitchRow" id="weekly_limit">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="weekly_share">
+                <property name="use-markup">False</property>
+                <property name="update-policy">if-valid</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="step-increment">1</property>
+                    <property name="page-increment">5</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
               <object class="AdwComboRow" id="order">
                 <property name="use-markup">False</property>
               </object>

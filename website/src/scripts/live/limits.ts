@@ -5,13 +5,15 @@ import { disclosure } from "./disclosure.ts";
 import { attr } from "./draw.ts";
 import { macShare, numberBox, type Share } from "./spin.ts";
 import { datePicker, timePicker, type Time } from "./time.ts";
-import { atLabel, warmHours } from "../../data/limits.ts";
+import { atLabel, warmHours, weeklyNote } from "../../data/limits.ts";
 import {
   model,
   nextWarmUp,
   setChoice,
   setOrder,
   setShare,
+  setWeeklyLimit,
+  weeklyShare,
   setWarmRange,
   turnWarmUp,
   warmNote,
@@ -20,6 +22,7 @@ import {
   type State,
 } from "../../lib/model.ts";
 import { atLimitNote, autoStandingSaid } from "../../lib/words.ts";
+import { systemOf } from "../../lib/platform.ts";
 
 const said = (el: Element | null, text: string) => {
   if (el && el.textContent!.trim() !== text) el.textContent = text;
@@ -40,6 +43,8 @@ function expander(root: HTMLElement, id: string): (() => void) | null {
 export class AtLimitControls {
   #choice: Combobox;
   #share: Share;
+  #weekly: Share;
+  #weeklyToggle: HTMLButtonElement;
   #order: Combobox;
   #box: HTMLElement;
   #orderBox: HTMLElement;
@@ -51,14 +56,27 @@ export class AtLimitControls {
   ) {
     const part = <T extends Element = HTMLElement>(name: string) =>
       document.getElementById(`${prefix}-${name}`) as unknown as T;
+    this.#weeklyToggle = root.querySelector<HTMLButtonElement>("[data-weekly-toggle]")!;
+    this.#weeklyToggle.addEventListener("click", () => {
+      const p = model.get().preferences;
+      setWeeklyLimit(!!p.weeklyOff, weeklyShare(p), systemOf(root));
+    });
+    const weekly = (at: number) =>
+      setWeeklyLimit(!model.get().preferences.weeklyOff, at, systemOf(root));
+    const share = (at: number) => setShare(at, systemOf(root));
     this.#box = part("at");
     this.#orderBox = part("order");
     const stepper = part<SVGElement>("stepper");
-    const choose = (v: string) => setChoice(v as AtLimit);
-    const order = (v: string) => setOrder(v as Order);
+    const choose = (v: string) => setChoice(v as AtLimit, systemOf(root));
+    const order = (v: string) => setOrder(v as Order, systemOf(root));
     if (stepper) {
       this.#choice = combobox(this.#box, part("choices"), "popup", choose);
-      this.#share = macShare(part<HTMLInputElement>("share"), stepper, setShare);
+      this.#share = macShare(part<HTMLInputElement>("share"), stepper, share);
+      this.#weekly = macShare(
+        part<HTMLInputElement>("weekly-share"),
+        part<SVGElement>("weekly-stepper"),
+        weekly,
+      );
       this.#order = combobox(this.#orderBox, part("order-choices"), "popup", order);
     } else {
       this.#choice = combobox(this.#box, part("choices"), "combobox", choose);
@@ -67,8 +85,18 @@ export class AtLimitControls {
         part<HTMLInputElement>("share"),
         root.querySelector("[data-spin=up]")!,
         root.querySelector("[data-spin=down]")!,
-        setShare,
+        share,
       );
+      const card = root.querySelector("[data-weekly-card]")!;
+      this.#weekly = numberBox(
+        part<HTMLInputElement>("weekly-share"),
+        card.querySelector("[data-spin=up]")!,
+        card.querySelector("[data-spin=down]")!,
+        weekly,
+      );
+      this.#weeklyToggle.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") e.preventDefault();
+      });
       this.#expander = expander(root, `${prefix}-expand`);
     }
   }
@@ -84,6 +112,14 @@ export class AtLimitControls {
     const acts = p.atLimit !== "nothing";
     this.#choice.set(p.atLimit);
     this.#share.set(p.share, acts);
+    this.#weekly.set(weeklyShare(p), acts && !p.weeklyOff);
+    this.#weeklyToggle.disabled = !acts;
+    said(this.root.querySelector("[data-weekly-note]"), weeklyNote(!p.weeklyOff, p.order));
+    attr(this.#weeklyToggle, "aria-checked", String(!p.weeklyOff));
+    said(
+      this.#weeklyToggle.parentElement!.querySelector("[data-said]"),
+      p.weeklyOff ? "Off" : "On",
+    );
     this.#order.set(p.order);
     // Windows dims Use first with At, out of the Tab order as a disabled control is
     if (!acts) this.#order.close();

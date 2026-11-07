@@ -21,7 +21,7 @@ import { taps } from "./shell.ts";
 import { plainText } from "./changelog.ts";
 import { rowsOf } from "./doctor.ts";
 import { DAY, HOUR, MINUTE, clock } from "../data/world.ts";
-import { advance, model, reset } from "./model.ts";
+import { advance, model, quit, reset } from "./model.ts";
 import { SITE_BANNED, bannedFromDocs, wordPattern } from "../../scripts/guard.mjs";
 import type { Platform } from "./platform.ts";
 
@@ -119,8 +119,12 @@ test("help keeps clap's styles: headings and usage bold and underlined, literals
   assert.ok(lines.includes("<b><u>Commands:</u></b>"));
   assert.ok(lines.includes("<b><u>Usage:</u></b> <b>pitboard watch</b> [OPTIONS] [COMMAND]"));
   assert.ok(lines.some((l) => l.startsWith("  <b>install</b>    Have this")));
-  assert.ok(lines.some((l) => l.startsWith("      <b>--at</b> &lt;PERCENT&gt;   Switch")));
-  assert.ok(lines.some((l) => l.startsWith("      <b>--order</b> &lt;ORDER&gt;  Which account")));
+  // The longer weekly option makes clap put each description on the following line.
+  assert.ok(lines.includes("      <b>--at</b> &lt;PERCENT&gt;"));
+  assert.ok(lines.includes("      <b>--weekly-at</b> &lt;PERCENT|off&gt;"));
+  assert.ok(lines.includes("      <b>--order</b> &lt;ORDER&gt;"));
+  assert.ok(lines.some((l) => l.startsWith("          Switch once a five-hour limit")));
+  assert.ok(lines.some((l) => l.startsWith("          Which account to switch to first:")));
   assert.ok(lines.some((l) => l.startsWith("  <b>-h</b>, <b>--help</b>")));
   const examples = helpLines(g, ["pitboard"]);
   assert.ok(
@@ -130,6 +134,64 @@ test("help keeps clap's styles: headings and usage bold and underlined, literals
   assert.ok(
     repo("crates/pitboard/src/main.rs").includes("{literal}{typed:<30}{literal:#}  {does}"),
   );
+});
+
+test("watch rejects its run options before a service subcommand", () => {
+  for (const [option, value] of [
+    ["--order", "resets-soonest"],
+    ["--no-switch", null],
+  ] as const) {
+    const parsed = parse(grammar(false), ["watch", option, ...(value ? [value] : []), "install"]);
+    assert.equal(parsed.kind, "error");
+    if (parsed.kind === "error") {
+      assert.equal(
+        text(parsed.lines)[0],
+        `error: the subcommand 'install' cannot be used with '${option}'`,
+      );
+    }
+  }
+});
+
+test("watch no-switch keeps both a terminal and an installed service from switching", async () => {
+  reset();
+  const s = structuredClone(model.get());
+  s.accounts.find((a) => a.id === "personal")!.limits[1].percent = 99;
+  const work = s.accounts.find((a) => a.label === "work")!;
+  work.limits[0] = { ...work.limits[0], percent: 0, resetsAt: null };
+  s.warm.on = [work.id];
+  s.warm.started = {};
+  model.set(s);
+  quit();
+  const once = await said("macos", "watch --once --no-switch");
+  assert.ok(once[0].includes("cannot be used with '--no-switch'"));
+  assert.equal(model.get().inUse.claude, "personal");
+  const watch = await run(machine("macos"), ["watch", "--no-switch"]);
+  assert.ok(text(watch.lines)[0].includes("never switches accounts"));
+  advance(clock.menuBar + 30);
+  assert.equal(model.get().inUse.claude, "personal");
+  assert.ok(
+    model
+      .get()
+      .log.some(
+        (entry) => entry.verb === "warm-up" && entry.caller === "cli" && entry.subject === "work",
+      ),
+  );
+  watch.runs!.stop();
+  await said("macos", "watch install --no-switch");
+  assert.equal(model.get().watchService?.switching, false);
+  const installed = JSON.parse((await said("macos", "watch status --json"))[0]);
+  assert.deepEqual(
+    [
+      installed.data.threshold,
+      installed.data.weekly_threshold,
+      installed.data.order,
+      installed.data.switches,
+    ],
+    [null, null, null, false],
+  );
+  advance(clock.menuBar + 60);
+  assert.equal(model.get().inUse.claude, "personal");
+  reset();
 });
 
 test("the value parsers are main.rs's and watch.rs's", () => {
@@ -148,6 +210,8 @@ test("the value parsers are main.rs's and watch.rs's", () => {
     "pitboard rename to",
     "pitboard watch at",
     "pitboard watch install at",
+    "pitboard watch install weekly_at",
+    "pitboard watch weekly_at",
   ]);
   const g = grammar(false);
   const refused = (typed: string) => {
@@ -448,7 +512,7 @@ test("pitboard watch install, status and uninstall keep the watch service in the
   assert.ok(installed[0].includes("reaches 90%"));
   assert.equal(installed[2], location("linux", "watch")[1]);
   assert.deepEqual(await said("windows", "watch status"), [
-    "Pitboard watches Claude Code in the background, and switches once a limit of the account in use reaches 90%.",
+    "Pitboard watches Claude Code in the background, and switches once a limit reaches 90%.",
     "\\Pitboard\\Watch S-1-5-21-1004-1005-1006-1001",
   ]);
   // under --order resets-soonest, words.rs `first_by` after the share
@@ -478,7 +542,7 @@ test("pitboard watch install, status and uninstall keep the watch service in the
     '"Nothing watches Claude Code in the background here.\\n{}\\n",',
     '"Run `pitboard watch install` to change that.".to_string()',
     '"Pitboard watches Claude Code in the background{}.\\n{location}\\n{}",',
-    '", and switches once a limit of the account in use reaches {}%{}",',
+    '", and switches once {}{}",',
     '"Stopped watching Claude Code in the background.\\n".to_string()',
     '"Nothing was watching Claude Code in the background.\\n".to_string()',
   ])
@@ -489,9 +553,9 @@ test("pitboard watch says what it decides as watch.rs does, and switches at its 
   reset();
   const step = await run(machine("macos"), ["watch", "--at", "70"]);
   assert.deepEqual(text(step.lines), [
-    "Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 70%, and warms up personal from 07:00 to 23:00. Stop with Ctrl-C.",
+    "Watching Claude Code. Pitboard switches to another of your accounts once a limit reaches 70%, and warms up personal from 07:00 to 23:00. Stop with Ctrl-C.",
   ]);
-  assert.deepEqual(model.get().watching, { at: 70, order: "most-left" });
+  assert.deepEqual(model.get().watching, { at: 70, order: "most-left", weekly: 70 });
   advance(clock.menuBar + 30);
   const lines = text(step.runs!.next(model.get()));
   assert.deepEqual(lines, [
@@ -510,7 +574,7 @@ test("pitboard watch says what it decides as watch.rs does, and switches at its 
   const watch = joined("crates/pitboard/src/watch.rs");
   assert.ok(
     watch.includes(
-      '"Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches {}%{}{}. {}\\n",',
+      '"Watching Claude Code. Pitboard switches to another of your accounts once {}{}{}. {}\\n",',
     ),
   );
   assert.ok(watch.includes('", and warms up {} from {}",'));
@@ -779,4 +843,23 @@ test("each command a phone taps runs on its system without a usage error", async
       assert.ok(!lines[0].startsWith("error:"), `${platform}: ${tapped}`);
     }
   }
+});
+
+test("watch accepts an independent weekly limit and reports off in its installed policy", async () => {
+  reset();
+  const split = await said("macos", "watch install --at 93 --weekly-at 99");
+  assert.ok(split[0].includes("5-hour limit reaches 93% or a weekly limit reaches 99%"));
+  assert.deepEqual(model.get().watchService, { at: 93, weekly: 99, order: "most-left" });
+  await said("macos", "watch install --at 93 --weekly-at off");
+  assert.equal(model.get().watchService?.weekly, null);
+  assert.ok((await said("macos", "watch status"))[0].includes("weekly triggers are off"));
+  const arg = grammar(false)
+    .tree.commands.find((c) => c.name === "watch")!
+    .arguments.find((a) => a.id === "weekly_at")!;
+  assert.equal(
+    checks["pitboard watch weekly_at"]("100", arg),
+    "weekly share must be from 50 to 99, or off",
+  );
+  assert.equal(checks["pitboard watch weekly_at"]("off", arg), null);
+  reset();
 });

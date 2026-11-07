@@ -16,7 +16,9 @@ const { prefix, show } = Astro.props;
 <Accounts prefix={prefix} moment="after" pane="settings">
   <div slot="settings">
     <div class="px-24 text-u-28/36 font-semibold">{page.title}</div>
-    <div class:list={["mt-24 px-24 pb-24", { "live:min-h-362": show === "switch" }]}>
+    {/* Reserve the full Limits section: the weekly controls and the longest explanation,
+        with automatic switching, Resets Soonest and weekly triggers turned off. */}
+    <div class:list={["mt-24 px-24 pb-24", { "live:min-h-592": show === "switch" }]}>
       <div class="ml-1 pb-6 font-semibold">{page.section}</div>
       <LimitsSections prefix={prefix} show={show} />
     </div>

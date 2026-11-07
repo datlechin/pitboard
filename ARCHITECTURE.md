@@ -436,6 +436,18 @@ keeps it is in the header of the module named.
   (`nothing_is_switched_by_itself_unless_somebody_turned_it_on`, `codex_is_never_switched`).
   Only those two call `Pitboard::auto_switch`, so the status line and daily renewal never
   switch.
+- Automatic switching and limit notifications use separate five-hour and weekly shares.
+  Weekly policy covers all-model and scoped weekly limits; disabling it suppresses its triggers,
+  but a replacement with an actually used-up weekly limit is still refused. Missing readings,
+  settling and per-reset attempt protections do not depend on the selected shares.
+  Old scalar settings and `--at` services apply their share to both periods; the first edit
+  preserves the other period. Resets Soonest remains a separate reason to switch early.
+- Limit controls send only the field edited. The actor preserves the other fields from its
+  current preferences, so a late snapshot cannot undo an earlier edit.
+- The app ignores an automatic look or a non-switch outcome made for an earlier policy,
+  releases its switch claim, and still reports a completed switch
+  (`a_look_from_an_earlier_policy_does_not_post_or_replace_what_stands`,
+  `a_noop_decision_from_an_earlier_policy_does_not_post_or_replace_what_stands`).
 - An automatic switch is decided once, under `state.lock`, from one telling of whose login
   Claude Code has stored, and made from that same login (`switch/auto.rs`), so front ends
   deciding from one reading make one switch
@@ -487,14 +499,14 @@ keeps it is in the header of the module named.
   of a change, and `uninstall` takes it away before the schedule
   (`the_services_run_is_ended_only_between_changes`,
   `uninstalling_takes_the_watch_service_with_it`).
-- The watch service switches at the share it was installed with, or never, with
+- The watch service switches at the shares it was installed with, or never, with
   `--no-switch`, and says which as it is read back
   (`a_service_that_never_switches_runs_watch_with_no_switch_and_reads_back_so`,
   `with_no_switch_watch_warms_up_and_never_switches`).
 - Where its front has no status item, closing the window quits the app, so the app offers to
   run the automatic switch and the warm-ups in the watch service, reads it on each visit to
   them and installs it only when asked. Installed, it switches only where the settings' choice
-  is Switch, at their share, and never otherwise, installed again as either changes, and the
+  is Switch, at their shares, and never otherwise, installed again as either changes, and the
   settings say what it does once the window is closed
   (`without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs_it`,
   `with_a_status_item_it_is_not_offered`, `the_watch_service_is_read_on_each_visit`,

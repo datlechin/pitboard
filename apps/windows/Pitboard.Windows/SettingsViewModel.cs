@@ -6,8 +6,8 @@ namespace Pitboard.Windows;
 
 public sealed record SettingsLink(string Title, string Url);
 
-// What the settings page shows and sends, by the macOS Settings' rules. A setter sends only what differs from what the
-// model says, so a control set to the model's value sends nothing.
+// What the settings page shows and sends, by the macOS Settings' rules. Limit controls remember requests until the
+// model acknowledges them, so a rapid edit back to the displayed value still reaches the actor.
 public sealed partial class SettingsViewModel : INotifyPropertyChanged
 {
     // Settings > Apps > Startup and System > Notifications, by the URIs Microsoft's "Launch the Windows Settings app" lists.
@@ -34,6 +34,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     private readonly IUpdates _updates;
     private readonly Func<NotificationsBlocked?> _notifications;
     private NotificationsBlocked? _blocked;
+    private AtLimit? _requestedLimitChoice;
+    private byte? _requestedShare;
+    private bool? _requestedWeeklyEnabled;
+    private byte? _requestedWeeklyShare;
+    private bool _showingValues;
 
     public SettingsViewModel(
         AppModel model, StartAtSignIn start, IUpdates updates, string version, Func<NotificationsBlocked?> notifications)
@@ -50,6 +55,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     private MachineShown Machine => _model.Machine;
 
     private AtLimitShown AtLimit => Machine.AtLimit;
+
+    private WeeklyLimitShown WeeklyLimit => AtLimit.Weekly;
 
     private WarmShown Warm => Machine.Warm;
 
@@ -116,6 +123,24 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public string ShareRange => AtLimit.ShareRange;
 
     public bool CanSetShare => AtLimit.ShareEnabled;
+
+    public bool UsesWeeklyLimit => WeeklyLimit.On;
+
+    public bool CanChooseWeeklyLimit => WeeklyLimit.Enabled;
+
+    public string WeeklyLimitTitle => WeeklyLimit.Title;
+
+    public string WeeklyLimitNote => WeeklyLimit.Note;
+
+    public double WeeklyShare => WeeklyLimit.At;
+
+    public string WeeklyShareTitle => WeeklyLimit.ShareLabel;
+
+    public string WeeklyShareLabel => WeeklyLimit.AtLabel;
+
+    public string WeeklyShareRange => WeeklyLimit.Range;
+
+    public bool CanSetWeeklyShare => WeeklyLimit.ShareEnabled;
 
     public string OrderTitle => AtLimit.OrderLabel;
 
@@ -268,9 +293,12 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public void ChooseAtLimit(int index)
     {
-        if (index >= 0 && index < AtLimit.Choices.Length && AtLimit.Choices[index].Choice != AtLimit.Choice)
+        if (!_showingValues && index >= 0 && index < AtLimit.Choices.Length
+            && AtLimit.Choices[index].Choice != (_requestedLimitChoice ?? AtLimit.Choice))
         {
-            _model.Send(new Intent.SetAtLimit(AtLimit.Choices[index].Choice, AtLimit.At));
+            var choice = AtLimit.Choices[index].Choice;
+            _requestedLimitChoice = choice;
+            _model.Send(new Intent.SetAtLimitChoice(choice));
         }
     }
 
@@ -285,14 +313,50 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     // False for a cleared box, which then shows the share again.
     public bool SetShare(double value)
     {
+        if (_showingValues)
+        {
+            return true;
+        }
+
         if (ShareOf(value, AtLimit) is not { } at)
         {
             return false;
         }
 
-        if (at != AtLimit.At)
+        if (at != (_requestedShare ?? AtLimit.At))
         {
-            _model.Send(new Intent.SetAtLimit(AtLimit.Choice, at));
+            _requestedShare = at;
+            _model.Send(new Intent.SetAtLimitShare(at));
+        }
+
+        return true;
+    }
+
+    public void SetWeeklyLimit(bool on)
+    {
+        if (!_showingValues && on != (_requestedWeeklyEnabled ?? WeeklyLimit.On))
+        {
+            _requestedWeeklyEnabled = on;
+            _model.Send(new Intent.SetWeeklyLimitEnabled(on));
+        }
+    }
+
+    public bool SetWeeklyShare(double value)
+    {
+        if (_showingValues)
+        {
+            return true;
+        }
+
+        if (ShareOf(value, AtLimit) is not { } at)
+        {
+            return false;
+        }
+
+        if (at != (_requestedWeeklyShare ?? WeeklyLimit.At))
+        {
+            _requestedWeeklyShare = at;
+            _model.Send(new Intent.SetWeeklyLimitShare(at));
         }
 
         return true;
@@ -345,6 +409,29 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(AppModel.Machine))
+        {
+            if (_requestedLimitChoice == AtLimit.Choice)
+            {
+                _requestedLimitChoice = null;
+            }
+
+            if (_requestedShare == AtLimit.At)
+            {
+                _requestedShare = null;
+            }
+
+            if (_requestedWeeklyEnabled == WeeklyLimit.On)
+            {
+                _requestedWeeklyEnabled = null;
+            }
+
+            if (_requestedWeeklyShare == WeeklyLimit.At)
+            {
+                _requestedWeeklyShare = null;
+            }
+        }
+
         if (args.PropertyName is nameof(AppModel.Machine) or nameof(AppModel.Uninstall) or nameof(AppModel.Removal))
         {
             Tell();
@@ -358,6 +445,17 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         Keyed.Sync(
             WarmAccounts, Warm.Accounts, account => account.Qualified, shown => shown.Qualified,
             account => new WarmAccountRow(account, Warm.Enabled), (shown, account) => shown.Show(account, Warm.Enabled));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+        // Bindings set controls synchronously here. Their change events are echoes, even if a
+        // newer user edit is still waiting for the actor's next snapshot.
+        var wasShowingValues = _showingValues;
+        _showingValues = true;
+        try
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+        }
+        finally
+        {
+            _showingValues = wasShowingValues;
+        }
     }
 }

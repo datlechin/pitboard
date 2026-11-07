@@ -9,8 +9,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Limits settings and `pitboard watch --weekly-at` set a separate weekly share or turn weekly
+  triggers off, while keeping the five-hour share and existing settings.
+
 - **Show Pace** in the app’s Limits settings restores each limit’s expected-use marker and
   pace, with an estimated run-out time for the account in use. It is off by default.
+
+### Changed
+
+- **Breaking:** The public API of `pitboard-core` adds weekly policy to automatic switching;
+  [its documentation](https://docs.rs/pitboard-core/0.20.0/pitboard_core/) shows the new one.
+
+### Fixed
+
+- Limits settings keep a percentage edit when its action or weekly switch changes before the
+  model answers.
+- Changing the switching policy discards outdated checks and skipped-switch notices while
+  still reporting completed switches.
+- The website's command examples respect `--no-switch`, and its settings leave a separately
+  installed watch service alone where the app has a status item.
 
 ## [1.0.0-beta.10] - 2026-11-03
 

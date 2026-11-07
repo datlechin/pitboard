@@ -11,7 +11,15 @@ import NumberBox from "./NumberBox.astro";
 import TimePicker from "./TimePicker.astro";
 import Toggle from "./Toggle.astro";
 import { settingsPage as page } from "../../../data/windows.ts";
-import { choices, heading, orderLabel, orders } from "../../../data/limits.ts";
+import {
+  choices,
+  heading,
+  orderLabel,
+  orders,
+  weeklyLabel,
+  weeklyToggle,
+  weeklyNote,
+} from "../../../data/limits.ts";
 import { DOCS } from "../../../data/site.ts";
 import { moments, share, warmUp } from "../../../data/world.ts";
 import type { AtLimit, Order } from "../../../lib/model.ts";
@@ -122,6 +130,20 @@ const icon = "size-20 shrink-0";
             >
           </span>
           <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+        </div>
+        <div class:list={[item, "has-[:disabled]:text-win-text-off"]}>
+          <span class="min-w-0 flex-1">
+            <span class="block">{weeklyToggle.win}</span>
+            <span class:list={["block", caption]} data-weekly-note>{weeklyNote(true, order)}</span>
+          </span>
+          <Toggle on aria-label={weeklyToggle.win} data-weekly-toggle />
+        </div>
+        <div class:list={[item, "group/share has-[:disabled]:text-win-text-off"]} data-weekly-card>
+          <span class="min-w-0 flex-1">
+            <span class="block">{weeklyLabel}</span>
+            <span class:list={["block", caption]}>{page.share.range}</span>
+          </span>
+          <NumberBox prefix={`${prefix}-weekly`} value={page.share.value} label={weeklyLabel} />
         </div>
         <div
           class:list={[item, card, "has-[[aria-disabled=true]]:text-win-text-off"]}

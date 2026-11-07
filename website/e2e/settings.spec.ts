@@ -185,7 +185,9 @@ test.describe("macOS", () => {
     await field.press("Enter");
     await expect(field).toHaveValue("50%");
     await expect(stepper).toHaveAttribute("aria-valuenow", "50");
-    await expect(fig.locator('[data-note="notify"]')).toContainText("reaches 50%,");
+    await expect(fig.locator('[data-note="notify"]')).toContainText(
+      "a 5-hour limit reaches 50% or a weekly limit reaches 95%",
+    );
     await field.fill("ninety");
     await field.press("Tab");
     await expect(field).toHaveValue("50%");
@@ -268,6 +270,15 @@ test.describe("Windows", () => {
     await page.keyboard.press("ArrowDown");
     await expect(fig.locator('[data-note="switch"]')).toContainText(soonestSwitch);
     expect(await height(fig)).toBe(tall);
+    // The longer weekly-off explanation keeps the same window size too.
+    const weekly = fig.getByRole("switch", { name: "Use weekly limits" });
+    await weekly.click();
+    await expect(fig.locator("[data-weekly-note]")).toContainText(
+      "Resets Soonest can still choose an account",
+    );
+    expect(await height(fig)).toBe(tall);
+    await weekly.click();
+    await at.focus();
     // Do nothing dims it with At, out of reach, and keeps its choice
     await page.keyboard.press("Home");
     await expect(chosen(at)).toHaveText("Do nothing");
@@ -300,10 +311,7 @@ test.describe("Windows", () => {
     await box.fill("12");
     await page.keyboard.press("Enter");
     await expect(box).toHaveValue("50");
-    await expect(page.locator("#auto-win-at")).toHaveAttribute(
-      "aria-label",
-      "When a limit reaches 50%",
-    );
+    await expect(page.locator("#auto-win-at")).toHaveAttribute("aria-label", "5-hour limit 50%");
     await box.fill("70");
     await page.keyboard.press("Escape");
     await expect(box).toHaveValue("50");
@@ -445,7 +453,7 @@ for (const system of ["gnome", "kde"] as const)
       page,
     }) => {
       const fig = await preferences(page, system);
-      const at = fig.getByRole("spinbutton", { name: "At" });
+      const at = fig.getByRole("spinbutton", { name: "5-hour limit" });
       await at.focus();
       await page.keyboard.press("ArrowUp");
       await expect(at).toHaveAttribute("aria-valuenow", "96");
@@ -523,7 +531,7 @@ for (const system of ["gnome", "kde"] as const)
       const behind = page.locator("#auto-linux > div:not([data-part])");
       await expect(behind.first()).toHaveAttribute("inert", "");
       await expect(page.locator("#auto-linux-main-menu")).toHaveAttribute("inert", "");
-      await fig.getByRole("spinbutton", { name: "At" }).focus();
+      await fig.getByRole("spinbutton", { name: "5-hour limit" }).focus();
       await page.keyboard.press("Escape");
       await expect(fig).toBeHidden();
       await expect(behind.first()).not.toHaveAttribute("inert");
@@ -559,3 +567,57 @@ test("axe finds nothing in the open pop-ups and the open ComboBoxes", async ({ p
     }
   }
 });
+
+for (const platform of ["macos", "windows"] as const) {
+  test(`${platform} edits weekly limits independently and remembers a disabled percentage`, async ({
+    page,
+  }) => {
+    const prefix = platform === "macos" ? "auto-mac" : "auto-win";
+    const fig = await open(page, platform, prefix);
+    const short = page.locator(`#${prefix}-share`);
+    const weekly = page.locator(`#${prefix}-weekly-share`);
+    const toggle = fig.getByRole("switch", { name: /Use [Ww]eekly [Ll]imits/ });
+    const value = (at: number) => (platform === "macos" ? `${at}%` : String(at));
+    await short.fill("93");
+    await short.press("Enter");
+    await expect(weekly).toHaveValue(value(95));
+    await weekly.fill("99");
+    await weekly.press("Enter");
+    await expect(short).toHaveValue(value(93));
+    await expect(fig.locator('[data-note="notify"]')).toContainText("a weekly limit reaches 99%");
+    await toggle.click();
+    await expect(weekly).toBeDisabled();
+    await expect(weekly).toHaveValue(value(99));
+    await expect(fig.locator("[data-weekly-note]")).toContainText("Weekly usage does not trigger");
+    await toggle.click();
+    await expect(weekly).toBeEnabled();
+    await expect(weekly).toHaveValue(value(99));
+    expect(await axe(page, [`#${prefix}`])).toEqual([]);
+  });
+}
+
+for (const system of ["gnome", "kde"] as const) {
+  test(`${system} keeps weekly settings independent and remembers them while off`, async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "a pointer and a keyboard");
+    const fig = await preferences(page, system);
+    const short = fig.locator('[data-part="share"] [role="spinbutton"]');
+    const weekly = fig.locator('[data-part="weekly-share"] [role="spinbutton"]');
+    await short.fill("93");
+    await short.press("Enter");
+    await expect(weekly).toHaveValue("95%");
+    await weekly.fill("99");
+    await weekly.press("Enter");
+    await expect(short).toHaveValue("93%");
+    const toggle = fig.getByRole("switch", { name: "Use Weekly Limits" });
+    await toggle.click();
+    await expect(weekly).toBeDisabled();
+    await expect(weekly).toHaveValue("99%");
+    await toggle.click();
+    await expect(weekly).toBeEnabled();
+    await expect(weekly).toHaveValue("99%");
+    expect(await axe(page, ["#auto-linux"])).toEqual([]);
+  });
+}

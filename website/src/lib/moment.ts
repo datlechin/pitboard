@@ -3,7 +3,7 @@
 // the share reaches it at once, the 5-hour first. The moment takes the page's choice, share and
 // accounts, and what the app posts there is what the row's notification shows.
 import { accounts as read, clock, type Limit } from "../data/world.ts";
-import { advised, type Posted, type State } from "./model.ts";
+import { advised, limitShare, weeklyThreshold, type Posted, type State } from "./model.ts";
 import { paceOf, whole } from "./words.ts";
 
 export interface Moment {
@@ -26,16 +26,21 @@ export function noticeMoment(s: State): Moment | null {
   const subject = s.accounts.find((a) => a.id === "personal");
   const reading = read.find((a) => a.id === "personal")!;
   if (!subject) return null;
-  const share = s.preferences.share;
+  const weekly = weeklyThreshold(s.preferences);
+  let share = s.preferences.share;
   let at = clock.warned;
   let reaching: Limit | null = null;
   for (const l of reading.limits) {
-    const when = reachesAt(l, share);
+    const threshold = limitShare(l, s.preferences.share, weekly);
+    if (threshold === null) continue;
+    const when = reachesAt(l, threshold);
     if (when !== null && (reaching === null || when < at)) {
       at = when;
       reaching = l;
+      share = threshold;
     }
   }
+  if (!reaching) return null;
   const m = structuredClone(s);
   Object.assign(m, {
     now: at,

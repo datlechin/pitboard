@@ -81,7 +81,8 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand --help 'Print help'
         }
         &'pitboard;watch'= {
-            cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --at 'Switch once a five-hour limit reaches this share, from 50 to 99; weekly limits use it too unless --weekly-at is set'
+            cand --weekly-at 'The share for weekly limits, from 50 to 99, or off; defaults to --at'
             cand --order 'Which account to switch to first: `most-left`, the one with the most room, or `resets-soonest`, the one whose week resets soonest, even before the share'
             cand --no-switch 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
             cand --once 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up'
@@ -94,7 +95,8 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'pitboard;watch;install'= {
-            cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --at 'Switch once a five-hour limit reaches this share, from 50 to 99; weekly limits use it too unless --weekly-at is set'
+            cand --weekly-at 'The share for weekly limits, from 50 to 99, or off; defaults to --at'
             cand --order 'Which account to switch to first: `most-left`, the one with the most room, or `resets-soonest`, the one whose week resets soonest, even before the share'
             cand --no-switch 'Never switch, and only warm up the accounts `pitboard warm on` turned on'
             cand --json 'Print JSON instead of text'

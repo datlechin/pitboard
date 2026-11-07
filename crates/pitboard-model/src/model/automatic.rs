@@ -684,7 +684,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         words::at_limit_note(
             os,
             AtLimit::Switch,
-            95,
+            Policy::default(),
             SwitchOrder::MostLeft,
             file_left,
             33,
@@ -988,6 +988,57 @@ fn a_look_answered_after_it_was_turned_off_asks_for_no_switch() {
     assert!(!model.state.switch_under_way());
 }
 
+#[test]
+fn a_look_from_an_earlier_policy_does_not_post_or_replace_what_stands() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    turned_on(&mut model, &mut machine);
+    // The core can return a skipped look when its ledger already records this reason,
+    // including one recorded by a previous launch or the command line.
+    machine.look = Ok(AutoLooked::Stands(Box::new(no_room(9_000))));
+    model.send(Intent::Refresh { asked: false });
+    model.run_but(&mut machine, auto_look);
+    let answer = machine.answer(model.take(auto_look));
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 99,
+    });
+    let before = standing(&model);
+    let jobs = model.give(answer);
+    assert!(
+        !jobs.iter().any(|job| matches!(job, Job::Post { .. })),
+        "{jobs:?}"
+    );
+    assert_eq!(standing(&model), before);
+}
+
+#[test]
+fn a_noop_decision_from_an_earlier_policy_does_not_post_or_replace_what_stands() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    turned_on(&mut model, &mut machine);
+    machine.look = Ok(AutoLooked::Act);
+    machine.auto = Ok(no_room(9_000));
+    model.send(Intent::Refresh { asked: false });
+    model.run_but(&mut machine, auto_switch);
+    let answer = machine.answer(model.take(auto_switch));
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 99,
+    });
+    let before = standing(&model);
+    let jobs = model.give(answer);
+    assert!(
+        !jobs.iter().any(|job| matches!(job, Job::Post { .. })),
+        "{jobs:?}"
+    );
+    assert_eq!(standing(&model), before);
+    assert!(
+        !model.state.switch_under_way(),
+        "the old decision releases its claim"
+    );
+}
+
 /// A decision under way as the setting is turned off that comes to anything but a switch is
 /// neither posted nor waited on: turned on again, the core is asked at once, and what it
 /// says then is said.
@@ -1237,6 +1288,7 @@ fn turning_it_on_is_kept_and_looks_at_once() {
                 preferences: Preferences {
                     auto_switch: true,
                     auto_switch_at: Some(90),
+                    auto_switch_weekly_at: Some(95),
                     at_limit: Some("switch".into()),
                     has_been_seen: true,
                     ..Preferences::default()
@@ -1245,6 +1297,7 @@ fn turning_it_on_is_kept_and_looks_at_once() {
             Job::AutoLook {
                 policy: Policy {
                     threshold: Threshold::new(90).expect("a share"),
+                    weekly: Some(Threshold::DEFAULT),
                     order: Order::MostLeft,
                 },
             },
@@ -1316,6 +1369,7 @@ fn an_early_switch_is_asked_for_in_the_order_and_said_by_the_week_that_resets_fi
 
     let soonest = Policy {
         threshold: Threshold::DEFAULT,
+        weekly: Some(Threshold::DEFAULT),
         order: Order::ResetsSoonest,
     };
     assert_eq!(machine.auto_at, [soonest]);
@@ -1330,4 +1384,191 @@ fn an_early_switch_is_asked_for_in_the_order_and_said_by_the_week_that_resets_fi
             .as_str()
         )
     );
+}
+
+#[test]
+fn editing_each_period_preserves_the_other_and_weekly_off_remembers_its_share() {
+    let mut model = Hand::new();
+    assert!(
+        model
+            .send(Intent::SetWeeklyLimit { on: false, at: 99 })
+            .is_empty()
+    );
+    assert!(!model.shown().machine.at_limit.weekly.enabled);
+    let preferences = Preferences::kept(Some(r#"{"auto_switch_at":93}"#), None).0;
+    model.give(Answer::Kept {
+        told: Told::new(),
+        preferences: Some((preferences, true)),
+        windows: None,
+    });
+    assert_eq!(model.shown().machine.at_limit.weekly.at, 93);
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Notify,
+        at: 90,
+    });
+    assert_eq!(model.state.preferences.auto_switch_weekly_at, Some(93));
+    model.send(Intent::SetWeeklyLimit { on: false, at: 99 });
+    let shown = model.shown().machine.at_limit;
+    assert_eq!(
+        (shown.at, shown.weekly.at, shown.weekly.on),
+        (90, 99, false)
+    );
+    assert!(shown.weekly.enabled);
+    assert!(!shown.weekly.share_enabled);
+    for choice in [AtLimit::Nothing, AtLimit::Switch, AtLimit::Notify] {
+        model.send(Intent::SetAtLimit { choice, at: 90 });
+        assert_eq!(model.state.preferences.weekly_threshold().percent(), 99);
+        assert_eq!(model.state.preferences.policy().weekly, None);
+        assert_eq!(
+            model.shown().machine.at_limit.weekly.enabled,
+            choice != AtLimit::Nothing
+        );
+    }
+    model.send(Intent::SetWeeklyLimit { on: true, at: 99 });
+    assert_eq!(model.state.preferences.threshold().percent(), 90);
+    assert_eq!(model.state.preferences.policy().weekly, Threshold::new(99));
+    assert!(model.shown().machine.at_limit.weekly.share_enabled);
+    assert!(
+        model
+            .send(Intent::SetWeeklyLimit { on: true, at: 99 })
+            .is_empty()
+    );
+    let kept = model.state.preferences.text().expect("preferences");
+    assert_eq!(
+        Preferences::kept(Some(&kept), None).0,
+        model.state.preferences
+    );
+}
+
+#[test]
+fn changing_only_weekly_policy_discards_stale_looks_and_noop_decisions() {
+    for decision in [false, true] {
+        let mut model = Hand::new();
+        let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+        turned_on(&mut model, &mut machine);
+        machine.look = if decision {
+            Ok(AutoLooked::Act)
+        } else {
+            Ok(AutoLooked::Stands(Box::new(no_room(9_000))))
+        };
+        machine.auto = Ok(no_room(9_000));
+        let held = if decision { auto_switch } else { auto_look };
+        model.send(Intent::Refresh { asked: false });
+        model.run_but(&mut machine, held);
+        let answer = machine.answer(model.take(held));
+        model.send(Intent::SetWeeklyLimit { on: false, at: 99 });
+        let before = standing(&model);
+        let jobs = model.give(answer);
+        assert!(
+            !jobs.iter().any(|job| matches!(job, Job::Post { .. })),
+            "{jobs:?}"
+        );
+        assert_eq!(standing(&model), before);
+        assert!(!model.state.switch_under_way());
+        machine.look = Ok(AutoLooked::Stands(Box::new(watching("work"))));
+        model.run(&mut machine);
+        assert_eq!(standing(&model), Some(watching_said("work")));
+    }
+}
+
+#[test]
+fn an_old_policy_decisions_completed_switch_or_error_is_still_reported() {
+    for completed in [false, true] {
+        let mut model = Hand::new();
+        let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+        turned_on(&mut model, &mut machine);
+        machine.look = Ok(AutoLooked::Act);
+        machine.auto = if completed {
+            switched_work_to_personal()
+        } else {
+            Err(unwritable())
+        };
+        model.send(Intent::Refresh { asked: false });
+        model.run_but(&mut machine, auto_switch);
+        let answer = machine.answer(model.take(auto_switch));
+        model.send(Intent::SetWeeklyLimit { on: false, at: 99 });
+        let jobs = model.give(answer);
+        assert!(
+            jobs.iter().any(|job| matches!(job, Job::Post { .. })),
+            "{jobs:?}"
+        );
+        if !completed {
+            assert!(!model.state.switch_under_way());
+        }
+    }
+}
+
+#[test]
+fn independent_control_edits_preserve_pending_siblings_and_reversals_without_a_snapshot() {
+    let weekly_edits = [
+        vec![
+            Intent::SetWeeklyLimitShare { at: 99 },
+            Intent::SetWeeklyLimitEnabled { on: false },
+        ],
+        vec![
+            Intent::SetWeeklyLimitEnabled { on: false },
+            Intent::SetWeeklyLimitShare { at: 99 },
+        ],
+    ];
+    for edits in weekly_edits {
+        let mut model = Hand::new();
+        read_preferences(&mut model, true);
+        for edit in edits {
+            model.send(edit);
+        }
+        assert_eq!(model.state.preferences.weekly_threshold().percent(), 99);
+        assert!(model.state.preferences.auto_switch_weekly_off);
+        model.send(Intent::SetWeeklyLimitEnabled { on: true });
+        assert_eq!(model.state.preferences.policy().weekly, Threshold::new(99));
+        model.send(Intent::SetWeeklyLimitEnabled { on: false });
+        model.send(Intent::SetWeeklyLimitEnabled { on: true });
+        assert_eq!(model.state.preferences.policy().weekly, Threshold::new(99));
+        assert_eq!(model.state.preferences.threshold().percent(), 95);
+    }
+    for edits in [
+        vec![
+            Intent::SetAtLimitShare { at: 80 },
+            Intent::SetAtLimitChoice {
+                choice: AtLimit::Nothing,
+            },
+        ],
+        vec![
+            Intent::SetAtLimitChoice {
+                choice: AtLimit::Nothing,
+            },
+            Intent::SetAtLimitShare { at: 80 },
+        ],
+    ] {
+        let mut model = Hand::new();
+        read_preferences(&mut model, true);
+        for edit in edits {
+            model.send(edit);
+        }
+        assert_eq!(model.state.preferences.threshold().percent(), 80);
+        assert_eq!(model.state.preferences.at_limit(), AtLimit::Nothing);
+        assert_eq!(model.state.preferences.weekly_threshold().percent(), 95);
+        model.send(Intent::SetAtLimitChoice {
+            choice: AtLimit::Switch,
+        });
+        assert_eq!(model.state.preferences.threshold().percent(), 80);
+        model.send(Intent::SetAtLimitShare { at: 95 });
+        assert_eq!(model.state.preferences.at_limit(), AtLimit::Switch);
+        assert_eq!(model.state.preferences.threshold().percent(), 95);
+    }
+}
+
+#[test]
+fn independent_control_edits_cannot_overwrite_unread_preferences() {
+    let mut model = Hand::new();
+    for edit in [
+        Intent::SetAtLimitChoice {
+            choice: AtLimit::Nothing,
+        },
+        Intent::SetAtLimitShare { at: 80 },
+        Intent::SetWeeklyLimitEnabled { on: false },
+        Intent::SetWeeklyLimitShare { at: 99 },
+    ] {
+        assert!(model.send(edit).is_empty());
+        assert_eq!(model.state.preferences, Preferences::default());
+    }
 }

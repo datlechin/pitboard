@@ -3,7 +3,8 @@
 //! An agent working through a task stops when its account reaches a limit, while another of
 //! the same person's accounts may sit there with room. So, where somebody asks for it,
 //! Pitboard switches Claude Code to another of their accounts once any limit of the one in
-//! use reaches a share they chose, 95% unless they chose otherwise. Before the limit and not
+//! use reaches its chosen share, 95% unless they chose otherwise. Five-hour and weekly
+//! shares can differ, and the weekly trigger can be off. Before the limit and not
 //! at it: a session already running follows a switch within about half a minute
 //! ([`crate::switch::ADOPTION_CEILING_SECONDS`]), and one that has reached its limit has
 //! already stopped. While a file sits behind the keychain, a running session follows only
@@ -25,7 +26,7 @@
 //! until it can. Every limit at the share is judged, and each reason it does not switch away
 //! from one is said and recorded once for that limit and its reset. What it never does:
 //!
-//! - switch to an account without room below the share in every limit it has;
+//! - switch to an account at any enabled share, or with any limit used up;
 //! - switch back by itself. The next time the account in use reaches the share, the best
 //!   account there is is chosen again, which may be the one it left;
 //! - switch away from one limit of an account twice before that limit resets. Somebody who
@@ -93,10 +94,38 @@ impl Default for Threshold {
 }
 
 /// How Pitboard switches by itself: at what share, and to which account first.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {
+    /// The share for five-hour and unclassified limits.
     pub threshold: Threshold,
+    /// No weekly trigger when absent; exhausted weekly limits still exclude a destination.
+    pub weekly: Option<Threshold>,
     pub order: Order,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Threshold::DEFAULT.into()
+    }
+}
+
+impl From<Threshold> for Policy {
+    fn from(threshold: Threshold) -> Self {
+        Self {
+            threshold,
+            weekly: Some(threshold),
+            order: Order::default(),
+        }
+    }
+}
+
+impl Policy {
+    pub fn shares(self) -> usage::Shares {
+        usage::Shares {
+            at: self.threshold.percent(),
+            weekly: self.weekly.map(Threshold::percent),
+        }
+    }
 }
 
 /// Why Pitboard switches by itself.
@@ -372,7 +401,7 @@ fn answered(row: &Row) -> Option<&Snapshot> {
 /// What Pitboard would do about `current`, the Claude Code account in use, from `rows`, as
 /// `state` and `ledger` stand at `now`, under `policy`.
 ///
-/// Every limit at the share is judged, the furthest past it first. One already switched away
+/// Every limit at its share is judged, the fullest first. One already switched away
 /// from, or tried for as often as it is tried, leaves the next to be judged on its own: where
 /// none is left, it is said why of the furthest at once, since nothing will be tried. Only one
 /// left to try is held back, by the account settling or by a failed attempt's wait, and either
@@ -400,11 +429,11 @@ pub(crate) fn decide(
     else {
         return Decision::NoReading;
     };
-    let share = policy.threshold.percent();
+    let shares = policy.shares();
     let mut reached: Vec<&Window> = reading
         .windows
         .iter()
-        .filter(|window| window.reached(share, now))
+        .filter(|window| shares.reached(window, now))
         .collect();
     reached.sort_by(|a, b| fuller(a, b, now));
     let Some(&furthest) = reached.first() else {
@@ -469,7 +498,7 @@ pub(crate) fn decide(
         policy.order,
         candidates().filter_map(|row| {
             let theirs = answered(row)?;
-            let room = usage::room(theirs, &reading.windows, limit, share, now)?;
+            let room = usage::room(theirs, &reading.windows, limit, shares, now)?;
             Some((row, room))
         }),
     );
@@ -511,11 +540,11 @@ fn early(
     {
         return None;
     }
-    let share = policy.threshold.percent();
+    let shares = policy.shares();
     let (to_row, room) = usage::preferred(
         Order::ResetsSoonest,
         goes(rows, &current, now).filter_map(|row| {
-            let room = usage::resets_first(answered(row)?, reading, share, now)?;
+            let room = usage::resets_first(answered(row)?, reading, shares, now)?;
             ledger.open_early(&row.id, room.week).then_some((row, room))
         }),
     )?;
@@ -1020,6 +1049,7 @@ mod tests {
             ledger,
             Policy {
                 threshold,
+                weekly: Some(threshold),
                 order: Order::MostLeft,
             },
             now,
@@ -1165,6 +1195,180 @@ mod tests {
     #[test]
     fn a_limit_shown_at_the_share_is_at_the_share() {
         assert_eq!(to(&decided(&[work_at(94.5), spare()])), Some("spare"));
+    }
+
+    fn split(weekly: Option<u8>) -> Policy {
+        Policy {
+            threshold: Threshold::new(93).unwrap(),
+            weekly: weekly.map(|at| Threshold::new(at).unwrap()),
+            order: Order::MostLeft,
+        }
+    }
+
+    fn at_policy(rows: &[Row], policy: Policy) -> Decision {
+        decided_by(&state_of(rows), rows, &Ledger::default(), policy, NOW)
+    }
+
+    #[test]
+    fn each_period_reaches_its_own_share_as_drawn() {
+        for (session, weekly, reached) in [
+            (92.4, 93.0, None),
+            (92.4, 98.4, None),
+            (92.5, 98.4, Some(LimitKind::Session)),
+            (10.0, 98.5, Some(LimitKind::WeeklyAll)),
+            (93.0, 99.0, Some(LimitKind::WeeklyAll)),
+        ] {
+            let work = row(
+                "work",
+                true,
+                vec![window("session", session), window("weekly_all", weekly)],
+            );
+            let decision = at_policy(&[work, spare()], split(Some(99)));
+            match reached {
+                Some(kind) => {
+                    let Decision::Switch(plan) = decision else {
+                        panic!("expected a switch at {session}/{weekly}: {decision:?}")
+                    };
+                    assert_eq!(plan.limit().kind, kind);
+                    assert_eq!(plan.to.label, "spare");
+                }
+                None => assert!(matches!(decision, Decision::Below { .. }), "{decision:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn weekly_off_ignores_weekly_limits_without_disabling_the_five_hour_trigger() {
+        for weekly in [
+            window("weekly_all", 100.0),
+            scoped("weekly_scoped", "Opus", 100.0),
+            window("weekly_future", 100.0),
+        ] {
+            let work = row("work", true, vec![window("session", 10.0), weekly]);
+            let mut rows = [work, spare()];
+            assert!(matches!(
+                at_policy(&rows, split(None)),
+                Decision::Below { .. }
+            ));
+            rows[0].usage.as_mut().unwrap().windows[0].percent = 92.5;
+            assert_eq!(to(&at_policy(&rows, split(None))), Some("spare"));
+        }
+    }
+
+    #[test]
+    fn scoped_and_named_weekly_limits_follow_the_weekly_share() {
+        for kind in ["weekly_all", "weekly_scoped", "weekly_future", "seven_day"] {
+            let work = |percent| {
+                row(
+                    "work",
+                    true,
+                    vec![window("session", 10.0), scoped(kind, "Opus", percent)],
+                )
+            };
+            assert!(matches!(
+                at_policy(&[work(98.4), spare()], split(Some(99))),
+                Decision::Below { .. }
+            ));
+            assert_eq!(
+                to(&at_policy(&[work(98.5), spare()], split(Some(99)))),
+                Some("spare")
+            );
+        }
+        let unknown = row("work", true, vec![window("new_limit", 92.5)]);
+        assert_eq!(
+            to(&at_policy(&[unknown, spare()], split(None))),
+            Some("spare")
+        );
+    }
+
+    #[test]
+    fn destinations_have_room_under_each_periods_own_share() {
+        for (session, weekly, accepted) in [
+            (10.0, 96.0, true),
+            (10.0, 98.4, true),
+            (10.0, 98.5, false),
+            (92.5, 10.0, false),
+        ] {
+            let candidate = row(
+                "spare",
+                false,
+                vec![window("session", session), window("weekly_all", weekly)],
+            );
+            let decision = at_policy(&[work_at(93.0), candidate], split(Some(99)));
+            assert_eq!(
+                to(&decision).is_some(),
+                accepted,
+                "{session}/{weekly}: {decision:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn disabling_weekly_still_refuses_a_destination_whose_week_is_used_up() {
+        for kind in ["weekly_all", "weekly_scoped", "weekly_future"] {
+            for (percent, reset, accepted) in [
+                (99.9, NOW + 3600, true),
+                (100.0, NOW + 3600, false),
+                (101.0, NOW + 3600, false),
+                (100.0, NOW, true),
+            ] {
+                let week = Window {
+                    resets_at: Some(reset),
+                    ..scoped(kind, "Opus", percent)
+                };
+                let candidate = row("spare", false, vec![window("session", 10.0), week]);
+                let decision = at_policy(&[work_at(93.0), candidate], split(None));
+                assert_eq!(
+                    to(&decision).is_some(),
+                    accepted,
+                    "{kind}/{percent}: {decision:?}"
+                );
+            }
+        }
+        let mut unread = spare();
+        let reading = unread.usage.as_mut().unwrap();
+        reading.lists_every_limit = false;
+        reading
+            .windows
+            .retain(|window| window.kind == LimitKind::Session);
+        assert!(no_room(&at_policy(&[work_at(93.0), unread], split(None))));
+    }
+
+    #[test]
+    fn changing_the_weekly_share_keeps_the_same_windows_attempts_and_switch() {
+        let rows = [
+            row(
+                "work",
+                true,
+                vec![window("session", 10.0), window("weekly_all", 99.0)],
+            ),
+            spare(),
+        ];
+        let state = state_of(&rows);
+        let plan = plan(&rows);
+        let mut ledger = Ledger::default();
+        ledger.attempt(&plan, NOW);
+        assert!(matches!(
+            decided_by(&state, &rows, &ledger, split(Some(99)), NOW),
+            Decision::Waiting { .. }
+        ));
+        ledger.switched(&plan);
+        let saved = serde_json::to_value(&ledger).unwrap();
+        for policy in [split(None), split(Some(99)), split(Some(93))] {
+            let decision = decided_by(&state, &rows, &ledger, policy, NOW);
+            if policy.weekly.is_none() {
+                assert!(matches!(decision, Decision::Below { .. }));
+            } else {
+                assert!(matches!(
+                    decision,
+                    Decision::Hold(Hold {
+                        why: Skip::AlreadyLeft,
+                        ..
+                    })
+                ));
+            }
+            assert_eq!(serde_json::to_value(&ledger).unwrap(), saved);
+        }
     }
 
     #[test]
@@ -2080,6 +2284,8 @@ mod tests {
 
     #[test]
     fn a_share_is_between_fifty_and_ninety_nine() {
+        assert_eq!(Policy::default(), Policy::from(Threshold::DEFAULT));
+        assert_eq!(Policy::default().weekly, Some(Threshold::DEFAULT));
         assert_eq!(Threshold::new(49), None);
         assert_eq!(Threshold::new(100), None);
         assert_eq!(Threshold::new(50).map(Threshold::percent), Some(50));
@@ -2103,6 +2309,7 @@ mod tests {
 
     const SOONEST: Policy = Policy {
         threshold: Threshold::DEFAULT,
+        weekly: Some(Threshold::DEFAULT),
         order: Order::ResetsSoonest,
     };
 
@@ -2143,6 +2350,33 @@ mod tests {
         match soonest(rows, &Ledger::default(), NOW) {
             Decision::Switch(plan) => plan,
             other => panic!("a move before the share, not {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_early_move_uses_both_shares_and_refuses_an_exhausted_disabled_week() {
+        for (weekly_at, used, accepted) in [
+            (Some(99), 96.0, true),
+            (Some(99), 98.5, false),
+            (None, 99.9, true),
+            (None, 100.0, false),
+        ] {
+            let policy = Policy {
+                order: Order::ResetsSoonest,
+                ..split(weekly_at)
+            };
+            let mut candidate = weekly("spare", false, 10.0, 1);
+            candidate.usage.as_mut().unwrap().windows[1].percent = used;
+            let rows = [weekly("work", true, 30.0, 5), candidate];
+            let decision = at_policy(&rows, policy);
+            assert_eq!(
+                to(&decision).is_some(),
+                accepted,
+                "{weekly_at:?}/{used}: {decision:?}"
+            );
+            if let Decision::Switch(plan) = decision {
+                assert!(matches!(plan.why, Why::ResetsFirst { .. }));
+            }
         }
     }
 

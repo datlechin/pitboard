@@ -15,9 +15,11 @@ export const choices: { value: AtLimit; mac: string; win: string }[] = [
 ];
 
 // the pop-up's and the ComboBox's name, which says the share
-export const atLabel = (share: number) => `${heading} ${share}%`;
+export const atLabel = (share: number) => `${shareLabel} ${share}%`;
 // present/words/machine.rs `AT`: the share's field, beside When a limit reaches
-export const shareLabel = "At";
+export const shareLabel = "5-hour limit";
+export const weeklyLabel = "Weekly limits";
+export const weeklyToggle = { mac: "Use Weekly Limits", win: "Use weekly limits" };
 export const shareRange = "From 50% to 99%";
 
 // present/words/machine.rs `USE_FIRST` and `order_choice`: which account goes first, under At
@@ -46,3 +48,12 @@ export function warmHours(from: number, to: number): string {
 
 // present/words/machine.rs `warm_up`
 export const warm = { title: eachFront((front) => titled(front, "Warm-Up", "Warm-up")) };
+
+export function weeklyNote(on: boolean, order: Order): string {
+  const note = on
+    ? "The same threshold applies to overall and model-specific weekly limits."
+    : "Weekly usage does not trigger notifications or automatic switches. Accounts with no weekly usage left are still unavailable.";
+  return order === "resets-soonest"
+    ? `${note} Resets Soonest can still choose an account whose week resets earlier.`
+    : note;
+}

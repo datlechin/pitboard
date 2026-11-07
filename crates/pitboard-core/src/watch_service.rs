@@ -30,7 +30,7 @@ impl Switching {
         }
     }
 
-    /// The share it switches at, `None` where it never does.
+    /// The five-hour share, `None` where it never switches.
     pub fn at(self) -> Option<Threshold> {
         self.policy().map(|policy| policy.threshold)
     }
@@ -124,13 +124,22 @@ pub(crate) fn taken_away(ctx: &Context, permit: Permit) -> Result<bool> {
 
 const VERB: &str = "watch-service";
 
-// `pitboard watch`'s own options, after the job's marker. The order is written only where it
-// is not the default, so a service that switches as an earlier Pitboard did is written as it
-// wrote it.
+// Only departures from the old uniform share and default order need extra arguments, so a
+// service that switches as an earlier Pitboard did is written as it wrote it.
 fn options(switching: Switching) -> Vec<String> {
     match switching {
-        Switching::At(Policy { threshold, order }) => {
+        Switching::At(Policy {
+            threshold,
+            weekly,
+            order,
+        }) => {
             let mut options = vec!["--at".to_string(), threshold.percent().to_string()];
+            if weekly != Some(threshold) {
+                options.extend([
+                    "--weekly-at".to_string(),
+                    weekly.map_or_else(|| "off".to_string(), |at| at.percent().to_string()),
+                ]);
+            }
             if order != Order::default() {
                 options.extend(["--order".to_string(), order.code().to_string()]);
             }
@@ -142,13 +151,38 @@ fn options(switching: Switching) -> Vec<String> {
 
 fn switching(options: &[String]) -> Option<Switching> {
     let threshold = |percent: &String| percent.parse().ok().and_then(Threshold::new);
-    let at = |threshold, order| Switching::At(Policy { threshold, order });
+    let at = |threshold, weekly, order| {
+        Switching::At(Policy {
+            threshold,
+            weekly,
+            order,
+        })
+    };
+    let weekly = |percent: &String| match percent.as_str() {
+        "off" => Some(None),
+        _ => threshold(percent).map(Some),
+    };
     match options {
         [at_flag, percent] if at_flag == "--at" => {
-            threshold(percent).map(|threshold| at(threshold, Order::default()))
+            threshold(percent).map(|threshold| at(threshold, Some(threshold), Order::default()))
         }
         [at_flag, percent, order_flag, order] if at_flag == "--at" && order_flag == "--order" => {
-            Some(at(threshold(percent)?, Order::from_code(order)?))
+            let threshold = threshold(percent)?;
+            Some(at(threshold, Some(threshold), Order::from_code(order)?))
+        }
+        [at_flag, percent, weekly_flag, week]
+            if at_flag == "--at" && weekly_flag == "--weekly-at" =>
+        {
+            Some(at(threshold(percent)?, weekly(week)?, Order::default()))
+        }
+        [at_flag, percent, weekly_flag, week, order_flag, order]
+            if at_flag == "--at" && weekly_flag == "--weekly-at" && order_flag == "--order" =>
+        {
+            Some(at(
+                threshold(percent)?,
+                weekly(week)?,
+                Order::from_code(order)?,
+            ))
         }
         [never] if never == "--no-switch" => Some(Switching::Never),
         _ => None,
@@ -216,6 +250,7 @@ mod tests {
     fn at(percent: u8) -> Switching {
         Switching::At(Policy {
             threshold: Threshold::new(percent).expect("a share there can be"),
+            weekly: Threshold::new(percent),
             order: Order::MostLeft,
         })
     }
@@ -223,6 +258,7 @@ mod tests {
     fn soonest(percent: u8) -> Switching {
         Switching::At(Policy {
             threshold: Threshold::new(percent).expect("a share there can be"),
+            weekly: Threshold::new(percent),
             order: Order::ResetsSoonest,
         })
     }
@@ -521,6 +557,73 @@ mod tests {
             &["--at", "90", "--no-switch"],
             &["--no-switch", "--once"],
             &["--no-switch=true"],
+        ] {
+            assert_eq!(switching(&given(unread)), None, "{unread:?}");
+        }
+    }
+
+    #[test]
+    fn independent_weekly_shares_and_off_read_back_from_each_service() {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
+            let ctx = machine.ctx(&[]);
+            for weekly in [Threshold::new(99), None] {
+                for order in [Order::MostLeft, Order::ResetsSoonest] {
+                    let policy = Policy {
+                        threshold: Threshold::new(93).unwrap(),
+                        weekly,
+                        order,
+                    };
+                    let switching = Switching::At(policy);
+                    let location =
+                        install(&ctx, Permit::for_a_test(), switching).expect("installed");
+                    assert_eq!(
+                        status(&ctx),
+                        Installed::Yes {
+                            location,
+                            switching: Some(switching)
+                        }
+                    );
+                    assert!(machine.written(&ctx).contains("--weekly-at"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn weekly_service_arguments_are_explicit_and_strict() {
+        let given = |words: &[&str]| words.iter().map(|o| (*o).to_string()).collect::<Vec<_>>();
+        for (weekly, value) in [(Threshold::new(99), "99"), (None, "off")] {
+            for order in [Order::MostLeft, Order::ResetsSoonest] {
+                let policy = Switching::At(Policy {
+                    threshold: Threshold::new(93).unwrap(),
+                    weekly,
+                    order,
+                });
+                let mut expected = given(&["--at", "93", "--weekly-at", value]);
+                if order != Order::MostLeft {
+                    expected.extend(given(&["--order", order.code()]));
+                }
+                assert_eq!(options(policy), expected);
+                assert_eq!(switching(&expected), Some(policy));
+            }
+        }
+        assert_eq!(switching(&given(&["--at", "93"])), Some(at(93)));
+        assert_eq!(
+            switching(&given(&["--at", "93", "--weekly-at", "93"])),
+            Some(at(93))
+        );
+        for unread in [
+            &["--at", "93", "--weekly-at"][..],
+            &["--at", "93", "--weekly-at", "100"],
+            &["--at", "93", "--weekly-at", "49"],
+            &["--at", "93", "--weekly-at", "OFF"],
+            &["--at", "93", "--weekly-at", "none"],
+            &["--weekly-at", "99"],
+            &["--weekly-at", "99", "--at", "93"],
+            &["--at", "93", "--weekly-at", "99", "--weekly-at", "off"],
+            &["--no-switch", "--weekly-at", "off"],
+            &["--at", "93", "--weekly-at", "off", "--once"],
+            &["--at", "93", "--weekly-at", "99", "--order", "soon"],
         ] {
             assert_eq!(switching(&given(unread)), None, "{unread:?}");
         }

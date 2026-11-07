@@ -6,6 +6,7 @@ import { map } from "nanostores";
 import {
   DAY,
   HOUR,
+  WEEK,
   MINUTE,
   ZONE,
   accounts as drawn,
@@ -75,6 +76,8 @@ export interface Preferences {
   // whether anybody chose, which hides the setup step that asks (present/setup.rs)
   chosen: boolean;
   share: number;
+  weeklyShare?: number;
+  weeklyOff?: boolean;
   order: Order;
 }
 
@@ -149,9 +152,9 @@ export interface State extends World {
   autoStanding: AutoStanding | null;
   // warm/mod.rs `Range` in minutes of the day, the accounts on by id, and when each last warmed
   warm: { from: number; to: number; on: string[]; started: Record<string, number> };
-  watchService: { at: number; order: Order } | null;
+  watchService: { at: number; order: Order; weekly?: number | null; switching?: boolean } | null;
   // a `pitboard watch` left running in a terminal, at the share it switches at, in its order
-  watching: { at: number; order: Order } | null;
+  watching: { at: number; order: Order; weekly?: number | null; switching?: boolean } | null;
   // the daily renewal schedule `pitboard schedule install` puts in place
   schedule: boolean;
   log: Logged[];
@@ -280,9 +283,30 @@ const usedUp = (l: Limit, now: number) => used(l, now) >= 100;
 const reached = (percent: number, share: number) => whole(percent) >= share;
 export const sameReset = (a: number, b: number) => Math.abs(a - b) < SAME_RESET;
 
-// usage::LimitKind, as a reading names it by its length
+// usage::LimitKind: explicit service names where present, otherwise the drawn period.
 const kind = (l: Limit) =>
-  l.lengthSeconds === 5 * HOUR ? "session" : l.scope ? "weekly_scoped" : "weekly_all";
+  l.kind === "five_hour"
+    ? "session"
+    : l.kind === "seven_day"
+      ? "weekly_all"
+      : (l.kind ??
+        (l.lengthSeconds === 5 * HOUR
+          ? "session"
+          : l.lengthSeconds === WEEK
+            ? l.scope
+              ? "weekly_scoped"
+              : "weekly_all"
+            : `period_${l.lengthSeconds}`));
+export const weeklyShare = (p: Pick<Preferences, "share" | "weeklyShare">) =>
+  p.weeklyShare ?? p.share;
+export const weeklyThreshold = (p: Pick<Preferences, "share" | "weeklyShare" | "weeklyOff">) =>
+  p.weeklyOff ? null : weeklyShare(p);
+export const limitShare = (l: Limit, share: number, weekly: number | null) =>
+  kind(l).startsWith("weekly_") ? weekly : share;
+const meets = (l: Limit, now: number, share: number, weekly: number | null) => {
+  const at = limitShare(l, share, weekly);
+  return at !== null && reached(used(l, now), at);
+};
 const sameLimit = (a: Limit, b: Limit) => kind(a) === kind(b) && a.scope === b.scope;
 const limitKey = (tool: Tool, id: string, l: Limit) => `${tool}/${id}/${kind(l)}/${l.scope ?? ""}`;
 
@@ -333,8 +357,10 @@ function below(
   limit: Limit | null,
   share: number,
   now: number,
+  weekly: number | null = share,
 ): Room | null {
-  if (theirs.length === 0 || theirs.some((l) => reached(used(l, now), share))) return null;
+  if (theirs.length === 0 || theirs.some((l) => usedUp(l, now) || meets(l, now, share, weekly)))
+    return null;
   const given = (had: Limit) => theirs.find((l) => sameLimit(l, had));
   const gives = (k: string) => theirs.some((l) => !l.scope && kind(l) === k);
   const other = (l: Limit) => !limit || !sameLimit(l, limit);
@@ -356,7 +382,8 @@ export const room = (
   limit: Limit,
   share: number,
   now: number,
-) => below(theirs, everyLimit, mine, limit, share, now);
+  weekly: number | null = share,
+) => below(theirs, everyLimit, mine, limit, share, now, weekly);
 
 // usage/order.rs `FRESH`: budget.rs `UNREACHABLE_MOST`
 export const FRESH = 900;
@@ -375,11 +402,12 @@ export function resetsFirst(
   share: number,
   now: number,
   readAt: number,
+  weekly: number | null = share,
 ): Room | null {
   const fresh = now - readAt <= FRESH;
   const first = comesBefore(weekOf(theirs, everyLimit, now), weekOf(mine, everyLimit, now));
   if (!fresh || !first || fiveHours(theirs, now) > fiveHours(mine, now)) return null;
-  return below(theirs, everyLimit, mine, null, share, now);
+  return below(theirs, everyLimit, mine, null, share, now, weekly);
 }
 
 // usage/order.rs `preferred`: the first of those alike
@@ -442,13 +470,19 @@ function openEarly(s: State, id: string, week: Week): boolean {
 }
 
 // autoswitch.rs `early`: a switch on the page is never refused, so no early move waits
-function early(s: State, from: Account, share: number, order: Order): Decision | null {
+function early(
+  s: State,
+  from: Account,
+  share: number,
+  order: Order,
+  weekly: number | null,
+): Decision | null {
   if (order !== "resets-soonest" || settling(s, from) !== null) return null;
   const best = preferred(
     "resets-soonest",
     goes(s, from).flatMap((a): [Account, Room][] => {
       if (a.unread) return [];
-      const r = resetsFirst(a.limits, from.limits, true, share, s.now, s.readAt);
+      const r = resetsFirst(a.limits, from.limits, true, share, s.now, s.readAt, weekly);
       return r && openEarly(s, a.id, r.week) ? [[a, r]] : [];
     }),
   );
@@ -459,7 +493,12 @@ function early(s: State, from: Account, share: number, order: Order): Decision |
 }
 
 // autoswitch.rs `decide`, for the Claude Code account in use at `share`, in `order`.
-export function decide(s: State, share: number, order: Order = "most-left"): Decision {
+export function decide(
+  s: State,
+  share: number,
+  order: Order = "most-left",
+  weekly: number | null = share,
+): Decision {
   const now = s.now;
   const from = current(s, "claude");
   if (!from || from.unread) return { decided: "no-reading" };
@@ -469,10 +508,10 @@ export function decide(s: State, share: number, order: Order = "most-left"): Dec
     return was !== undefined && sameReset(was, l.resetsAt ?? 0);
   };
   const reachedLimits = from.limits
-    .filter((l) => reached(used(l, now), share))
+    .filter((l) => meets(l, now, share, weekly))
     .sort((a, b) => fuller(a, b, now));
   if (reachedLimits.length === 0) {
-    const moved = early(s, from, share, order);
+    const moved = early(s, from, share, order, weekly);
     if (moved) return moved;
     const running = from.limits
       .filter((l) => l.resetsAt === null || l.resetsAt > now)
@@ -488,7 +527,7 @@ export function decide(s: State, share: number, order: Order = "most-left"): Dec
     order,
     goes(s, from).flatMap((a): [Account, Room][] => {
       if (a.unread) return [];
-      const r = room(a.limits, listsEveryLimit("claude"), from.limits, limit, share, now);
+      const r = room(a.limits, listsEveryLimit("claude"), from.limits, limit, share, now, weekly);
       return r ? [[a, r]] : [];
     }),
   );
@@ -511,12 +550,12 @@ function post(s: State, notice: Omit<Posted, "at">) {
 }
 
 // advice.rs `spare`: the account of the same tool there is room on for a switch away from `ran`.
-function spare(s: State, from: Account, ran: Limit, share: number) {
+function spare(s: State, from: Account, ran: Limit, share: number, weekly: number | null = share) {
   const best = preferred(
     s.preferences.order,
     s.accounts.flatMap((a): [Account, Room][] => {
       if (a.tool !== from.tool || a === from || a.unread || !switchable(a, s.now)) return [];
-      const r = room(a.limits, listsEveryLimit(a.tool), from.limits, ran, share, s.now);
+      const r = room(a.limits, listsEveryLimit(a.tool), from.limits, ran, share, s.now, weekly);
       return r ? [[a, r]] : [];
     }),
   );
@@ -575,12 +614,13 @@ function advise(s: State) {
   s.advice = tools.flatMap(([tool]) => standing.filter((a) => a.tool === tool).slice(0, 1));
 
   const { atLimit, share } = s.preferences;
+  const weekly = weeklyThreshold(s.preferences);
   if (atLimit === "nothing" || !s.running) return;
   for (const a of readTools(s)) {
-    const l = a.limits.find((l) => reached(used(l, now), share) && !told(s.told, a, l));
+    const l = a.limits.find((l) => meets(l, now, share, weekly) && !told(s.told, a, l));
     if (!l || (atLimit === "switch" && a.tool === "claude")) continue;
     s.told[limitKey(a.tool, a.id, l)] = l.resetsAt ?? 0;
-    const instead = spare(s, a, l, share);
+    const instead = spare(s, a, l, share, weekly);
     const then = instead
       ? otherUsed(instead.account.label, instead.left)
       : l.resetsAt !== null
@@ -610,17 +650,18 @@ const RESETS_FIRST = eachFront((f) =>
 // state.rs `tell_first` and advice.rs `First::about`, told once for the week it is about
 function tellFirst(s: State) {
   const { atLimit, share, order } = s.preferences;
+  const weekly = weeklyThreshold(s.preferences);
   if (order !== "resets-soonest") return;
   const now = s.now;
   for (const a of readTools(s)) {
     if (a.unread || (atLimit === "switch" && a.tool === "claude")) continue;
-    if (a.limits.some((l) => reached(used(l, now), share))) continue;
+    if (a.limits.some((l) => meets(l, now, share, weekly))) continue;
     const every = listsEveryLimit(a.tool);
     const best = preferred(
       "resets-soonest",
       s.accounts.flatMap((o): [Account, Room][] => {
         if (o.tool !== a.tool || o === a || o.unread || !switchable(o, now)) return [];
-        const r = resetsFirst(o.limits, a.limits, every, share, now, s.readAt);
+        const r = resetsFirst(o.limits, a.limits, every, share, now, s.readAt, weekly);
         return r ? [[o, r]] : [];
       }),
     );
@@ -662,11 +703,19 @@ const NOT_SWITCHING = eachFront((f) =>
 function lookToSwitch(s: State) {
   const app = s.running && s.preferences.atLimit === "switch";
   const policy = app
-    ? { at: s.preferences.share, order: s.preferences.order }
-    : (s.watchService ?? s.watching);
-  if (!policy) return;
+    ? {
+        at: s.preferences.share,
+        order: s.preferences.order,
+        weekly: weeklyThreshold(s.preferences),
+        switching: true,
+      }
+    : s.watchService?.switching === false
+      ? s.watching
+      : (s.watchService ?? s.watching);
+  if (!policy || policy.switching === false) return;
   const share = policy.at;
-  const decision = decide(s, share, policy.order);
+  const weekly = policy.weekly === undefined ? share : policy.weekly;
+  const decision = decide(s, share, policy.order, weekly);
   const from = current(s, "claude");
   // switch/auto.rs `met_a_limit`: the account in use at a limit may be moved to early again
   if (decision.decided === "hold" || (decision.decided === "switch" && decision.limit))
@@ -703,7 +752,7 @@ function lookToSwitch(s: State) {
     case "hold": {
       const { limit, why } = decision;
       const key = `skipped/${from!.label}/${kind(limit)}/${limit.scope ?? ""}/${limit.resetsAt ?? 0}/${why.code}`;
-      const said = notSwitching(why, share);
+      const said = notSwitching(why, share, weekly);
       const back = s.switchedBack;
       if (back?.until != null && back.until <= s.now) s.switchedBack = null;
       const quiet = why.code !== "no_room" && s.switchedBack?.from === from!.label;
@@ -1138,18 +1187,20 @@ export function signInAgain(tool: Tool, label: string, caller: Caller = "app"): 
 }
 
 // When a limit reaches: kept at once, then advised on and looked at again (state.rs `at_limit_set`).
-export function setChoice(atLimit: AtLimit) {
+export function setChoice(atLimit: AtLimit, system: System = "macos") {
   change((s) => {
     s.preferences = { ...s.preferences, atLimit, chosen: true };
+    syncWatch(s, system);
     if (atLimit !== "switch") s.autoStanding = null;
     afterChange(s);
   });
 }
 
 // Use first: kept at once, then advised on and looked at again (state.rs `order_set`).
-export function setOrder(order: Order) {
+export function setOrder(order: Order, system: System = "macos") {
   change((s) => {
     s.preferences = { ...s.preferences, order };
+    syncWatch(s, system);
     afterChange(s);
   });
 }
@@ -1157,11 +1208,37 @@ export function setOrder(order: Order) {
 // autoswitch.rs `Threshold::clamped`
 export const clamped = (share: number) => Math.min(HIGHEST, Math.max(LOWEST, Math.round(share)));
 
-export function setShare(share: number) {
+export function setShare(share: number, system: System = "macos") {
   change((s) => {
-    s.preferences = { ...s.preferences, share: clamped(share), chosen: true };
+    s.preferences = {
+      ...s.preferences,
+      weeklyShare: weeklyShare(s.preferences),
+      share: clamped(share),
+      chosen: true,
+    };
+    syncWatch(s, system);
     afterChange(s);
   });
+}
+
+export function setWeeklyLimit(on: boolean, at: number, system: System = "macos") {
+  change((s) => {
+    s.preferences = { ...s.preferences, weeklyShare: clamped(at), weeklyOff: !on, chosen: true };
+    syncWatch(s, system);
+    afterChange(s);
+  });
+}
+
+// state.rs `watch_as_limits_says`: only a host without a status item offers and manages
+// background watching. A CLI-installed service on other hosts keeps its own policy.
+function syncWatch(s: State, system: System) {
+  if (!surfaces(system).statusItem && s.watchService)
+    s.watchService = {
+      at: s.preferences.share,
+      order: s.preferences.order,
+      weekly: weeklyThreshold(s.preferences),
+      switching: s.preferences.atLimit === "switch",
+    };
 }
 
 // service.rs `warm_turn`, logged as the core logs it.
@@ -1207,9 +1284,24 @@ export function refresh() {
   });
 }
 
-export function installWatch(at: number, caller: Caller = "cli", order: Order = "most-left") {
+export function installWatch(
+  at: number,
+  caller: Caller = "cli",
+  order: Order = "most-left",
+  weekly: number | null = at,
+  switching = true,
+) {
   change((s) => {
-    s.watchService = { at: clamped(at), order };
+    s.watchService = {
+      at: clamped(at),
+      order,
+      weekly: weekly === null ? null : clamped(weekly),
+      ...(caller === "app"
+        ? { switching: s.preferences.atLimit === "switch" }
+        : switching
+          ? {}
+          : { switching: false }),
+    };
     record(s, caller, "watch-service", "install");
   });
 }
@@ -1483,15 +1575,21 @@ export function setSchedule(on: boolean, caller: Caller = "cli"): boolean {
 }
 
 // Not a change of its own: the watch's switches and warm-ups are.
-export function watchInTerminal(watching: { at: number; order: Order } | null) {
+export function watchInTerminal(
+  watching: { at: number; order: Order; weekly?: number | null; switching?: boolean } | null,
+) {
   change((s) => {
     s.watching = watching;
   }, false);
 }
 
 // `pitboard watch --once`: one decision at `share` in `order`, switching as a watch does.
-export function decideOnce(share: number, order: Order = "most-left"): Decision {
-  const decision = decide(model.get(), share, order);
+export function decideOnce(
+  share: number,
+  order: Order = "most-left",
+  weekly: number | null = share,
+): Decision {
+  const decision = decide(model.get(), share, order, weekly);
   // switch/auto.rs `met_a_limit`
   if (decision.decided === "hold")
     change((s) => {
@@ -1499,7 +1597,7 @@ export function decideOnce(share: number, order: Order = "most-left"): Decision 
     }, false);
   if (decision.decided !== "switch") return decision;
   return change((s) => {
-    const d = decide(s, share, order) as Extract<Decision, { decided: "switch" }>;
+    const d = decide(s, share, order, weekly) as Extract<Decision, { decided: "switch" }>;
     const from = current(s, "claude")!;
     if (d.limit) {
       delete s.early[from.id];

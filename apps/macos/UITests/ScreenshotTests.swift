@@ -123,6 +123,7 @@ final class ScreenshotTests: FixtureTestCase {
         app.toolbars.buttons[Words.limits].click()
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
         raise(app.windows[Words.limits])
+        app.windows[Words.limits].scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -350)
         keep(app.windows[Words.limits], as: "macos-settings-limits-warm-up")
     }
 

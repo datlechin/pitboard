@@ -444,10 +444,12 @@ pub(crate) enum Answer {
     },
     /// What the core's look at whether to switch Claude Code by itself came to.
     AutoLooked {
+        policy: Policy,
         looked: Result<AutoLooked, PitboardError>,
     },
     /// What switching Claude Code by itself came to.
     AutoSwitched {
+        policy: Policy,
         done: Result<AutoSwitched, PitboardError>,
     },
     /// What a warm-up came to: one by itself, or of the account `asked`, somebody asked for
@@ -1545,6 +1547,19 @@ impl State {
                 }
             }
             Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
+            Intent::SetAtLimitChoice { choice } => {
+                self.at_limit_set(choice, self.preferences.threshold().percent(), jobs)
+            }
+            Intent::SetAtLimitShare { at } => {
+                self.at_limit_set(self.preferences.at_limit(), at, jobs)
+            }
+            Intent::SetWeeklyLimit { on, at } => self.weekly_limit_set(on, at, jobs),
+            Intent::SetWeeklyLimitEnabled { on } => {
+                self.weekly_limit_set(on, self.preferences.weekly_threshold().percent(), jobs)
+            }
+            Intent::SetWeeklyLimitShare { at } => {
+                self.weekly_limit_set(!self.preferences.auto_switch_weekly_off, at, jobs)
+            }
             Intent::SetOrder { order } => self.order_set(order, jobs),
             Intent::SetShowPace { on } => self.show_pace_set(on, jobs),
             Intent::DeclineTip { tip } => self.put_away(tip, jobs),
@@ -2561,9 +2576,9 @@ impl State {
         if choice == AtLimit::Nothing {
             return false;
         }
-        let at = self.preferences.threshold().percent();
+        let policy = self.preferences.policy();
         let mut kept = false;
-        for heads_up in HeadsUp::about(read, tools, &self.told, at, self.preferences.order()) {
+        for heads_up in HeadsUp::about(read, tools, &self.told, policy) {
             if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude {
                 continue;
             }
@@ -2647,6 +2662,11 @@ impl State {
         if self.preferences.at_limit() == choice && self.preferences.auto_switch_at == at {
             return;
         }
+        // Freeze the inherited weekly share before the first edit of the short one.
+        if self.preferences.auto_switch_weekly_at.is_none() {
+            self.preferences.auto_switch_weekly_at =
+                Some(i64::from(self.preferences.weekly_threshold().percent()));
+        }
         self.preferences.choose(choice);
         self.preferences.auto_switch_at = at;
         jobs.push(Job::KeepPreferences {
@@ -2656,6 +2676,31 @@ impl State {
             self.auto_standing = None;
             self.auto_refusals.ended();
         }
+        if let Some(status) = self.status.clone()
+            && !self.standing_in
+        {
+            self.advise(&status, jobs);
+        }
+        self.look_to_switch(jobs);
+        self.watch_as_limits_says(jobs);
+    }
+
+    fn weekly_limit_set(&mut self, on: bool, at: u8, jobs: &mut Vec<Job>) {
+        if !self.preferences_read {
+            return;
+        }
+        let at = Some(i64::from(Threshold::clamped(i64::from(at)).percent()));
+        if self.preferences.auto_switch_weekly_off == !on
+            && self.preferences.auto_switch_weekly_at == at
+        {
+            return;
+        }
+        self.preferences.choose(self.preferences.at_limit());
+        self.preferences.auto_switch_weekly_at = at;
+        self.preferences.auto_switch_weekly_off = !on;
+        jobs.push(Job::KeepPreferences {
+            preferences: self.preferences.clone(),
+        });
         if let Some(status) = self.status.clone()
             && !self.standing_in
         {
@@ -2744,14 +2789,15 @@ impl State {
     /// asked for. Files the core could not read decide nothing, which each read says too.
     fn auto_looked(
         &mut self,
+        policy: Policy,
         looked: Result<AutoLooked, PitboardError>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        self.decide_later(now);
-        if !self.switches() {
+        if !self.switches() || policy != self.preferences.policy() {
             return;
         }
+        self.decide_later(now);
         match looked {
             Ok(AutoLooked::Stands(outcome)) => self.auto_stands(*outcome, now, jobs),
             Ok(AutoLooked::Act) => self.auto_act(now, jobs),
@@ -2783,6 +2829,7 @@ impl State {
     // A switch made as the setting was turned off is still said: nobody was there to ask for it.
     fn auto_switched(
         &mut self,
+        policy: Policy,
         done: Result<AutoSwitched, PitboardError>,
         now: Now,
         jobs: &mut Vec<Job>,
@@ -2840,6 +2887,12 @@ impl State {
                 }
             }
             _ if !self.switches() => self.switching = None,
+            Ok(_) if policy != self.preferences.policy() => {
+                self.switching = None;
+                // A current-policy look may already have returned while this decision held
+                // the claim. Ask again now that a new decision can act.
+                self.look_to_switch(jobs);
+            }
             Ok(outcome) => {
                 self.switching = None;
                 self.auto_stands(outcome, now, jobs);
@@ -3183,8 +3236,8 @@ impl State {
                 reopen,
                 done,
             } => self.switched(&account, reopen, done.map_err(Some), now, jobs),
-            Answer::AutoLooked { looked } => self.auto_looked(looked, now, jobs),
-            Answer::AutoSwitched { done } => self.auto_switched(done, now, jobs),
+            Answer::AutoLooked { policy, looked } => self.auto_looked(policy, looked, now, jobs),
+            Answer::AutoSwitched { policy, done } => self.auto_switched(policy, done, now, jobs),
             // The page says Pitboard opened the app only where it did.
             Answer::Opened {
                 tool,
