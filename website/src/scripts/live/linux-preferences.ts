@@ -98,9 +98,7 @@ class LinuxPreferences extends LiveFigure {
     this.#choice = dropdown("choice", "at-limit-choices", (v) =>
       setChoice(v as AtLimit, systemOf(this)),
     );
-    this.#order = dropdown("order", "order-choices", (v) =>
-      setOrder(v as Order, systemOf(this)),
-    );
+    this.#order = dropdown("order", "order-choices", (v) => setOrder(v as Order, systemOf(this)));
     const spin = (row: string) => {
       const el = this.#part(row);
       return [
@@ -260,7 +258,11 @@ class LinuxPreferences extends LiveFigure {
     if (a) return turnWarmUp(a.label, toggle.getAttribute("aria-checked") !== "true");
     switch (toggle.getAttribute("data-part")) {
       case "weekly-toggle":
-        return setWeeklyLimit(!!s.preferences.weeklyOff, weeklyShare(s.preferences), systemOf(this));
+        return setWeeklyLimit(
+          !!s.preferences.weeklyOff,
+          weeklyShare(s.preferences),
+          systemOf(this),
+        );
       case "start-at-login":
         return setGeneral({ opensAtLogin: !s.general.opensAtLogin });
       case "renew":
