@@ -1243,6 +1243,7 @@ mod tests {
             "Use weekly limits"
         );
         assert_eq!(weekly_limit_title(Front::MacMenuBar), "Use Weekly Limits");
+        assert_eq!(weekly_limit_label(95), "Weekly limits 95%");
         assert_eq!(weekly_limit_label(99), "Weekly limits 99%");
         assert!(
             weekly_limit_note(false, SwitchOrder::ResetsSoonest)
