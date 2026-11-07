@@ -680,7 +680,7 @@ public sealed class SettingsPageTests
         await Expand(page, "settings.warm", "work");
 
         var toggles = Views.Visible<ToggleSwitch>(page).ToArray();
-        Assert.HasCount(5, toggles, "start at sign-in, two warm-ups, daily renewal and automatic checks");
+        Assert.HasCount(6, toggles, "start at sign-in, Show Pace, two warm-ups, daily renewal and automatic checks");
         foreach (var toggle in toggles)
         {
             var card = Card(toggle);
