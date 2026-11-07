@@ -249,6 +249,8 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.control("settings.warmFrom").exists)
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
 
+        // The independent weekly controls make this pane scroll before its account toggles.
+        app.windows[Words.limits].scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -350)
         XCTAssertTrue(work.isHittable)
         work.click()
         XCTAssertTrue(work.wait(until: "value == 1", timeout: 5))

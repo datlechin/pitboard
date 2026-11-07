@@ -95,8 +95,12 @@ class LinuxPreferences extends LiveFigure {
         box.addEventListener(type, () => this.#placeList(box, list), true);
       return combobox(box, list, "dropdown", choose);
     };
-    this.#choice = dropdown("choice", "at-limit-choices", (v) => setChoice(v as AtLimit));
-    this.#order = dropdown("order", "order-choices", (v) => setOrder(v as Order));
+    this.#choice = dropdown("choice", "at-limit-choices", (v) =>
+      setChoice(v as AtLimit, systemOf(this)),
+    );
+    this.#order = dropdown("order", "order-choices", (v) =>
+      setOrder(v as Order, systemOf(this)),
+    );
     const spin = (row: string) => {
       const el = this.#part(row);
       return [
@@ -118,7 +122,7 @@ class LinuxPreferences extends LiveFigure {
         const n = Number(typed.trim().replace(/%$/, "").trim());
         return typed.trim() === "" || Number.isNaN(n) ? null : n;
       },
-      take: setShare,
+      take: (at) => setShare(at, systemOf(this)),
     });
     this.#weekly = gtkSpin(...spin("weekly-share"), {
       min: LOWEST,
@@ -131,7 +135,7 @@ class LinuxPreferences extends LiveFigure {
         const n = Number(typed.trim().replace(/%$/, "").trim());
         return typed.trim() === "" || Number.isNaN(n) ? null : n;
       },
-      take: (at) => setWeeklyLimit(!model.get().preferences.weeklyOff, at),
+      take: (at) => setWeeklyLimit(!model.get().preferences.weeklyOff, at, systemOf(this)),
     });
     const hour = { min: 0, max: DAY - 1, step: 15, page: 60, wrap: true, said: clock };
     this.#from = gtkSpin(...spin("from"), {
@@ -256,7 +260,7 @@ class LinuxPreferences extends LiveFigure {
     if (a) return turnWarmUp(a.label, toggle.getAttribute("aria-checked") !== "true");
     switch (toggle.getAttribute("data-part")) {
       case "weekly-toggle":
-        return setWeeklyLimit(!!s.preferences.weeklyOff, weeklyShare(s.preferences));
+        return setWeeklyLimit(!!s.preferences.weeklyOff, weeklyShare(s.preferences), systemOf(this));
       case "start-at-login":
         return setGeneral({ opensAtLogin: !s.general.opensAtLogin });
       case "renew":

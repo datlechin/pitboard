@@ -648,6 +648,7 @@ final class SiteFiguresTests: FixtureTestCase {
             "toggle: \(kind(personal.elementType))\nfrom: \(kind(from.elementType))\n"
                 + tree(of: app.windows["Limits"]),
             as: "site-limits-warm-up")
+        app.windows["Limits"].scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -350)
         keep(app.windows["Limits"], as: "site-limits-warm-up")
         XCTAssertEqual(personal.elementType, .switch)
         XCTAssertEqual(from.elementType, .datePicker)

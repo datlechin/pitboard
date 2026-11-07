@@ -26,6 +26,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   model answers.
 - Changing the switching policy discards outdated checks and skipped-switch notices while
   still reporting completed switches.
+- The website's command examples respect `--no-switch`, and its settings leave a separately
+  installed watch service alone where the app has a status item.
 
 ## [1.0.0-beta.10] - 2026-11-03
 

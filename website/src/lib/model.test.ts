@@ -1513,13 +1513,13 @@ test("weekly notification policy applies to both providers and keeps manual exha
   reset();
 });
 
-test("installed watching follows independent settings and keeps weekly off after the app closes", () => {
+test("GNOME installed watching follows independent settings and keeps weekly off after the app closes", () => {
   const s = rows(row("work", [session(20), weekly(100)]), spare());
   s.preferences = { atLimit: "nothing", chosen: true, share: 93, order: "most-left" };
   model.set(s);
   installWatch(93, "app");
-  setWeeklyLimit(false, 99);
-  setChoice("switch");
+  setWeeklyLimit(false, 99, "gnome");
+  setChoice("switch", "gnome");
   assert.deepEqual(model.get().watchService, {
     at: 93,
     weekly: null,
@@ -1529,6 +1529,42 @@ test("installed watching follows independent settings and keeps weekly off after
   quit();
   advance(NOW + DECIDE_EVERY_SECONDS);
   assert.equal(model.get().inUse.claude, "work");
+  reset();
+});
+
+test("only a frontend without a status item keeps an installed watch service in step with settings", () => {
+  for (const system of systems) {
+    reset();
+    installWatch(80, "cli");
+    const installed = model.get().watchService;
+    const check = () => {
+      const p = model.get().preferences;
+      assert.deepEqual(
+        model.get().watchService,
+        surfaces(system).statusItem
+          ? installed
+          : {
+              at: p.share,
+              weekly: weeklyThreshold(p),
+              order: p.order,
+              switching: p.atLimit === "switch",
+            },
+        system,
+      );
+    };
+    setWeeklyLimit(true, 99, system);
+    check();
+    setShare(90, system);
+    check();
+    setOrder("resets-soonest", system);
+    check();
+    setChoice("switch", system);
+    check();
+    setWeeklyLimit(false, 99, system);
+    check();
+    setChoice("notify", system);
+    check();
+  }
   reset();
 });
 

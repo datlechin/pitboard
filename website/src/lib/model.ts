@@ -1187,20 +1187,20 @@ export function signInAgain(tool: Tool, label: string, caller: Caller = "app"): 
 }
 
 // When a limit reaches: kept at once, then advised on and looked at again (state.rs `at_limit_set`).
-export function setChoice(atLimit: AtLimit) {
+export function setChoice(atLimit: AtLimit, system: System = "macos") {
   change((s) => {
     s.preferences = { ...s.preferences, atLimit, chosen: true };
-    syncWatch(s);
+    syncWatch(s, system);
     if (atLimit !== "switch") s.autoStanding = null;
     afterChange(s);
   });
 }
 
 // Use first: kept at once, then advised on and looked at again (state.rs `order_set`).
-export function setOrder(order: Order) {
+export function setOrder(order: Order, system: System = "macos") {
   change((s) => {
     s.preferences = { ...s.preferences, order };
-    syncWatch(s);
+    syncWatch(s, system);
     afterChange(s);
   });
 }
@@ -1208,7 +1208,7 @@ export function setOrder(order: Order) {
 // autoswitch.rs `Threshold::clamped`
 export const clamped = (share: number) => Math.min(HIGHEST, Math.max(LOWEST, Math.round(share)));
 
-export function setShare(share: number) {
+export function setShare(share: number, system: System = "macos") {
   change((s) => {
     s.preferences = {
       ...s.preferences,
@@ -1216,22 +1216,23 @@ export function setShare(share: number) {
       share: clamped(share),
       chosen: true,
     };
-    syncWatch(s);
+    syncWatch(s, system);
     afterChange(s);
   });
 }
 
-export function setWeeklyLimit(on: boolean, at: number) {
+export function setWeeklyLimit(on: boolean, at: number, system: System = "macos") {
   change((s) => {
     s.preferences = { ...s.preferences, weeklyShare: clamped(at), weeklyOff: !on, chosen: true };
-    syncWatch(s);
+    syncWatch(s, system);
     afterChange(s);
   });
 }
 
-// An installed service follows changes made in the app, including either threshold.
-function syncWatch(s: State) {
-  if (s.watchService)
+// state.rs `watch_as_limits_says`: only a host without a status item offers and manages
+// background watching. A CLI-installed service on other hosts keeps its own policy.
+function syncWatch(s: State, system: System) {
+  if (!surfaces(system).statusItem && s.watchService)
     s.watchService = {
       at: s.preferences.share,
       order: s.preferences.order,

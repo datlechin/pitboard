@@ -22,6 +22,7 @@ import {
   type State,
 } from "../../lib/model.ts";
 import { atLimitNote, autoStandingSaid } from "../../lib/words.ts";
+import { systemOf } from "../../lib/platform.ts";
 
 const said = (el: Element | null, text: string) => {
   if (el && el.textContent!.trim() !== text) el.textContent = text;
@@ -58,17 +59,19 @@ export class AtLimitControls {
     this.#weeklyToggle = root.querySelector<HTMLButtonElement>("[data-weekly-toggle]")!;
     this.#weeklyToggle.addEventListener("click", () => {
       const p = model.get().preferences;
-      setWeeklyLimit(!!p.weeklyOff, weeklyShare(p));
+      setWeeklyLimit(!!p.weeklyOff, weeklyShare(p), systemOf(root));
     });
-    const weekly = (at: number) => setWeeklyLimit(!model.get().preferences.weeklyOff, at);
+    const weekly = (at: number) =>
+      setWeeklyLimit(!model.get().preferences.weeklyOff, at, systemOf(root));
+    const share = (at: number) => setShare(at, systemOf(root));
     this.#box = part("at");
     this.#orderBox = part("order");
     const stepper = part<SVGElement>("stepper");
-    const choose = (v: string) => setChoice(v as AtLimit);
-    const order = (v: string) => setOrder(v as Order);
+    const choose = (v: string) => setChoice(v as AtLimit, systemOf(root));
+    const order = (v: string) => setOrder(v as Order, systemOf(root));
     if (stepper) {
       this.#choice = combobox(this.#box, part("choices"), "popup", choose);
-      this.#share = macShare(part<HTMLInputElement>("share"), stepper, setShare);
+      this.#share = macShare(part<HTMLInputElement>("share"), stepper, share);
       this.#weekly = macShare(
         part<HTMLInputElement>("weekly-share"),
         part<SVGElement>("weekly-stepper"),
@@ -82,7 +85,7 @@ export class AtLimitControls {
         part<HTMLInputElement>("share"),
         root.querySelector("[data-spin=up]")!,
         root.querySelector("[data-spin=down]")!,
-        setShare,
+        share,
       );
       const card = root.querySelector("[data-weekly-card]")!;
       this.#weekly = numberBox(
