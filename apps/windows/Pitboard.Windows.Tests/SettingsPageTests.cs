@@ -327,7 +327,7 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         var choice = Views.Element<ComboBox>(page, "settings.atLimit");
-        await Expand(page, "settings.atLimitGroup", "5-hour limit");
+        await Expand(page, "settings.atLimitGroup", "Use first");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
         Assert.IsTrue(choice.IsEnabled);
@@ -375,7 +375,7 @@ public sealed class SettingsPageTests
             },
         });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.atLimitGroup", "5-hour limit");
+        await Expand(page, "settings.atLimitGroup", "Use first");
 
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
         Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
@@ -505,7 +505,7 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
-        await Expand(page, "settings.atLimitGroup", "5-hour limit");
+        await Expand(page, "settings.atLimitGroup", "Weekly limits");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
@@ -821,7 +821,7 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "5-hour limit");
+        await Expand(page, "settings.atLimitGroup", "Weekly limits");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
