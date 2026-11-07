@@ -220,6 +220,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
+        raise(app.windows[Words.limits])
         let personal = app.control("settings.warm.claude/personal")
         let work = app.control("settings.warm.claude/work")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
@@ -229,6 +230,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.control("settings.warmFrom").exists)
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
 
+        XCTAssertTrue(work.isHittable)
         work.click()
         XCTAssertTrue(work.wait(until: "value == 1", timeout: 5))
     }
