@@ -19,7 +19,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
         "resets_at": "[time]"
       },
       "as_of": "[time]",
-      "held_until": null
+      "held_until": null,
+      "weekly_threshold": 95
     },
     "warnings": [],
     "error": null

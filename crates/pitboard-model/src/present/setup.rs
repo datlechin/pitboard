@@ -138,7 +138,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
         }),
         Footing::AtLimitUnchosen => Some(SetupStep {
             title: words::SWITCH_BEFORE_RUNNING_OUT.into(),
-            detail: words::at_limit_tip(seen.state.preferences.threshold().percent()),
+            detail: words::at_limit_tip(seen.state.preferences.policy()),
             // The settings say what the plans' terms may say of switching by itself.
             actions: vec![
                 Choice {

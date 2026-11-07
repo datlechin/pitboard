@@ -56,8 +56,13 @@ test("pitboard watch install prints what watch.rs writes, and where each system 
   const source = joined(repo("crates/pitboard/src/watch.rs"));
   const words = repo("crates/pitboard-core/src/words.rs").replace(/=\s+"/g, '= "');
   const [first, ...rest] = text(printed(sessions.watchInstall, "linux"));
-  // the share, then words.rs `first_by`, which says nothing under most-left
-  assert.ok(source.includes(`"${first.replace(/\d+%/, "{}%{}")}\\n{}{location}\\n\\n{}\\n",`));
+  // The published sample has one share; current watch.rs composes its policy clause,
+  // then words.rs `first_by`, which says nothing under most-left.
+  assert.ok(
+    source.includes(
+      `"${first.replace(/a limit of the account in use reaches \d+%/, "{}{}")}\\n{}{location}\\n\\n{}\\n",`,
+    ),
+  );
   assert.ok(source.includes(`"${rest[0]}\\n"`));
   const terms = rest.at(-1)!;
   const [said, url] = terms.split(": ");

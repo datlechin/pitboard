@@ -46,7 +46,7 @@ public sealed class SettingsTests
     }
 
     // The choice's name says the share it is made at.
-    private static bool Names(ComboBox choice, int share) =>
+    private static bool Names(AutomationElement choice, int share) =>
         Retry.WhileFalse(() => choice.Name.EndsWith($" {share}%", StringComparison.Ordinal), Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
 
     private static bool Says(Launched launched, string start, TimeSpan within) =>
@@ -93,6 +93,8 @@ public sealed class SettingsTests
         var choice = Control(launched, "settings.atLimit").AsComboBox();
         Expand(launched, "settings.atLimitGroup");
         var share = Control(launched, "settings.atLimitShare");
+        var weekly = Control(launched, "settings.weeklyLimit");
+        var weeklyShare = Control(launched, "settings.weeklyLimitShare");
 
         // Both are held back until the app's preferences have been read.
         Assert.IsTrue(Enables(choice, true));
@@ -100,22 +102,38 @@ public sealed class SettingsTests
         Assert.IsTrue(Enables(share, true));
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")), "nothing said while it does not switch");
         Assert.IsTrue(Names(choice, 95));
+        Assert.IsTrue(Names(weeklyShare, 95));
+        Assert.IsTrue(Becomes(weekly, ToggleState.On));
 
         choice.Select(SwitchAutomatically);
         Control(launched, "settings.autoSwitchStanding");
 
         share.Patterns.RangeValue.Pattern.SetValue(96);
         Assert.IsTrue(Names(choice, 96), "the model did not take the share");
+        Assert.IsTrue(Names(weeklyShare, 95), "editing the 5-hour share changed the weekly share");
+        weeklyShare.Patterns.RangeValue.Pattern.SetValue(99);
+        Assert.IsTrue(Names(weeklyShare, 99), "the model did not take the weekly share");
+        Assert.IsTrue(Names(choice, 96), "editing the weekly share changed the 5-hour share");
+        weekly.Patterns.Toggle.Pattern.Toggle();
+        Assert.IsTrue(Becomes(weekly, ToggleState.Off));
+        Assert.IsTrue(Enables(weeklyShare, false));
+        Assert.IsTrue(Enables(share, true));
+        weekly.Patterns.Toggle.Pattern.Toggle();
+        Assert.IsTrue(Becomes(weekly, ToggleState.On));
+        Assert.IsTrue(Enables(weeklyShare, true));
+        Assert.IsTrue(Names(weeklyShare, 99), "turning the weekly trigger back on lost its value");
 
         var order = Control(launched, "settings.atLimitOrder").AsComboBox();
         order.Select(ResetsSoonest);
         Assert.IsTrue(Says(
             launched,
-            "Pitboard switches Claude Code at 96%, and its running sessions follow within about 33 seconds. Before then, it switches",
+            "Pitboard switches Claude Code once a 5-hour limit reaches 96% or a weekly limit reaches 99%, and its running sessions follow within about 33 seconds. Before then, it switches",
             Shortly));
 
         choice.Select(DoNothing);
         Assert.IsTrue(Enables(share, false), "the share takes a value while nothing happens at it");
+        Assert.IsTrue(Enables(weekly, false));
+        Assert.IsTrue(Enables(weeklyShare, false));
         Assert.IsTrue(Enables(order, false), "nothing is switched to first while nothing happens at the share");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }

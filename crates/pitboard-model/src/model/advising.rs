@@ -702,6 +702,96 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 
+#[test]
+fn notifications_use_each_periods_share_and_weekly_off_preserves_exhaustion_advice() {
+    for choice in [AtLimit::Notify, AtLimit::Switch] {
+        let mut model = Hand::new();
+        let mut preferences = super::preferences::Preferences {
+            auto_switch_at: Some(93),
+            auto_switch_weekly_at: Some(99),
+            has_been_seen: true,
+            ..Default::default()
+        };
+        preferences.choose(choice);
+        model.give(super::state::Answer::Kept {
+            told: Told::new(),
+            preferences: Some((preferences, true)),
+            windows: None,
+        });
+        let read = |session, weekly| {
+            status(
+                [ProviderId::Claude, ProviderId::Codex]
+                    .into_iter()
+                    .flat_map(|tool| {
+                        [
+                            account(Some("work"))
+                                .of(tool)
+                                .signed_in()
+                                .limits(vec![
+                                    window("session", session).resets(Some(7_200)),
+                                    window("weekly_all", weekly).resets(Some(90_000)),
+                                ])
+                                .build(),
+                            account(Some("spare"))
+                                .of(tool)
+                                .limits(vec![
+                                    window("session", 10.0).resets(Some(9_000)),
+                                    window("weekly_all", 97.0).resets(Some(90_000)),
+                                ])
+                                .build(),
+                        ]
+                    })
+                    .collect(),
+            )
+        };
+        let mut machine = Stub::reading(Ok(read(20.0, 97.0)));
+        model.refresh(&mut machine);
+        assert!(
+            machine.posted.is_empty(),
+            "weekly usage below its own share"
+        );
+        machine.answer = Ok(read(93.0, 97.0));
+        model.refresh(&mut machine);
+        let count = if choice == AtLimit::Notify { 2 } else { 1 };
+        assert_eq!(machine.posted.len(), count);
+        assert!(
+            machine.posted.iter().all(|notice| notice
+                .button
+                .as_ref()
+                .is_some_and(|button| button.clicked.ends_with("/spare"))),
+            "a spare at 97% weekly is eligible under the 99% weekly share"
+        );
+        model.send(Intent::SetWeeklyLimit { on: false, at: 99 });
+        machine.answer = Ok(read(20.0, 100.0));
+        model.refresh(&mut machine);
+        assert_eq!(
+            machine.posted.len(),
+            count,
+            "weekly off emits no threshold notice"
+        );
+        assert_eq!(
+            model.state.advice.len(),
+            2,
+            "real exhaustion still offers a manual switch"
+        );
+        machine.answer = Ok(read(20.0, 99.0));
+        model.refresh(&mut machine);
+        model.send(Intent::SetWeeklyLimit { on: true, at: 99 });
+        model.run(&mut machine);
+        assert_eq!(
+            machine.posted.len(),
+            2 * count,
+            "weekly has its own deduplication key"
+        );
+        model.refresh(&mut machine);
+        assert_eq!(
+            machine.posted.len(),
+            2 * count,
+            "the same weekly reset is told only once"
+        );
+    }
+}
+
 // Back as the core judges it, before a reading says so.
 #[test]
 fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
@@ -851,7 +941,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_them() {
         words::at_limit_note(
             Front::MacMenuBar,
             AtLimit::Notify,
-            95,
+            pitboard_core::duty::autoswitch::Policy::default(),
             SwitchOrder::MostLeft,
             false,
             33

@@ -61,7 +61,7 @@ pub(crate) use glance::{GlanceText, glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, OrderChoice, PaceShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
-    WatchServiceShown,
+    WatchServiceShown, WeeklyLimitShown,
 };
 pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
 pub use removal::{OsRelease, Package, PackageRemoval, RemovalShown, package_removal};

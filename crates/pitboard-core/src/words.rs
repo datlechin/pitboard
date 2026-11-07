@@ -159,21 +159,31 @@ pub fn watching(
     said
 }
 
-/// Why Pitboard does not switch Claude Code away from a limit at `threshold`, as a clause
-/// that says what to do about it where anything can be done. It names no command, and no
-/// time, which each front end says in its own way: the app says it too.
+/// Why Pitboard does not switch, as a clause shared by the app and command line.
 pub fn not_switching(
     why: &crate::duty::autoswitch::Skip,
-    threshold: crate::duty::autoswitch::Threshold,
+    policy: impl Into<crate::duty::autoswitch::Policy>,
 ) -> String {
     use crate::duty::autoswitch::{SETTLING_SECONDS, Skip};
     use crate::duty::cadence::ATTEMPTS;
+    let policy = policy.into();
     match why {
         Skip::NoRoom { unread } => {
-            let room = format!(
-                "no other Claude Code account has room below {}% in every limit",
-                threshold.percent()
-            );
+            let short = policy.threshold.percent();
+            let room = match policy.weekly {
+                Some(weekly) if weekly == policy.threshold => {
+                    format!("no other Claude Code account has room below {short}% in every limit")
+                }
+                Some(weekly) => format!(
+                    "no other Claude Code account has room below {short}% in its 5-hour and other \
+                     limits and below {}% in its weekly limits",
+                    weekly.percent()
+                ),
+                None => format!(
+                    "no other Claude Code account has room below {short}% in its 5-hour and other \
+                     limits with no weekly limit used up"
+                ),
+            };
             if unread.is_empty() {
                 room
             } else {
@@ -200,6 +210,19 @@ pub fn not_switching(
              sessions use",
             names.join(", ")
         ),
+    }
+}
+
+/// When the policy triggers a switch, as a clause following "once".
+pub fn limit_policy(policy: crate::duty::autoswitch::Policy) -> String {
+    let short = policy.threshold.percent();
+    match policy.weekly {
+        Some(weekly) if weekly == policy.threshold => format!("a limit reaches {short}%"),
+        Some(weekly) => format!(
+            "a 5-hour limit reaches {short}% or a weekly limit reaches {}%",
+            weekly.percent()
+        ),
+        None => format!("a 5-hour limit reaches {short}% (weekly triggers are off)"),
     }
 }
 
@@ -1815,6 +1838,53 @@ mod tests {
         ] {
             assert!(!not_watching(&why).contains("pitboard "), "{why:?}");
         }
+    }
+
+    #[test]
+    fn limit_words_say_both_shares_and_when_the_weekly_trigger_is_off() {
+        use crate::duty::autoswitch::{Policy, Skip, Threshold};
+        let uniform = Policy::from(Threshold::new(93).unwrap());
+        let split = Policy {
+            weekly: Threshold::new(99),
+            ..uniform
+        };
+        let off = Policy {
+            weekly: None,
+            ..uniform
+        };
+        assert_eq!(limit_policy(uniform), "a limit reaches 93%");
+        assert_eq!(
+            limit_policy(split),
+            "a 5-hour limit reaches 93% or a weekly limit reaches 99%"
+        );
+        assert_eq!(
+            limit_policy(off),
+            "a 5-hour limit reaches 93% (weekly triggers are off)"
+        );
+
+        let no_room = Skip::NoRoom { unread: Vec::new() };
+        assert_eq!(
+            not_switching(&no_room, uniform),
+            "no other Claude Code account has room below 93% in every limit"
+        );
+        assert_eq!(
+            not_switching(&no_room, split),
+            "no other Claude Code account has room below 93% in its 5-hour and other limits \
+             and below 99% in its weekly limits"
+        );
+        assert_eq!(
+            not_switching(&no_room, off),
+            "no other Claude Code account has room below 93% in its 5-hour and other limits \
+             with no weekly limit used up"
+        );
+        let unread = Skip::NoRoom {
+            unread: vec!["spare".into()],
+        };
+        assert_eq!(
+            not_switching(&unread, split),
+            "no other Claude Code account has room below 93% in its 5-hour and other limits \
+             and below 99% in its weekly limits, and there is no reading of spare from Anthropic yet"
+        );
     }
 
     // A container whose only user is root seldom runs systemd, so Linux says what is missing.

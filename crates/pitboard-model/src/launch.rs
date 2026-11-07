@@ -16,7 +16,7 @@ use crate::{
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
-use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Policy, Skip, Threshold, Why};
+use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Policy, Skip, Why};
 use pitboard_core::duty::warm::{Overview, Range};
 use pitboard_core::duty::written::Written;
 use pitboard_core::provider::{self, ProviderId};
@@ -536,9 +536,8 @@ fn status_of(front: Front, done: service::Done<status::Report>) -> Status {
     }
 }
 
-/// What switching Claude Code by itself at `threshold` came to, as the model takes it, with
-/// what a switch warned of.
-fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> AutoSwitched {
+/// What switching Claude Code under `policy` came to, with its warnings.
+fn auto_switched(auto: Auto, warnings: Vec<Warning>, policy: Policy) -> AutoSwitched {
     match auto {
         Auto::Watching {
             account,
@@ -581,7 +580,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
         Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
             key: why.told_apart(&from, &limit),
             used: words::share_of_limit(&limit),
-            why: words::not_switching(&why, threshold),
+            why: words::not_switching(&why, policy),
             code: why.code(),
             until: match why {
                 Skip::Settling { until } => Some(until),
@@ -1053,7 +1052,7 @@ impl AppCore {
         changed(
             self.front,
             self.core().core.auto_switch(policy),
-            |auto, warnings| auto_switched(auto, warnings, policy.threshold),
+            |auto, warnings| auto_switched(auto, warnings, policy),
         )
     }
 
@@ -1065,7 +1064,7 @@ impl AppCore {
         Ok(
             match self.readable()?.core.auto_look(policy).said(self.front)? {
                 Look::Stands(auto) => {
-                    AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), policy.threshold)))
+                    AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), policy)))
                 }
                 Look::Act => AutoLooked::Act,
             },

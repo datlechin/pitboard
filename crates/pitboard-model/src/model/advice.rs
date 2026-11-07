@@ -8,7 +8,7 @@ use crate::{Account, Status};
 use pitboard_core::duty::autoswitch::Policy;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
-use pitboard_core::usage::{self, Order, Week, Window, same_reset, whole};
+use pitboard_core::usage::{self, Order, Shares, Week, Window, same_reset, whole};
 use std::collections::BTreeMap;
 
 /// The share, as drawn, an account to offer must be below in every limit: one the app draws
@@ -46,10 +46,11 @@ fn spare(
     ran: &Window,
     current: &Account,
     mine: &[&Account],
-    share: u8,
+    shares: impl Into<Shares>,
     order: Order,
     now: i64,
 ) -> Option<(String, Option<i64>, Key)> {
+    let shares = shares.into();
     let in_use = current
         .usage
         .as_ref()
@@ -57,7 +58,7 @@ fn spare(
     let (spare, room) = usage::preferred(
         order,
         switchable(mine).filter_map(|account| {
-            let room = usage::room(account.usage.as_ref()?, in_use, ran, share, now)?;
+            let room = usage::room(account.usage.as_ref()?, in_use, ran, shares, now)?;
             Some((account, room))
         }),
     )?;
@@ -213,8 +214,7 @@ impl HeadsUp {
         status: &Status,
         tools: &[ProviderId],
         told: &Told,
-        at: u8,
-        order: Order,
+        policy: Policy,
     ) -> Vec<HeadsUp> {
         in_use(status, tools)
             .into_iter()
@@ -225,14 +225,21 @@ impl HeadsUp {
                     .usage
                     .iter()
                     .flat_map(|usage| &usage.windows)
-                    .filter(|limit| limit.reached(at, status.now))
+                    .filter(|limit| policy.shares().reached(limit, status.now))
                     .find(|limit| !told_at_its_reset(told, found.provider, ran, limit))?;
                 Some(HeadsUp {
                     provider: found.provider,
                     tool: found.tool,
                     ran: ran.to_owned(),
                     window: limit.clone(),
-                    instead: spare(limit, found.current, &found.mine, at, order, status.now),
+                    instead: spare(
+                        limit,
+                        found.current,
+                        &found.mine,
+                        policy.shares(),
+                        policy.order,
+                        status.now,
+                    ),
                 })
             })
             .collect()
@@ -266,20 +273,20 @@ impl First {
         if policy.order != Order::ResetsSoonest {
             return Vec::new();
         }
-        let share = policy.threshold.percent();
+        let shares = policy.shares();
         let now = status.now;
         in_use(status, tools)
             .into_iter()
             .filter_map(|found| {
                 let ran = found.current.label.as_deref()?;
                 let mine = found.current.usage.as_ref()?;
-                if mine.windows.iter().any(|limit| limit.reached(share, now)) {
+                if mine.windows.iter().any(|limit| shares.reached(limit, now)) {
                     return None;
                 }
                 let (account, room) = usage::preferred(
                     Order::ResetsSoonest,
                     switchable(&found.mine).filter_map(|account| {
-                        let room = usage::resets_first(account.usage.as_ref()?, mine, share, now)?;
+                        let room = usage::resets_first(account.usage.as_ref()?, mine, shares, now)?;
                         Some((account, room))
                     }),
                 )?;
@@ -807,5 +814,47 @@ mod tests {
         let work = advice.renaming("work", "office");
         assert_eq!(work.ran, "office");
         assert_eq!(work.key_of(), "claude/office/session/");
+    }
+
+    #[test]
+    fn early_notices_follow_split_weekly_eligibility_without_offering_exhausted_accounts() {
+        use pitboard_core::duty::autoswitch::Threshold;
+        for tool in [ProviderId::Claude, ProviderId::Codex] {
+            for (weekly, used, offered) in [
+                (Some(99), 98.0, true),
+                (None, 99.9, true),
+                (None, 100.0, false),
+            ] {
+                let read = status(vec![
+                    account(Some("work"))
+                        .of(tool)
+                        .signed_in()
+                        .limits(vec![
+                            window("session", 40.0).resets(Some(9_000)),
+                            window("weekly_all", 97.0).resets(Some(500_000)),
+                        ])
+                        .build(),
+                    account(Some("spare"))
+                        .of(tool)
+                        .limits(vec![
+                            window("session", 20.0).resets(Some(9_000)),
+                            window("weekly_all", used).resets(Some(100_000)),
+                        ])
+                        .build(),
+                ]);
+                let policy = Policy {
+                    threshold: Threshold::new(93).expect("a share"),
+                    weekly: weekly.and_then(Threshold::new),
+                    order: Order::ResetsSoonest,
+                };
+                let first = First::about(&read, &[tool], &Told::new(), policy);
+                assert_eq!(!first.is_empty(), offered, "{tool:?} {weekly:?} {used}");
+                if let Some(first) = first.first() {
+                    assert_eq!(first.instead, "spare");
+                    let told = Told::from([(first.key_of(), first.week)]);
+                    assert!(First::about(&read, &[tool], &told, policy).is_empty());
+                }
+            }
+        }
     }
 }

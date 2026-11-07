@@ -42,6 +42,10 @@ import {
   setChoice,
   setOrder,
   setShare,
+  setWeeklyLimit,
+  weeklyShare,
+  weeklyThreshold,
+  installWatch,
   settle,
   showAppWindow,
   signInAgain,
@@ -197,6 +201,33 @@ function rows(...claude: Account[]): State {
   return s;
 }
 const to = (d: Decision) => (d.decided === "switch" ? d.to.label : null);
+
+test("independent weekly thresholds leave 93% alone and accept a weekly alternative below 99%", () => {
+  const current = row("work", [session(20), weekly(93)]);
+  assert.equal(decide(rows(current, spare()), 93, "most-left", 99).decided, "below");
+  const alternative = row("spare", [session(10), weekly(97)]);
+  assert.equal(to(decide(rows(workAt(93), alternative), 93, "most-left", 99)), "spare");
+  assert.equal(
+    to(decide(rows(row("work", [session(20), weekly(98.5)]), spare()), 93, "most-left", 99)),
+    "spare",
+  );
+});
+
+test("weekly off suppresses weekly triggers but excludes an actually exhausted replacement", () => {
+  assert.equal(
+    decide(rows(row("work", [session(20), weekly(100)]), spare()), 93, "most-left", null).decided,
+    "below",
+  );
+  assert.equal(
+    to(decide(rows(workAt(93), row("spare", [session(10), weekly(99.9)])), 93, "most-left", null)),
+    "spare",
+  );
+  assert.equal(
+    decide(rows(workAt(93), row("spare", [session(10), weekly(100)])), 93, "most-left", null)
+      .decided,
+    "hold",
+  );
+});
 
 test("a_limit_below_the_share_is_left_alone_and_one_at_it_switches", () => {
   answersTo(autoswitch, "a_limit_below_the_share_is_left_alone_and_one_at_it_switches");
@@ -706,9 +737,16 @@ test("an_account_left_at_a_limit_is_moved_back_to_before_the_share_once_it_reset
   assert.equal(model.get().inUse.claude, "work", "moved back to");
 });
 
+// These older scenarios set one policy for both periods before a single decision pass.
+function uniformShare(share: number) {
+  const s = model.get();
+  model.set({ ...s, preferences: { ...s.preferences, weeklyShare: share } });
+  setShare(share);
+}
+
 test("one limit of each tool is notified a pass, the 5-hour first, the weekly at the next read", () => {
   reset();
-  setShare(50);
+  uniformShare(50);
   assert.deepEqual(posted(), [
     [
       "5-Hour Limit Almost Reached",
@@ -735,7 +773,7 @@ test("Pitboard switches by itself only once the account has settled, then never 
   assert.equal(use("claude", "personal"), "ok");
   const putBack = model.get().now;
   setChoice("switch");
-  setShare(50);
+  uniformShare(50);
   const s = model.get();
   assert.equal(s.inUse.claude, "personal");
   assert.deepEqual(posted().at(-1), [
@@ -790,7 +828,7 @@ test("Switch Back goes back to the account a switch by itself left, and nothing 
   advance(NOW + 2);
   assert.equal(use("claude", "personal"), "ok");
   setChoice("switch");
-  setShare(50);
+  uniformShare(50);
   advance(model.get().now + SETTLING_SECONDS + DECIDE_EVERY_SECONDS);
   assert.equal(model.get().inUse.claude, "work", "switched for personal's weekly limit");
   const weeklyResets = model.get().accounts.find((a) => a.label === "personal")!.limits[1].resetsAt;
@@ -808,7 +846,7 @@ test("Switch Back goes back to the account a switch by itself left, and nothing 
     /less than 5 minutes ago/,
   );
   // and the weekly limit it was switched away from
-  setShare(70);
+  uniformShare(70);
   assert.match(
     autoStandingSaid(model.get().autoStanding!, model.get().now),
     /switched away from once already/,
@@ -1019,7 +1057,8 @@ test("a share is clamped to 50 to 99, and every change of it is a choice made", 
   assert.deepEqual([0, 49.4, 50, 77.6, 99, 120].map(clamped), [50, 50, 50, 78, 99, 99]);
   const words = catalogue.replace(/\\\n\s*/g, "");
   assert.ok(
-    words.includes("once a limit of the account in use reaches {at}%, while the app is open."),
+    words.includes("Pitboard notifies you once {}, while the app is open.") &&
+      words.includes("a limit of the account in use reaches {at}%"),
   );
   assert.ok(ffi("present/machine.rs").includes("let note = words::at_limit_note("));
   assert.equal(
@@ -1427,4 +1466,85 @@ test("a switch on Linux takes as long as the tray's took through KDE Plasma, its
     assert.equal(TAKES_MS.switch[desktop], 1060);
     assert.equal(TAKES_MS.read[desktop], TAKES_MS.read.windows);
   }
+});
+
+test("editing either threshold preserves the other and weekly off remembers its value", () => {
+  const s = rows(workAt(20), spare());
+  s.preferences = { atLimit: "nothing", chosen: true, share: 93, order: "most-left" };
+  model.set(s);
+  assert.equal(weeklyThreshold(model.get().preferences), 93);
+  setShare(90);
+  assert.equal(weeklyThreshold(model.get().preferences), 93);
+  setWeeklyLimit(true, 99);
+  assert.equal(model.get().preferences.share, 90);
+  setWeeklyLimit(false, 99);
+  assert.equal(weeklyThreshold(model.get().preferences), null);
+  setChoice("notify");
+  assert.equal(weeklyShare(model.get().preferences), 99);
+  setWeeklyLimit(true, weeklyShare(model.get().preferences));
+  assert.equal(weeklyThreshold(model.get().preferences), 99);
+  reset();
+});
+
+test("weekly notification policy applies to both providers and keeps manual exhaustion advice", () => {
+  const s = rows(row("work", [session(20), weekly(100)]), spare());
+  s.accounts = s.accounts.map((a) =>
+    a.tool === "codex" ? { ...a, limits: [session(20), weekly(100)] } : a,
+  );
+  s.preferences = {
+    atLimit: "nothing",
+    chosen: true,
+    share: 93,
+    weeklyShare: 99,
+    weeklyOff: true,
+    order: "most-left",
+  };
+  model.set(s);
+  setChoice("notify");
+  assert.equal(model.get().posted.length, 0);
+  assert.ok(model.get().advice.some((a) => a.tool === "claude"));
+  setWeeklyLimit(true, 99);
+  assert.ok(model.get().posted.some((p) => p.subtitle === "Claude Code"));
+  assert.ok(model.get().posted.some((p) => p.subtitle === "Codex"));
+  const count = model.get().posted.length;
+  setWeeklyLimit(false, 99);
+  setWeeklyLimit(true, 99);
+  assert.equal(model.get().posted.length, count, "changing policy does not forget notified limits");
+  reset();
+});
+
+test("installed watching follows independent settings and keeps weekly off after the app closes", () => {
+  const s = rows(row("work", [session(20), weekly(100)]), spare());
+  s.preferences = { atLimit: "nothing", chosen: true, share: 93, order: "most-left" };
+  model.set(s);
+  installWatch(93, "app");
+  setWeeklyLimit(false, 99);
+  setChoice("switch");
+  assert.deepEqual(model.get().watchService, {
+    at: 93,
+    weekly: null,
+    order: "most-left",
+    switching: true,
+  });
+  quit();
+  advance(NOW + DECIDE_EVERY_SECONDS);
+  assert.equal(model.get().inUse.claude, "work");
+  reset();
+});
+
+test("weekly policy includes scoped limits, leaves other limits watched, and keeps early rotation", () => {
+  const atScoped = row("work", [session(20), weekly(20), scoped("Opus", 98.5)]);
+  assert.equal(to(decide(rows(atScoped, spare()), 93, "most-left", 99)), "spare");
+  assert.equal(decide(rows(atScoped, spare()), 93, "most-left", null).decided, "below");
+  const other = row("work", [
+    session(20),
+    weekly(20),
+    { percent: 93, resetsAt: NOW + DAY, lengthSeconds: DAY, kind: "daily" },
+  ]);
+  assert.equal(to(decide(rows(other, spare()), 93, "most-left", null)), "spare");
+  const sooner = row("spare", [session(10), { ...weekly(99.9), resetsAt: NOW + DAY }]);
+  assert.equal(
+    to(decide(rows(row("work", [session(20), weekly(30)]), sooner), 93, "resets-soonest", null)),
+    "spare",
+  );
 });

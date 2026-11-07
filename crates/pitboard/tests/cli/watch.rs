@@ -536,3 +536,93 @@ fn readings_now() -> i64 {
         .expect("after 1970")
         .as_secs() as i64
 }
+
+#[test]
+fn weekly_share_is_independent_of_the_five_hour_share() {
+    let env = two_accounts("watch-weekly-independent");
+    env.an_hour_on();
+    env.measured(&[("alpha", 20.0, 96.0), ("beta", 10.0, 30.0)]);
+    let (out, err, code) = env.run(&[
+        "watch",
+        "--once",
+        "--json",
+        "--at",
+        "93",
+        "--weekly-at",
+        "99",
+    ]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["event"], "idle", "{out}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+}
+
+#[test]
+fn the_five_hour_share_can_switch_to_an_account_below_its_own_weekly_share() {
+    let env = two_accounts("watch-weekly-candidate");
+    env.an_hour_on();
+    env.measured(&[("alpha", 93.0, 96.0), ("beta", 10.0, 97.0)]);
+    let (out, err, code) = env.run(&[
+        "watch",
+        "--once",
+        "--json",
+        "--at",
+        "93",
+        "--weekly-at",
+        "99",
+    ]);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(data["event"], "switched", "{out}");
+    assert_eq!(data["threshold"], 93);
+    assert_eq!(data["weekly_threshold"], 99);
+    assert_eq!(data["limit"]["kind"], "session");
+}
+
+#[test]
+fn a_weekly_switch_reports_its_own_share() {
+    let env = two_accounts("watch-weekly-event");
+    env.an_hour_on();
+    env.measured(&[("alpha", 20.0, 98.5), ("beta", 10.0, 96.0)]);
+    let (out, err, code) = env.run(&[
+        "watch",
+        "--once",
+        "--json",
+        "--at",
+        "93",
+        "--weekly-at",
+        "99",
+    ]);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(data["event"], "switched", "{out}");
+    assert_eq!(data["threshold"], 99);
+    assert_eq!(data["weekly_threshold"], 99);
+    assert_eq!(data["limit"]["kind"], "weekly_all");
+}
+
+#[test]
+fn weekly_off_leaves_a_full_week_but_never_switches_to_one() {
+    let env = two_accounts("watch-weekly-off");
+    env.an_hour_on();
+    env.measured(&[("alpha", 20.0, 100.0), ("beta", 10.0, 100.0)]);
+    let args = [
+        "watch",
+        "--once",
+        "--json",
+        "--at",
+        "93",
+        "--weekly-at",
+        "off",
+    ];
+    let (out, err, code) = env.run(&args);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(data["event"], "idle", "{out}");
+    assert_eq!(data["threshold"], 93);
+    assert!(data["weekly_threshold"].is_null());
+
+    env.measured(&[("alpha", 94.0, 100.0), ("beta", 10.0, 100.0)]);
+    let (out, err, code) = env.run(&args);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["event"], "no_room", "{out}");
+}

@@ -472,12 +472,14 @@ impl Stub {
             Job::AutoLook { policy } => {
                 self.looked_at.push(policy);
                 Answer::AutoLooked {
+                    policy,
                     looked: self.look.clone().map_err(|refused| refused.error()),
                 }
             }
             Job::AutoSwitch { policy } => {
                 self.auto_at.push(policy);
                 Answer::AutoSwitched {
+                    policy,
                     done: self.auto.clone().map_err(|refused| refused.error()),
                 }
             }

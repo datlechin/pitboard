@@ -362,6 +362,16 @@ pub enum Intent {
     SetWatchService { on: bool },
     /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
     SetAtLimit { choice: AtLimit, at: u8 },
+    /// Changes only the action, preserving shares whose snapshot may not have arrived yet.
+    SetAtLimitChoice { choice: AtLimit },
+    /// Changes only the short-window share, preserving the current action and weekly share.
+    SetAtLimitShare { at: u8 },
+    /// Whether weekly limits trigger the chosen action, and the share kept for them.
+    SetWeeklyLimit { on: bool, at: u8 },
+    /// Changes only whether weekly limits trigger, retaining the current weekly share.
+    SetWeeklyLimitEnabled { on: bool },
+    /// Changes only the weekly share, retaining whether its trigger is enabled.
+    SetWeeklyLimitShare { at: u8 },
     /// Which account goes first when Pitboard picks one, taken as `SetAtLimit` is.
     SetOrder { order: SwitchOrder },
     /// Whether to show each limit’s pace, independent of automatic switching.

@@ -20,6 +20,7 @@ import Switch from "./Switch.astro";
 import Symbolic from "./Symbolic.astro";
 import Window from "./Window.astro";
 import { accountsPage, atLimitNote, prefs, warmAccounts } from "../../../data/linux-window.ts";
+import { weeklyLabel, weeklyToggle, weeklyNote, shareRange } from "../../../data/limits.ts";
 import { moments } from "../../../data/world.ts";
 import { start, type AtLimit } from "../../../lib/model.ts";
 
@@ -187,6 +188,30 @@ const option =
                   max={99}
                   typed
                   part="share"
+                />
+                <Row
+                  title={weeklyToggle.mac}
+                  subtitle={weeklyNote(true, order)}
+                  titleId={id("weekly-label")}
+                  data-part="weekly-row"
+                  hidden={chosen === "nothing"}
+                >
+                  <Switch
+                    slot="suffix"
+                    on
+                    labelledby={id("weekly-label")}
+                    data-part="weekly-toggle"
+                  />
+                </Row>
+                <SpinRow
+                  title={weeklyLabel}
+                  subtitle={shareRange}
+                  value={`${share}%`}
+                  now={share}
+                  min={50}
+                  max={99}
+                  typed
+                  part="weekly-share"
                 />
                 {/* Use first, an AdwComboRow as When a limit reaches is, which Do Nothing hides */}
                 <Row

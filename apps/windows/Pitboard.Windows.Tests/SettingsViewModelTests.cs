@@ -233,8 +233,8 @@ public sealed class SettingsViewModelTests
         CollectionAssert.AreEqual(
             new Intent[]
             {
-                new Intent.SetAtLimit(AtLimit.Switch, 95),
-                new Intent.SetAtLimit(AtLimit.Notify, 96),
+                new Intent.SetAtLimitChoice(AtLimit.Switch),
+                new Intent.SetAtLimitShare(96),
                 new Intent.SetWarmRange(420, 1440),
                 new Intent.SetWarmRange(360, 1260),
                 new Intent.SetWarm(new AccountKey(Tool.Claude, "work"), true),
@@ -254,6 +254,168 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
+    public void TurningWeeklyOffBeforeTheNextSnapshotKeepsTheJustEditedShare()
+    {
+        var (shown, model, _) = Over(Snapshots.Read(1));
+
+        shown.SetWeeklyShare(99);
+        shown.SetWeeklyLimit(false);
+
+        Assert.HasCount(2, model.Sent);
+        Assert.AreEqual(new Intent.SetWeeklyLimitShare(99), model.Sent.First());
+        Assert.AreEqual(
+            new Intent.SetWeeklyLimitEnabled(false), model.Sent.Last(),
+            "the toggle must not restore the previous snapshot's 95% while the 99% edit is still being applied");
+    }
+
+    [TestMethod]
+    public void ChoosingNothingBeforeTheNextSnapshotKeepsTheJustEditedFiveHourShare()
+    {
+        var (shown, model, _) = Over(Snapshots.Read(1));
+
+        shown.SetShare(80);
+        shown.ChooseAtLimit(0);
+
+        Assert.HasCount(2, model.Sent);
+        Assert.AreEqual(new Intent.SetAtLimitShare(80), model.Sent.First());
+        Assert.AreEqual(
+            new Intent.SetAtLimitChoice(AtLimit.Nothing), model.Sent.Last(),
+            "the action choice must not restore the previous snapshot's 95% while the 80% edit is still being applied");
+    }
+
+    [TestMethod]
+    public void RapidEditsBackToTheDisplayedValueStillReachTheActor()
+    {
+        var (shown, model, _) = Over(Snapshots.Read(1));
+
+        shown.SetWeeklyLimit(false);
+        shown.SetWeeklyLimit(true);
+        shown.SetShare(80);
+        Assert.AreEqual(95.0, shown.Share, "the presentation must still come from the model");
+        shown.SetShare(95);
+        shown.SetWeeklyShare(99);
+        shown.SetWeeklyShare(95);
+        shown.ChooseAtLimit(0);
+        shown.ChooseAtLimit(1);
+
+        CollectionAssert.AreEqual(
+            new Intent[]
+            {
+                new Intent.SetWeeklyLimitEnabled(false),
+                new Intent.SetWeeklyLimitEnabled(true),
+                new Intent.SetAtLimitShare(80),
+                new Intent.SetAtLimitShare(95),
+                new Intent.SetWeeklyLimitShare(99),
+                new Intent.SetWeeklyLimitShare(95),
+                new Intent.SetAtLimitChoice(AtLimit.Nothing),
+                new Intent.SetAtLimitChoice(AtLimit.Notify),
+            },
+            model.Sent.ToArray());
+    }
+
+    [TestMethod]
+    public void IntermediateSnapshotsDoNotEchoOverNewerRequests()
+    {
+        var initial = Snapshots.Read(1);
+        var (shown, model, app) = Over(initial);
+        // x:Bind raises these events synchronously when PropertyChanged updates the controls.
+        shown.PropertyChanged += (_, _) =>
+        {
+            shown.ChooseAtLimit(shown.AtLimitIndex);
+            shown.SetShare(shown.Share);
+            shown.SetWeeklyLimit(shown.UsesWeeklyLimit);
+            shown.SetWeeklyShare(shown.WeeklyShare);
+        };
+        shown.ChooseAtLimit(0);
+        shown.ChooseAtLimit(1);
+        shown.SetShare(80);
+        shown.SetShare(95);
+        shown.SetWeeklyLimit(false);
+        shown.SetWeeklyLimit(true);
+        shown.SetWeeklyShare(99);
+        shown.SetWeeklyShare(95);
+        var sent = model.Sent.Count;
+
+        app.Apply(initial with
+        {
+            Revision = 2,
+            Machine = initial.Machine with
+            {
+                AtLimit = initial.Machine.AtLimit with
+                {
+                    Choice = AtLimit.Nothing,
+                    At = 80,
+                    Weekly = initial.Machine.AtLimit.Weekly with { On = false, At = 99 },
+                },
+            },
+        });
+        Assert.HasCount(sent, model.Sent, "the intermediate actor snapshot is not a new user edit");
+        shown.ChooseAtLimit(1);
+        shown.SetShare(95);
+        shown.SetWeeklyLimit(true);
+        shown.SetWeeklyShare(95);
+        Assert.HasCount(sent, model.Sent, "the latest requested values are already on their way to the actor");
+
+        app.Apply(initial with { Revision = 3 });
+        Assert.HasCount(sent, model.Sent, "acknowledging the final values must not echo them");
+        shown.ChooseAtLimit(0);
+        shown.SetShare(80);
+        shown.SetWeeklyLimit(false);
+        shown.SetWeeklyShare(99);
+        Assert.HasCount(sent + 4, model.Sent, "new user edits must still be accepted after acknowledgement");
+    }
+
+    [TestMethod]
+    public void WeeklyEditsAndTurningItOffKeepTheOtherShareAndTheRememberedValue()
+    {
+        var initial = With(1, machine => machine with
+        {
+            AtLimit = machine.AtLimit with
+            {
+                At = 93,
+                Weekly = machine.AtLimit.Weekly with { At = 99, AtLabel = "Weekly limits 99%" },
+            },
+        });
+        var (shown, model, app) = Over(initial);
+        shown.SetShare(92);
+        shown.SetWeeklyShare(98);
+        shown.SetWeeklyLimit(false);
+        CollectionAssert.AreEqual(
+            new Intent[]
+            {
+                new Intent.SetAtLimitShare(92),
+                new Intent.SetWeeklyLimitShare(98),
+                new Intent.SetWeeklyLimitEnabled(false),
+            },
+            model.Sent.ToArray());
+
+        var sent = model.Sent.Count;
+        app.Apply(initial with
+        {
+            Revision = 2,
+            Machine = initial.Machine with
+            {
+                AtLimit = initial.Machine.AtLimit with
+                {
+                    Weekly = initial.Machine.AtLimit.Weekly with { On = false, At = 98, AtLabel = "Weekly limits 98%", ShareEnabled = false },
+                },
+            },
+        });
+        Assert.AreEqual(93.0, shown.Share);
+        Assert.AreEqual(98.0, shown.WeeklyShare);
+        Assert.IsFalse(shown.UsesWeeklyLimit);
+        Assert.IsFalse(shown.CanSetWeeklyShare);
+        Assert.IsTrue(shown.CanChooseWeeklyLimit);
+        Assert.AreEqual("Weekly limits 98%", shown.WeeklyShareLabel);
+        shown.SetWeeklyLimit(false);
+        shown.SetWeeklyShare(98);
+        Assert.IsFalse(shown.SetWeeklyShare(double.NaN));
+        Assert.HasCount(sent, model.Sent, "binding or clearing the weekly value must not change either share");
+        shown.SetWeeklyLimit(true);
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent.Last());
+    }
+
+    [TestMethod]
     public void ShowingThePageReadsWhatATerminalOrAnotherProgramCanChange()
     {
         var (shown, model, _) = Over(Snapshots.Read(1));
@@ -270,10 +432,10 @@ public sealed class SettingsViewModelTests
         var (shown, _, app) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
         Assert.AreEqual("When a limit reaches", shown.AtLimitHeading);
-        Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
+        Assert.AreEqual("5-hour limit 95%", shown.AtLimitLabel);
         CollectionAssert.AreEqual(AtLimitChoices, shown.AtLimitTitles);
         Assert.AreEqual(2, shown.AtLimitIndex);
-        Assert.AreEqual("At", shown.ShareTitle);
+        Assert.AreEqual("5-hour limit", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
 

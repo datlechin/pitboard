@@ -327,20 +327,20 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         var choice = Views.Element<ComboBox>(page, "settings.atLimit");
-        await Expand(page, "settings.atLimitGroup", "At");
+        await Expand(page, "settings.atLimitGroup", "5-hour limit");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
         Assert.IsTrue(choice.IsEnabled);
         CollectionAssert.AreEqual(new object[] { "Do nothing", "Notify me", "Switch automatically" }, choice.Items.ToArray());
         Assert.AreEqual(1, choice.SelectedIndex, "a fresh install notifies");
-        Assert.AreEqual("When a limit reaches 95%", AutomationProperties.GetName(choice));
+        Assert.AreEqual("5-hour limit 95%", AutomationProperties.GetName(choice));
         Assert.AreEqual("When a limit reaches", Views.Element<SettingsExpander>(page, "settings.atLimitGroup").Header);
         Assert.IsTrue(share.IsEnabled);
         Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it does not switch");
         Assert.IsTrue(Views.Visible<HyperlinkButton>(page).Any(link => AutomationProperties.GetAutomationId(link) == "settings.atLimitTerms"));
 
         choice.SelectedIndex = 2;
-        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 95), model.Sent);
+        Assert.Contains(new Intent.SetAtLimitChoice(AtLimit.Switch), model.Sent);
 
         app.Apply(With(2, machine => machine with
         {
@@ -353,7 +353,7 @@ public sealed class SettingsPageTests
         Assert.DoesNotContain(Snapshots.Terms.Sentence, Views.Texts(page));
 
         share.Value = 96;
-        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 96), model.Sent);
+        Assert.Contains(new Intent.SetAtLimitShare(96), model.Sent);
 
         var order = Views.Element<ComboBox>(page, "settings.atLimitOrder");
         CollectionAssert.AreEqual(new object[] { "Most left", "Resets soonest" }, order.Items.ToArray());
@@ -365,13 +365,124 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task TheModelHeldBackTheChoiceUntilItHasReadThePreferences()
     {
-        var unread = With(1, machine => machine with { AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false } });
+        var unread = With(1, machine => machine with
+        {
+            AtLimit = machine.AtLimit with
+            {
+                Enabled = false,
+                ShareEnabled = false,
+                Weekly = machine.AtLimit.Weekly with { Enabled = false, ShareEnabled = false },
+            },
+        });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.atLimitGroup", "At");
+        await Expand(page, "settings.atLimitGroup", "5-hour limit");
 
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
         Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
+        Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.weeklyLimit").IsEnabled);
+        Assert.IsFalse(Views.Element<NumberBox>(page, "settings.weeklyLimitShare").IsEnabled);
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimitOrder").IsEnabled);
+    }
+
+    [UITestMethod]
+    public async Task WeeklyControlsKeepTheirOwnShareWhenTurnedOffAndBackOn()
+    {
+        var initial = With(1, machine => machine with
+        {
+            AtLimit = machine.AtLimit with
+            {
+                At = 93,
+                Weekly = machine.AtLimit.Weekly with { At = 99, AtLabel = "Weekly limits 99%" },
+            },
+        });
+        var model = new StandInModel(initial);
+        var app = new AppModel(model);
+        var page = await Shown(app);
+        await Expand(page, "settings.atLimitGroup", "Weekly limits");
+        var weekly = Views.Element<ToggleSwitch>(page, "settings.weeklyLimit");
+        var share = Views.Element<NumberBox>(page, "settings.weeklyLimitShare");
+        var shortShare = Views.Element<NumberBox>(page, "settings.atLimitShare");
+
+        Assert.IsTrue(weekly.IsOn);
+        Assert.IsTrue(share.IsEnabled);
+        Assert.AreEqual(99.0, share.Value);
+        Assert.AreEqual("Use weekly limits", AutomationProperties.GetName(weekly));
+        Assert.AreEqual("Weekly limits 99%", AutomationProperties.GetName(share));
+        Assert.AreEqual("From 50% to 99%", Card(share).Description);
+        share.Value = 98;
+        Assert.AreEqual(new Intent.SetWeeklyLimitShare(98), model.Sent.Last());
+        Assert.AreEqual(93.0, shortShare.Value);
+
+        var changed = initial with
+        {
+            Revision = 2,
+            Machine = initial.Machine with
+            {
+                AtLimit = initial.Machine.AtLimit with
+                {
+                    Weekly = initial.Machine.AtLimit.Weekly with { At = 98, AtLabel = "Weekly limits 98%" },
+                },
+            },
+        };
+        app.Apply(changed);
+        weekly.IsOn = false;
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(false), model.Sent.Last());
+        app.Apply(changed with
+        {
+            Revision = 3,
+            Machine = changed.Machine with
+            {
+                AtLimit = changed.Machine.AtLimit with
+                {
+                    Weekly = changed.Machine.AtLimit.Weekly with { On = false, ShareEnabled = false },
+                },
+            },
+        });
+        Assert.IsFalse(share.IsEnabled);
+        Assert.AreEqual(Visibility.Visible, Card(share).Visibility);
+        Assert.AreEqual(98.0, share.Value);
+        Assert.IsTrue(shortShare.IsEnabled);
+        weekly.IsOn = true;
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent.Last());
+    }
+
+    [UITestMethod]
+    public async Task IntermediateBindingsAndClearedBoxesDoNotOverwritePendingEdits()
+    {
+        var initial = Snapshots.Read(1);
+        var model = new StandInModel(initial);
+        var app = new AppModel(model);
+        var page = await Shown(app);
+        await Expand(page, "settings.atLimitGroup", "Weekly limits");
+        var weekly = Views.Element<ToggleSwitch>(page, "settings.weeklyLimit");
+        var share = Views.Element<NumberBox>(page, "settings.weeklyLimitShare");
+        var shortShare = Views.Element<NumberBox>(page, "settings.atLimitShare");
+        shortShare.Value = 80;
+        shortShare.Value = 95;
+        share.Value = 99;
+        weekly.IsOn = false;
+        weekly.IsOn = true;
+        var sent = model.Sent.Count;
+
+        app.Apply(initial with
+        {
+            Revision = 2,
+            Machine = initial.Machine with
+            {
+                AtLimit = initial.Machine.AtLimit with
+                {
+                    At = 80,
+                    Weekly = initial.Machine.AtLimit.Weekly with { At = 99, On = false },
+                },
+            },
+        });
+        Assert.HasCount(sent, model.Sent, "old actor results must not become new edits from bound controls");
+        share.Value = 98;
+        sent = model.Sent.Count;
+        share.Value = double.NaN;
+        shortShare.Value = double.NaN;
+        await Views.Until(() => share.Value == 99 && shortShare.Value == 80, "cleared boxes did not restore the displayed model values");
+        Assert.HasCount(sent, model.Sent, "restoring an empty box must not replace a newer pending edit");
     }
 
     [UITestMethod]
@@ -394,12 +505,18 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
-        await Expand(page, "settings.atLimitGroup", "At");
+        await Expand(page, "settings.atLimitGroup", "5-hour limit");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
         {
-            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, At = 90, AtLabel = "When a limit reaches 90%" },
+            AtLimit = machine.AtLimit with
+            {
+                Choice = AtLimit.Switch,
+                At = 90,
+                AtLabel = "5-hour limit 90%",
+                Weekly = machine.AtLimit.Weekly with { On = false, At = 99, AtLabel = "Weekly limits 99%", ShareEnabled = false },
+            },
             Warm = TwoWarmed with { From = 420, To = 1260 },
             Schedule = machine.Schedule with { On = true },
         }));
@@ -409,6 +526,8 @@ public sealed class SettingsPageTests
             "the warm-up's accounts did not show");
 
         Assert.AreEqual(90.0, Views.Element<NumberBox>(page, "settings.atLimitShare").Value);
+        Assert.AreEqual(99.0, Views.Element<NumberBox>(page, "settings.weeklyLimitShare").Value);
+        Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.weeklyLimit").IsOn);
         Assert.AreEqual(2, Views.Element<ComboBox>(page, "settings.atLimit").SelectedIndex);
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
         Assert.AreEqual(new TimeSpan(7, 0, 0), Views.Element<TimePicker>(page, "settings.warmFrom").SelectedTime);
@@ -702,7 +821,7 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "At");
+        await Expand(page, "settings.atLimitGroup", "5-hour limit");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
@@ -710,12 +829,21 @@ public sealed class SettingsPageTests
 
         app.Apply(With(2, machine => machine with
         {
-            AtLimit = machine.AtLimit with { Choice = AtLimit.Nothing, ShareEnabled = false },
+            AtLimit = machine.AtLimit with
+            {
+                Choice = AtLimit.Nothing,
+                ShareEnabled = false,
+                Weekly = machine.AtLimit.Weekly with { Enabled = false, ShareEnabled = false },
+            },
         }));
 
         Assert.AreEqual(Visibility.Visible, card.Visibility);
         Assert.IsFalse(card.IsEnabled);
         Assert.IsFalse(share.IsEnabled);
+        Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.weeklyLimit").IsEnabled);
+        var weeklyShare = Views.Element<NumberBox>(page, "settings.weeklyLimitShare");
+        Assert.IsFalse(weeklyShare.IsEnabled);
+        Assert.AreEqual(Visibility.Visible, Card(weeklyShare).Visibility);
     }
 
     // The header repeated the share the box beside it held; the choice's name says it for Narrator.
@@ -725,19 +853,19 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "At");
+        await Expand(page, "settings.atLimitGroup", "5-hour limit");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
         app.Apply(With(2, machine => machine with
         {
-            AtLimit = machine.AtLimit with { At = 90, AtLabel = "When a limit reaches 90%" },
+            AtLimit = machine.AtLimit with { At = 90, AtLabel = "5-hour limit 90%" },
         }));
 
-        Assert.AreEqual("At", card.Header);
+        Assert.AreEqual("5-hour limit", card.Header);
         Assert.AreEqual("From 50% to 99%", card.Description);
-        Assert.AreEqual("At", AutomationProperties.GetName(share));
-        Assert.AreEqual("When a limit reaches 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
+        Assert.AreEqual("5-hour limit", AutomationProperties.GetName(share));
+        Assert.AreEqual("5-hour limit 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
         Assert.AreEqual(90.0, share.Value);
     }
 

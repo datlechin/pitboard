@@ -11,12 +11,13 @@ struct LimitsSettings: View {
 
     var body: some View {
         let atLimit = model.machine.atLimit
+        let weekly = atLimit.weekly
         let warm = model.machine.warm
         let pace = model.machine.pace
         let share = Binding(
             get: { Int(atLimit.at) },
             set: {
-                model.send(.setAtLimit(choice: atLimit.choice, at: Self.share($0, of: atLimit)))
+                model.send(.setAtLimitShare(at: Self.share($0, of: atLimit)))
             })
         Form {
             Section {
@@ -37,7 +38,7 @@ struct LimitsSettings: View {
                     atLimit.heading,
                     selection: Binding(
                         get: { atLimit.choice },
-                        set: { model.send(.setAtLimit(choice: $0, at: atLimit.at)) })
+                        set: { model.send(.setAtLimitChoice(choice: $0)) })
                 ) {
                     ForEach(atLimit.choices, id: \.choice) { choice in
                         Text(choice.title).tag(choice.choice)
@@ -48,8 +49,11 @@ struct LimitsSettings: View {
                     LabeledContent(atLimit.shareLabel) {
                         HStack {
                             // The HIG pairs a stepper with a field where large changes are likely.
-                            ShareField(atLimit: atLimit, width: shareWidth) {
-                                model.send(.setAtLimit(choice: atLimit.choice, at: $0))
+                            ShareField(
+                                at: atLimit.at, label: atLimit.shareLabel, atLimit: atLimit,
+                                width: shareWidth, identifier: "settings.atLimitShareField"
+                            ) {
+                                model.send(.setAtLimitShare(at: $0))
                             }
                             Stepper(
                                 atLimit.shareLabel, value: share,
@@ -60,6 +64,39 @@ struct LimitsSettings: View {
                         }
                     }
                     .disabled(!atLimit.shareEnabled)
+                    Toggle(
+                        weekly.title,
+                        isOn: Binding(
+                            get: { weekly.on },
+                            set: { model.send(.setWeeklyLimitEnabled(on: $0)) })
+                    )
+                    .disabled(!weekly.enabled)
+                    .accessibilityIdentifier("settings.weeklyLimit")
+                    LabeledContent(weekly.shareLabel) {
+                        HStack {
+                            ShareField(
+                                at: weekly.at, label: weekly.shareLabel, atLimit: atLimit,
+                                width: shareWidth, identifier: "settings.weeklyLimitShareField"
+                            ) {
+                                model.send(.setWeeklyLimitShare(at: $0))
+                            }
+                            Stepper(
+                                weekly.shareLabel,
+                                value: Binding(
+                                    get: { Int(weekly.at) },
+                                    set: {
+                                        model.send(
+                                            .setWeeklyLimitShare(
+                                                at: Self.share($0, of: atLimit)))
+                                    }),
+                                in: Int(atLimit.lowest)...Int(atLimit.highest)
+                            )
+                            .labelsHidden()
+                            .accessibilityIdentifier("settings.weeklyLimitShare")
+                        }
+                    }
+                    .disabled(!weekly.shareEnabled)
+                    Text(weekly.note).explanatory()
                     Picker(
                         atLimit.orderLabel,
                         selection: Binding(
@@ -138,14 +175,17 @@ struct LimitsSettings: View {
 
 // Sent on Return or as focus leaves: a share clamped at each key left "120" in the field over 99.
 private struct ShareField: View {
+    let at: UInt8
+    let label: String
     let atLimit: AtLimitShown
     let width: CGFloat
+    let identifier: String
     let send: (UInt8) -> Void
     @State private var typed = 0
     @FocusState private var editing: Bool
 
     var body: some View {
-        TextField(atLimit.shareLabel, value: $typed, format: .percent)
+        TextField(label, value: $typed, format: .percent)
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.trailing)
@@ -155,14 +195,16 @@ private struct ShareField: View {
             .onChange(of: editing) {
                 if !editing { take() }
             }
-            .onChange(of: atLimit.at, initial: true) { typed = Int(atLimit.at) }
-            .accessibilityIdentifier("settings.atLimitShareField")
+            .onChange(of: at, initial: true) {
+                if !editing { typed = Int(at) }
+            }
+            .accessibilityIdentifier(identifier)
     }
 
     private func take() {
         let share = LimitsSettings.share(typed, of: atLimit)
         typed = Int(share)
-        if share != atLimit.at { send(share) }
+        send(share)
     }
 }
 

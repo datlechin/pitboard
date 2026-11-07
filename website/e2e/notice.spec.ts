@@ -47,7 +47,7 @@ async function offer(page: Page, system: System) {
   return page.locator(`#${ids[system]}`);
 }
 
-// The share set to 90%, and then Switch Automatically chosen, in the system's own controls.
+// Both limits set to one share in the system's own controls.
 async function setShare(page: Page, system: System, share: string) {
   const id = limits[system];
   const fig = page.locator(`#${id}`);
@@ -59,6 +59,12 @@ async function setShare(page: Page, system: System, share: string) {
       : page.locator(`#${id}-share`);
   await field.fill(share);
   await field.press("Enter");
+  const weekly =
+    system === "gnome" || system === "kde"
+      ? page.locator(`#${id}-preferences [data-part="weekly-share"] input`)
+      : page.locator(`#${id}-weekly-share`);
+  await weekly.fill(share);
+  await weekly.press("Enter");
 }
 
 async function chooseSwitch(page: Page, system: System) {

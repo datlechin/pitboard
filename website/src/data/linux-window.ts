@@ -54,6 +54,7 @@ import {
   SIGN_IN_EXPIRED,
   activity,
   atLimitNote as wordsAtLimitNote,
+  limitTrigger,
   firstBy,
   hm,
   isInUse,
@@ -275,16 +276,21 @@ export const activityPage = {
 // What a desktop with no status item says, and one with one does not (present/words/setup.rs,
 // present/words/machine.rs): on stock GNOME, closing the window quits Pitboard, and the watch
 // service goes on switching at the share, and before it under Resets Soonest, or never.
-const watchAbout = (switching: boolean, at = share, order: Order = "most-left") =>
+const watchAbout = (
+  switching: boolean,
+  at = share,
+  order: Order = "most-left",
+  weekly: number | null = at,
+) =>
   switching
-    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code at ${at}%${firstBy(order)} and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
+    ? `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on switching Claude Code ${weekly === at ? `at ${at}%` : `once ${limitTrigger(at, weekly)}`}${firstBy(order)} and warming up the accounts ${WARM_UP_LABEL} turns on, from each login.`
     : `${CLOSING_QUITS} Turned on, ${thisMachine(FRONT)} goes on warming up the accounts ${WARM_UP_LABEL} turns on, from each login, and never switches Claude Code.`;
 
 // The at-limit note under Before an account runs out, then, where nothing keeps Pitboard running
 // once its window is closed, what goes on then: switching, or with the watch service on its
 // warm-ups alone (present/machine.rs `at_limit`).
 export function atLimitNote(
-  p: Pick<Preferences, "atLimit" | "share" | "order">,
+  p: Pick<Preferences, "atLimit" | "share" | "order" | "weeklyShare" | "weeklyOff">,
   statusItem: boolean,
   watched = false,
 ): string | null {

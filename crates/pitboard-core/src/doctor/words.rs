@@ -1446,10 +1446,13 @@ pub(super) fn runs_from_sign_in(
                 Order::MostLeft => "",
                 Order::ResetsSoonest => "  ·  resets soonest first",
             };
-            format!(
-                "from sign-in  ·  switches at {}%{first}  ·  runs {program}",
-                policy.threshold.percent()
-            )
+            let short = policy.threshold.percent();
+            let at = match policy.weekly {
+                Some(weekly) if weekly == policy.threshold => format!("{short}%"),
+                Some(weekly) => format!("5-hour {short}%, weekly {}%", weekly.percent()),
+                None => format!("5-hour {short}%, weekly off"),
+            };
+            format!("from sign-in  ·  switches at {at}{first}  ·  runs {program}")
         }
         Some(Switching::Never) => format!("from sign-in  ·  never switches  ·  runs {program}"),
         None => format!("from sign-in  ·  runs {program}"),
@@ -1546,6 +1549,7 @@ mod tests {
     fn at(percent: u8) -> crate::watch_service::Switching {
         crate::watch_service::Switching::At(crate::duty::autoswitch::Policy {
             threshold: crate::duty::autoswitch::Threshold::new(percent).expect("a share"),
+            weekly: crate::duty::autoswitch::Threshold::new(percent),
             order: crate::usage::Order::MostLeft,
         })
     }
@@ -2685,6 +2689,22 @@ mod tests {
             runs_from_sign_in(Some(at(90)), "/opt/homebrew/bin/pitboard"),
             "from sign-in  ·  switches at 90%  ·  runs /opt/homebrew/bin/pitboard"
         );
+        for (weekly, said) in [
+            (crate::duty::autoswitch::Threshold::new(99), "weekly 99%"),
+            (None, "weekly off"),
+        ] {
+            let policy = crate::duty::autoswitch::Policy {
+                weekly,
+                ..crate::duty::autoswitch::Threshold::new(93).unwrap().into()
+            };
+            assert_eq!(
+                runs_from_sign_in(
+                    Some(crate::watch_service::Switching::At(policy)),
+                    "pitboard"
+                ),
+                format!("from sign-in  ·  switches at 5-hour 93%, {said}  ·  runs pitboard")
+            );
+        }
         assert_eq!(
             runs_from_sign_in(
                 Some(crate::watch_service::Switching::Never),

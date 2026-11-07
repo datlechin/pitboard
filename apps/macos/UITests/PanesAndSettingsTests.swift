@@ -158,6 +158,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
         let app = launch(.oneTool)
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
+        raise(app.windows[Words.limits])
         let choice = app.popUpButtons["settings.atLimit"]
         let share = app.control("settings.atLimitShare")
         let standing = app.control("settings.autoSwitchStanding")
@@ -186,6 +187,24 @@ final class PanesAndSettingsTests: FixtureTestCase {
         typed.doubleClick()
         typed.typeText("80\r")
         XCTAssertTrue(typed.wait(until: "value == '80%'", timeout: 5))
+
+        let weekly = app.control("settings.weeklyLimit")
+        let weeklyTyped = app.textFields["settings.weeklyLimitShareField"]
+        XCTAssertTrue(
+            weeklyTyped.wait(until: "value == '95%'", timeout: 5),
+            "changing the five-hour share preserves the weekly share")
+        weeklyTyped.doubleClick()
+        weeklyTyped.typeText("99")
+        weekly.click()
+        XCTAssertTrue(
+            weeklyTyped.wait(until: "value == '99%'", timeout: 5),
+            "leaving the field and turning weekly limits off keeps the edit")
+        XCTAssertTrue(typed.wait(until: "value == '80%'", timeout: 5))
+        XCTAssertTrue(weeklyTyped.wait(for: \.isEnabled, toEqual: false, timeout: 5))
+        XCTAssertEqual(weeklyTyped.value as? String, "99%")
+        weekly.click()
+        XCTAssertTrue(weeklyTyped.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        XCTAssertEqual(weeklyTyped.value as? String, "99%")
 
         let order = app.popUpButtons["settings.atLimitOrder"]
         XCTAssertTrue(order.exists, "which account goes first, under the share")

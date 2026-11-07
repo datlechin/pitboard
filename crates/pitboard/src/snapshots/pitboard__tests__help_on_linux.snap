@@ -158,12 +158,16 @@ Commands:
 
 Options:
       --at <PERCENT>
-          Switch once a limit of the account in use reaches this share, from 50 to 99
+          Switch once a five-hour limit reaches this share, from 50 to 99; weekly limits use it too
+          unless --weekly-at is set
           
           [default: 95]
 
       --json
           Print JSON instead of text
+
+      --weekly-at <PERCENT|off>
+          The share for weekly limits, from 50 to 99, or off; defaults to --at
 
       --order <ORDER>
           Which account to switch to first: `most-left`, the one with the most room, or
@@ -191,12 +195,16 @@ Usage: pitboard watch install [OPTIONS]
 
 Options:
       --at <PERCENT>
-          Switch once a limit of the account in use reaches this share, from 50 to 99
+          Switch once a five-hour limit reaches this share, from 50 to 99; weekly limits use it too
+          unless --weekly-at is set
           
           [default: 95]
 
       --json
           Print JSON instead of text
+
+      --weekly-at <PERCENT|off>
+          The share for weekly limits, from 50 to 99, or off; defaults to --at
 
       --order <ORDER>
           Which account to switch to first: `most-left`, the one with the most room, or

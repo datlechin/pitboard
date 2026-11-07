@@ -1655,6 +1655,7 @@ mod tests {
 
     const SOONEST: Policy = Policy {
         threshold: crate::duty::autoswitch::Threshold::DEFAULT,
+        weekly: Some(crate::duty::autoswitch::Threshold::DEFAULT),
         order: Order::ResetsSoonest,
     };
 

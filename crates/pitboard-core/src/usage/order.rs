@@ -5,12 +5,49 @@
 //! without a weekly limit for all models, such as a Team seat, loses it at each five-hour reset,
 //! so it comes first in either order.
 
-use super::{LimitKind, Snapshot, Window, budget, reached, same_reset};
+use super::{LimitKind, Snapshot, Window, budget, same_reset};
 use std::cmp::Ordering;
 
 // A front end that acts by itself reads each account more often than a usage check waits at most
 // on a service out of reach: an older reading is of an account nobody could ask about.
 const FRESH: i64 = budget::UNREACHABLE_MOST;
+
+/// The shares that trigger a switch, with no weekly trigger where `weekly` is `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shares {
+    /// The share for five-hour and unclassified limits.
+    pub at: u8,
+    pub weekly: Option<u8>,
+}
+
+impl From<u8> for Shares {
+    fn from(at: u8) -> Self {
+        Self {
+            at,
+            weekly: Some(at),
+        }
+    }
+}
+
+impl Shares {
+    pub fn at(self, window: &Window) -> Option<u8> {
+        match &window.kind {
+            LimitKind::WeeklyAll | LimitKind::WeeklyScoped => self.weekly,
+            LimitKind::Other(name) if name.starts_with("weekly_") => self.weekly,
+            _ => Some(self.at),
+        }
+    }
+
+    pub fn reached(self, window: &Window, now: i64) -> bool {
+        self.at(window)
+            .is_some_and(|share| window.reached(share, now))
+    }
+
+    /// Even a limit whose trigger is off leaves no room once the service says it is used up.
+    pub fn excludes(self, window: &Window, now: i64) -> bool {
+        window.used_up(now) || self.reached(window, now)
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Order {
@@ -113,7 +150,7 @@ pub struct Room {
 }
 
 /// The room for a switch away from `limit` of the account in use, whose limits are `mine`:
-/// `None` where any of `theirs` has reached `share` as it is drawn, or where nothing says what
+/// `None` where any of `theirs` has reached its share as drawn, or where nothing says what
 /// it has used of one of `mine`.
 ///
 /// A reading that lists every limit ([`Snapshot::lists_every_limit`]) does not have one it
@@ -124,22 +161,27 @@ pub fn room(
     theirs: &Snapshot,
     mine: &[Window],
     limit: &Window,
-    share: u8,
+    shares: impl Into<Shares>,
     now: i64,
 ) -> Option<Room> {
-    below(theirs, mine, Some(limit), share, now)
+    below(theirs, mine, Some(limit), shares.into(), now)
 }
 
 /// The room for a move before the share away from the account in use, whose reading is `mine`:
 /// `None` also where `theirs` has used more of its five-hour limit, or is old or not
 /// Anthropic's.
-pub fn resets_first(theirs: &Snapshot, mine: &Snapshot, share: u8, now: i64) -> Option<Room> {
+pub fn resets_first(
+    theirs: &Snapshot,
+    mine: &Snapshot,
+    shares: impl Into<Shares>,
+    now: i64,
+) -> Option<Room> {
     let fresh = theirs.answered_at.is_some_and(|at| now - at <= FRESH);
     let first = Week::of(theirs, now).comes_before(Week::of(mine, now));
     if !fresh || !first || five_hours(&theirs.windows, now) > five_hours(&mine.windows, now) {
         return None;
     }
-    below(theirs, &mine.windows, None, share, now)
+    below(theirs, &mine.windows, None, shares.into(), now)
 }
 
 /// The candidate to switch to in `order`, the first of those alike. An account without the limit
@@ -171,15 +213,11 @@ fn below(
     theirs: &Snapshot,
     mine: &[Window],
     limit: Option<&Window>,
-    share: u8,
+    shares: Shares,
     now: i64,
 ) -> Option<Room> {
     let windows = &theirs.windows;
-    if windows.is_empty()
-        || windows
-            .iter()
-            .any(|window| reached(window.used(now), share))
-    {
+    if windows.is_empty() || windows.iter().any(|window| shares.excludes(window, now)) {
         return None;
     }
     let given = |had: &Window| windows.iter().find(|window| window.same_limit(had));
@@ -246,6 +284,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_uniform_full_share_keeps_manual_advice_at_the_displayed_hundred() {
+        let mine = [window("session", 100.0, HOUR)];
+        let candidate = |used| reading(vec![window("session", used, HOUR)]);
+        assert!(room(&candidate(99.4), &mine, &mine[0], 100u8, NOW).is_some());
+        assert!(room(&candidate(99.5), &mine, &mine[0], 100u8, NOW).is_none());
+        assert!(room(&candidate(100.0), &mine, &mine[0], 100u8, NOW).is_none());
+    }
+
     /// An account with its five-hour limit `session` used and its week resetting in `days`.
     fn max(session: f64, days: i64) -> Snapshot {
         reading(vec![
@@ -310,7 +357,7 @@ mod tests {
         let candidates = || {
             [("soon", &soon), ("roomy", &roomy)]
                 .into_iter()
-                .filter_map(|(name, theirs)| Some((name, room(theirs, &mine, &limit, 95, NOW)?)))
+                .filter_map(|(name, theirs)| Some((name, room(theirs, &mine, &limit, 95u8, NOW)?)))
         };
         assert_eq!(
             preferred(Order::MostLeft, candidates()).map(|(name, _)| name),
@@ -336,7 +383,7 @@ mod tests {
         let candidates = || {
             accounts
                 .iter()
-                .filter_map(|(name, theirs)| Some((*name, room(theirs, &mine, &limit, 95, NOW)?)))
+                .filter_map(|(name, theirs)| Some((*name, room(theirs, &mine, &limit, 95u8, NOW)?)))
         };
         for order in [Order::MostLeft, Order::ResetsSoonest] {
             assert_eq!(preferred(order, candidates()).map(|(n, _)| n), Some("seat"));
@@ -363,9 +410,9 @@ mod tests {
         let candidates = [("tight", tight), ("roomy", roomy)];
         let chosen = preferred(
             Order::ResetsSoonest,
-            candidates
-                .iter()
-                .filter_map(|(name, theirs)| Some((*name, room(theirs, &mine, &limit, 95, NOW)?))),
+            candidates.iter().filter_map(|(name, theirs)| {
+                Some((*name, room(theirs, &mine, &limit, 95u8, NOW)?))
+            }),
         );
         assert_eq!(chosen.map(|(n, _)| n), Some("roomy"));
     }
@@ -373,40 +420,40 @@ mod tests {
     #[test]
     fn resets_first_needs_a_sooner_week_room_and_as_much_five_hour_room() {
         let mine = max(30.0, 5);
-        assert!(resets_first(&max(30.0, 1), &mine, 95, NOW).is_some());
-        assert!(resets_first(&max(0.0, 1), &mine, 95, NOW).is_some());
+        assert!(resets_first(&max(30.0, 1), &mine, 95u8, NOW).is_some());
+        assert!(resets_first(&max(0.0, 1), &mine, 95u8, NOW).is_some());
         assert!(
-            resets_first(&max(31.0, 1), &mine, 95, NOW).is_none(),
+            resets_first(&max(31.0, 1), &mine, 95u8, NOW).is_none(),
             "less five-hour room"
         );
         assert!(
-            resets_first(&max(0.0, 5), &mine, 95, NOW).is_none(),
+            resets_first(&max(0.0, 5), &mine, 95u8, NOW).is_none(),
             "the same week"
         );
         assert!(
-            resets_first(&max(0.0, 6), &mine, 95, NOW).is_none(),
+            resets_first(&max(0.0, 6), &mine, 95u8, NOW).is_none(),
             "a later week"
         );
         let mut full = max(0.0, 1);
         full.windows[1].percent = 95.0;
-        assert!(resets_first(&full, &mine, 95, NOW).is_none(), "no room");
+        assert!(resets_first(&full, &mine, 95u8, NOW).is_none(), "no room");
     }
 
     #[test]
     fn a_seat_resets_first_from_a_week_and_never_from_another_seat() {
-        assert!(resets_first(&seat(10.0), &max(30.0, 1), 95, NOW).is_some());
-        assert!(resets_first(&seat(0.0), &seat(30.0), 95, NOW).is_none());
-        assert!(resets_first(&max(0.0, 1), &seat(30.0), 95, NOW).is_none());
+        assert!(resets_first(&seat(10.0), &max(30.0, 1), 95u8, NOW).is_some());
+        assert!(resets_first(&seat(0.0), &seat(30.0), 95u8, NOW).is_none());
+        assert!(resets_first(&max(0.0, 1), &seat(30.0), 95u8, NOW).is_none());
     }
 
     #[test]
     fn resets_first_wants_both_weeks_known() {
         let mut passed = max(30.0, 5);
         passed.windows[1].resets_at = Some(NOW - HOUR);
-        assert!(resets_first(&max(0.0, 1), &passed, 95, NOW).is_none());
+        assert!(resets_first(&max(0.0, 1), &passed, 95u8, NOW).is_none());
         let mut unread = max(0.0, 1);
         unread.windows[1].resets_at = None;
-        assert!(resets_first(&unread, &max(30.0, 5), 95, NOW).is_none());
+        assert!(resets_first(&unread, &max(30.0, 5), 95u8, NOW).is_none());
     }
 
     #[test]
@@ -414,12 +461,12 @@ mod tests {
         let mine = max(30.0, 5);
         let mut old = max(0.0, 1);
         old.answered_at = Some(NOW - FRESH - 1);
-        assert!(resets_first(&old, &mine, 95, NOW).is_none());
+        assert!(resets_first(&old, &mine, 95u8, NOW).is_none());
         old.answered_at = Some(NOW - FRESH);
-        assert!(resets_first(&old, &mine, 95, NOW).is_some());
+        assert!(resets_first(&old, &mine, 95u8, NOW).is_some());
         old.answered_at = None;
         assert!(
-            resets_first(&old, &mine, 95, NOW).is_none(),
+            resets_first(&old, &mine, 95u8, NOW).is_none(),
             "not Anthropic's"
         );
     }
@@ -427,19 +474,19 @@ mod tests {
     #[test]
     fn without_a_five_hour_limit_none_of_it_is_used() {
         let ultra = |days| reading(vec![window("weekly_all", 40.0, days * DAY)]);
-        assert!(resets_first(&ultra(1), &max(0.0, 5), 95, NOW).is_some());
+        assert!(resets_first(&ultra(1), &max(0.0, 5), 95u8, NOW).is_some());
         assert!(
-            resets_first(&max(10.0, 1), &ultra(5), 95, NOW).is_none(),
+            resets_first(&max(10.0, 1), &ultra(5), 95u8, NOW).is_none(),
             "from no five-hour limit, only to none used"
         );
-        assert!(resets_first(&max(0.0, 1), &ultra(5), 95, NOW).is_some());
+        assert!(resets_first(&max(0.0, 1), &ultra(5), 95u8, NOW).is_some());
     }
 
     #[test]
     fn a_five_hour_limit_that_reset_counts_as_unused() {
         let mut reset = max(80.0, 1);
         reset.windows[0].resets_at = Some(NOW - 60);
-        assert!(resets_first(&reset, &max(30.0, 5), 95, NOW).is_some());
+        assert!(resets_first(&reset, &max(30.0, 5), 95u8, NOW).is_some());
     }
 
     #[test]
@@ -452,11 +499,11 @@ mod tests {
         let mut named = max(0.0, 1);
         named.lists_every_limit = false;
         assert!(
-            resets_first(&named, &mine, 95, NOW).is_some(),
+            resets_first(&named, &mine, 95u8, NOW).is_some(),
             "a model's limit may be left out of one with the five-hour and weekly limits"
         );
         let mut weekly_only = reading(vec![window("weekly_all", 10.0, DAY)]);
         weekly_only.lists_every_limit = false;
-        assert!(resets_first(&weekly_only, &mine, 95, NOW).is_none());
+        assert!(resets_first(&weekly_only, &mine, 95u8, NOW).is_none());
     }
 }

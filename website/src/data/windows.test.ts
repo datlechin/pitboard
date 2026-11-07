@@ -435,7 +435,7 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes("share_label: words::AT.into(),"));
   assert.ok(words.includes(`pub(crate) const AT: &str = "${s.share.header}";`));
   // the ComboBox and the NumberBox are named as the XAML binds them
-  assert.ok(words.includes('format!("{AT_LIMIT} {at}%")'));
+  assert.ok(words.includes('format!("{AT} {at}%")'));
   assert.ok(shell("SettingsViewModel.cs").includes("AtLimitLabel => AtLimit.AtLabel;"));
   assert.ok(
     xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"'),
@@ -443,7 +443,7 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(
     xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"'),
   );
-  assert.equal(s.atLimit.label, "When a limit reaches 95%");
+  assert.equal(s.atLimit.label, "5-hour limit 95%");
   assert.ok(words.includes('format!("From {lowest}% to {highest}%")'));
   assert.ok(shell("SettingsViewModel.cs").includes("ShareRange => AtLimit.ShareRange;"));
   const autoswitch = core("duty/autoswitch.rs");
@@ -458,7 +458,7 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   const note = `Pitboard switches Claude Code at ${s.share.value}%, and its running sessions follow within about 33 seconds.`;
   assert.ok(
     words.includes(
-      '"Pitboard switches Claude Code at {at}%, and its running sessions follow within about {seconds} seconds."',
+      '"Pitboard switches Claude Code {when}, and its running sessions follow within about {seconds} seconds."',
     ),
   );
   assert.ok(machine.includes("pitboard_core::switch::ADOPTION_CEILING_SECONDS,"));

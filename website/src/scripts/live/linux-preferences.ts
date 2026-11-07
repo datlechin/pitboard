@@ -20,6 +20,9 @@ import {
   setOrder,
   setSchedule,
   setShare,
+  setWeeklyLimit,
+  weeklyShare,
+  weeklyThreshold,
   setWarmRange,
   surfaces,
   turnWarmUp,
@@ -31,6 +34,7 @@ import {
 } from "../../lib/model.ts";
 import { systemOf } from "../../lib/platform.ts";
 import { autoStandingSaid } from "../../lib/words.ts";
+import { weeklyNote } from "../../data/limits.ts";
 import { atLimitNote, prefs } from "../../data/linux-window.ts";
 
 const DAY = 24 * 60;
@@ -49,6 +53,7 @@ class LinuxPreferences extends LiveFigure {
   #choice!: Combobox;
   #order!: Combobox;
   #share!: Spin;
+  #weekly!: Spin;
   #from!: Spin;
   #to!: Spin;
 
@@ -114,6 +119,19 @@ class LinuxPreferences extends LiveFigure {
         return typed.trim() === "" || Number.isNaN(n) ? null : n;
       },
       take: setShare,
+    });
+    this.#weekly = gtkSpin(...spin("weekly-share"), {
+      min: LOWEST,
+      max: HIGHEST,
+      step: 1,
+      page: 5,
+      wrap: false,
+      said: (n) => `${n}%`,
+      read: (typed) => {
+        const n = Number(typed.trim().replace(/%$/, "").trim());
+        return typed.trim() === "" || Number.isNaN(n) ? null : n;
+      },
+      take: (at) => setWeeklyLimit(!model.get().preferences.weeklyOff, at),
     });
     const hour = { min: 0, max: DAY - 1, step: 15, page: 60, wrap: true, said: clock };
     this.#from = gtkSpin(...spin("from"), {
@@ -237,13 +255,21 @@ class LinuxPreferences extends LiveFigure {
     const a = s.accounts.find((x) => x.id === row?.dataset.account);
     if (a) return turnWarmUp(a.label, toggle.getAttribute("aria-checked") !== "true");
     switch (toggle.getAttribute("data-part")) {
+      case "weekly-toggle":
+        return setWeeklyLimit(!!s.preferences.weeklyOff, weeklyShare(s.preferences));
       case "start-at-login":
         return setGeneral({ opensAtLogin: !s.general.opensAtLogin });
       case "renew":
         return void setSchedule(!s.schedule, "app");
       case "watch":
         if (s.watchService) uninstallWatch("app");
-        else installWatch(s.preferences.share, "app", s.preferences.order);
+        else
+          installWatch(
+            s.preferences.share,
+            "app",
+            s.preferences.order,
+            weeklyThreshold(s.preferences),
+          );
     }
   }
 
@@ -310,6 +336,11 @@ class LinuxPreferences extends LiveFigure {
         p.atLimit === "switch",
         s.watchService?.at ?? p.share,
         s.watchService?.order ?? p.order,
+        s.watchService
+          ? s.watchService.weekly === undefined
+            ? s.watchService.at
+            : s.watchService.weekly
+          : weeklyThreshold(p),
       ),
     );
     // Limits: the choice and its standing, the share and Use first where something happens at the
@@ -321,6 +352,14 @@ class LinuxPreferences extends LiveFigure {
     shown(said, !!standing);
     if (standing) text(said, autoStandingSaid(standing, s.now));
     this.#share.set(p.share, true);
+    this.#weekly.set(weeklyShare(p), !p.weeklyOff && p.atLimit !== "nothing");
+    set("weekly-toggle", !p.weeklyOff, p.atLimit !== "nothing");
+    shown(this.#part("weekly-row"), p.atLimit !== "nothing");
+    shown(this.#part("weekly-share"), p.atLimit !== "nothing");
+    text(
+      this.#part("weekly-row").querySelector('[data-part="subtitle"]'),
+      weeklyNote(!p.weeklyOff, p.order),
+    );
     shown(this.#part("share"), p.atLimit !== "nothing");
     this.#order.set(p.order);
     if (p.atLimit === "nothing") this.#order.close();

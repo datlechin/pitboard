@@ -18,6 +18,9 @@ import {
   orderLabel,
   orders,
   shareLabel,
+  weeklyLabel,
+  weeklyToggle,
+  weeklyNote,
   terms,
   timeOfDay,
   warm,
@@ -39,7 +42,7 @@ const tabs = [
   ["limits", "Limits", "sf-gauge"],
   ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-324.5", warm: "h-378.5" };
+const heights = { switch: "h-435.5", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
 // under Resets Soonest needs at least, a line of 17 more where a font wraps it once more, as
 // Linux's does, and Warm-Up as its accounts make it. The cut stays 8 points below, the desk's
@@ -49,7 +52,7 @@ const live = {
   switch: "[&:defined]:h-(--locked,auto)",
   warm: "[&:defined]:h-(--locked,auto)",
 };
-const frame = { switch: "live:min-h-401.5", warm: "" };
+const frame = { switch: "live:min-h-565.5", warm: "" };
 const drawn: AtLimit = "switch";
 const order: Order = "most-left";
 const minutes = (at: string) => {
@@ -228,6 +231,58 @@ const menuRow =
                 role="spinbutton"
                 tabindex="0"
                 aria-label={shareLabel}
+                aria-valuenow={share}
+                aria-valuemin="50"
+                aria-valuemax="99"
+                viewBox="0 0 19.5 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5.4 8.1 10 3.4l4.6 4.7M5.4 15.4l4.6 4.7 4.6-4.7" stroke-width="1.75" />
+                <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
+              </svg>
+            </div>
+            <div class:list={[row, ruled, "min-h-41 items-center gap-12 pr-14"]} data-share-row>
+              <span class="min-w-0 flex-1 py-8">
+                <span id={`${prefix}-weekly-label`}>{weeklyToggle.mac}</span>
+                <span class="block text-u-11/14 text-mac-window-dim" data-weekly-note
+                  >{weeklyNote(true, order)}</span
+                >
+              </span>
+              <Switch on aria-labelledby={`${prefix}-weekly-label`} data-weekly-toggle />
+            </div>
+            <div class:list={[row, ruled, "h-41 items-center pr-14"]} data-share-row>
+              <span class="flex-1">{weeklyLabel}</span>
+              {/* the field as drawn, and once the figure works the text field itself, whose text
+                  Chromium sets a pixel lower than the drawing's */}
+              <span
+                class:list={[
+                  "flex h-25.5 w-57.5 items-center justify-end rounded-u-6 bg-mac-window-bg pr-7.5 tabular-nums live:hidden",
+                  field,
+                ]}
+                >{share}%</span
+              >
+              <input
+                class:list={[
+                  "hidden h-25.5 w-57.5 rounded-u-6 bg-mac-window-bg pr-7.5 text-right tabular-nums select-text focus-mac live:block disabled:text-mac-window-dim",
+                  field,
+                ]}
+                id={`${prefix}-weekly-share`}
+                type="text"
+                inputmode="numeric"
+                enterkeyhint="done"
+                autocomplete="off"
+                aria-label={weeklyLabel}
+                value={`${share}%`}
+              />
+              <svg
+                class="ml-7.5 h-24 w-19.5 shrink-0 rounded-u-5 bg-mac-window-control focus-mac aria-disabled:text-mac-window-dim"
+                id={`${prefix}-weekly-stepper`}
+                role="spinbutton"
+                tabindex="0"
+                aria-label={weeklyLabel}
                 aria-valuenow={share}
                 aria-valuemin="50"
                 aria-valuemax="99"

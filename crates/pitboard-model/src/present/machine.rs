@@ -125,6 +125,21 @@ pub struct AtLimitShown {
     pub standing: Option<String>,
     // whatever is chosen, as the terms may cover warm-ups too
     pub terms: TermsShown,
+    pub weekly: WeeklyLimitShown,
+}
+
+/// Weekly trigger controls, retaining the chosen share while the trigger is off.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WeeklyLimitShown {
+    pub on: bool,
+    pub at: u8,
+    pub title: String,
+    pub share_label: String,
+    pub at_label: String,
+    pub range: String,
+    pub note: String,
+    pub enabled: bool,
+    pub share_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -369,7 +384,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let note = words::at_limit_note(
         seen.front,
         choice,
-        at,
+        state.preferences.policy(),
         order,
         state
             .warnings
@@ -420,6 +435,19 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .filter(|_| switching)
             .map(|standing| auto_standing(seen, standing)),
         terms: terms(),
+        weekly: WeeklyLimitShown {
+            on: !state.preferences.auto_switch_weekly_off,
+            at: state.preferences.weekly_threshold().percent(),
+            title: words::weekly_limit_title(seen.front),
+            share_label: words::WEEKLY_LIMITS.into(),
+            at_label: words::weekly_limit_label(state.preferences.weekly_threshold().percent()),
+            range: words::share_range(Threshold::LOWEST, Threshold::HIGHEST),
+            note: words::weekly_limit_note(!state.preferences.auto_switch_weekly_off, order),
+            enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
+            share_enabled: state.preferences_have_been_read()
+                && choice != AtLimit::Nothing
+                && !state.preferences.auto_switch_weekly_off,
+        },
     }
 }
 

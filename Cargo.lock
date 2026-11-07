@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "base64",
  "core-foundation",

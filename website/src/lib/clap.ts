@@ -533,16 +533,18 @@ export function parse(g: Grammar, words: string[]): Parsed {
   };
   const out = parseLevel(g, root, words, [root]);
   if (out.kind !== "run") return out;
-  // main.rs `command_line`: `watch`'s own --at, --once or --scheduled beside a subcommand
+  // main.rs `command_line`: every run-only option before a service subcommand is refused.
   const watch = out.levels.find((l) => l.path.join(" ") === "pitboard watch");
   const sub = out.levels[out.levels.indexOf(watch!) + 1];
   if (watch && sub) {
-    const given = ["at", "once", "scheduled"].find((id) => watch.given.has(id));
+    const given = ["at", "weekly_at", "order", "no_switch", "once", "scheduled"].find((id) =>
+      watch.given.has(id),
+    );
     if (given)
       return {
         kind: "error",
         lines: failure(
-          `the subcommand '${plain(sub.path.at(-1)!)}' cannot be used with '--${plain(given)}'`,
+          `the subcommand '${plain(sub.path.at(-1)!)}' cannot be used with '--${plain(given.replaceAll("_", "-"))}'`,
           { usage: usage(watch, []) },
         ),
       };

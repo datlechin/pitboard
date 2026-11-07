@@ -5,13 +5,15 @@ import { disclosure } from "./disclosure.ts";
 import { attr } from "./draw.ts";
 import { macShare, numberBox, type Share } from "./spin.ts";
 import { datePicker, timePicker, type Time } from "./time.ts";
-import { atLabel, warmHours } from "../../data/limits.ts";
+import { atLabel, warmHours, weeklyNote } from "../../data/limits.ts";
 import {
   model,
   nextWarmUp,
   setChoice,
   setOrder,
   setShare,
+  setWeeklyLimit,
+  weeklyShare,
   setWarmRange,
   turnWarmUp,
   warmNote,
@@ -40,6 +42,8 @@ function expander(root: HTMLElement, id: string): (() => void) | null {
 export class AtLimitControls {
   #choice: Combobox;
   #share: Share;
+  #weekly: Share;
+  #weeklyToggle: HTMLButtonElement;
   #order: Combobox;
   #box: HTMLElement;
   #orderBox: HTMLElement;
@@ -51,6 +55,12 @@ export class AtLimitControls {
   ) {
     const part = <T extends Element = HTMLElement>(name: string) =>
       document.getElementById(`${prefix}-${name}`) as unknown as T;
+    this.#weeklyToggle = root.querySelector<HTMLButtonElement>("[data-weekly-toggle]")!;
+    this.#weeklyToggle.addEventListener("click", () => {
+      const p = model.get().preferences;
+      setWeeklyLimit(!!p.weeklyOff, weeklyShare(p));
+    });
+    const weekly = (at: number) => setWeeklyLimit(!model.get().preferences.weeklyOff, at);
     this.#box = part("at");
     this.#orderBox = part("order");
     const stepper = part<SVGElement>("stepper");
@@ -59,6 +69,11 @@ export class AtLimitControls {
     if (stepper) {
       this.#choice = combobox(this.#box, part("choices"), "popup", choose);
       this.#share = macShare(part<HTMLInputElement>("share"), stepper, setShare);
+      this.#weekly = macShare(
+        part<HTMLInputElement>("weekly-share"),
+        part<SVGElement>("weekly-stepper"),
+        weekly,
+      );
       this.#order = combobox(this.#orderBox, part("order-choices"), "popup", order);
     } else {
       this.#choice = combobox(this.#box, part("choices"), "combobox", choose);
@@ -69,6 +84,16 @@ export class AtLimitControls {
         root.querySelector("[data-spin=down]")!,
         setShare,
       );
+      const card = root.querySelector("[data-weekly-card]")!;
+      this.#weekly = numberBox(
+        part<HTMLInputElement>("weekly-share"),
+        card.querySelector("[data-spin=up]")!,
+        card.querySelector("[data-spin=down]")!,
+        weekly,
+      );
+      this.#weeklyToggle.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") e.preventDefault();
+      });
       this.#expander = expander(root, `${prefix}-expand`);
     }
   }
@@ -84,6 +109,14 @@ export class AtLimitControls {
     const acts = p.atLimit !== "nothing";
     this.#choice.set(p.atLimit);
     this.#share.set(p.share, acts);
+    this.#weekly.set(weeklyShare(p), acts && !p.weeklyOff);
+    this.#weeklyToggle.disabled = !acts;
+    said(this.root.querySelector("[data-weekly-note]"), weeklyNote(!p.weeklyOff, p.order));
+    attr(this.#weeklyToggle, "aria-checked", String(!p.weeklyOff));
+    said(
+      this.#weeklyToggle.parentElement!.querySelector("[data-said]"),
+      p.weeklyOff ? "Off" : "On",
+    );
     this.#order.set(p.order);
     // Windows dims Use first with At, out of the Tab order as a disabled control is
     if (!acts) this.#order.close();

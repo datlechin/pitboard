@@ -36,22 +36,36 @@ pub(super) fn follow(preferences: &Preferences) {
     let weak = preferences.downgrade();
     imp.at_limit.connect_selected_notify(move |_| {
         if let Some(preferences) = weak.upgrade() {
-            chosen(&preferences);
+            chosen(&preferences, false);
         }
     });
-    imp.share.connect_output(|row| {
-        row.set_text(&format!("{}%", row.value()));
-        true
-    });
-    imp.share.connect_input(|row| {
-        let typed = row.text();
-        let typed = typed.trim().trim_end_matches('%').trim_end();
-        Some(typed.parse::<f64>().map_err(|_| ()))
-    });
+    for share in [&imp.share, &imp.weekly_share] {
+        share.connect_output(|row| {
+            row.set_text(&format!("{}%", row.value()));
+            true
+        });
+        share.connect_input(|row| {
+            let typed = row.text();
+            let typed = typed.trim().trim_end_matches('%').trim_end();
+            Some(typed.parse::<f64>().map_err(|_| ()))
+        });
+    }
     let weak = preferences.downgrade();
     imp.share.connect_value_notify(move |_| {
         if let Some(preferences) = weak.upgrade() {
-            chosen(&preferences);
+            chosen(&preferences, true);
+        }
+    });
+    let weak = preferences.downgrade();
+    imp.weekly_limit.connect_active_notify(move |_| {
+        if let Some(preferences) = weak.upgrade() {
+            weekly_chosen(&preferences, false);
+        }
+    });
+    let weak = preferences.downgrade();
+    imp.weekly_share.connect_value_notify(move |_| {
+        if let Some(preferences) = weak.upgrade() {
+            weekly_chosen(&preferences, true);
         }
     });
     let weak = preferences.downgrade();
@@ -128,6 +142,24 @@ pub(super) fn show(preferences: &Preferences, machine: &MachineShown) {
         .update_property(&[gtk::accessible::Property::Label(&at_limit.at_label)]);
     imp.share.set_visible(at_limit.choice != AtLimit::Nothing);
     imp.share.set_sensitive(at_limit.share_enabled);
+    let weekly = &at_limit.weekly;
+    imp.weekly_limit.set_title(&weekly.title);
+    imp.weekly_limit.set_subtitle(&weekly.note);
+    imp.weekly_limit.set_active(weekly.on);
+    imp.weekly_limit
+        .set_visible(at_limit.choice != AtLimit::Nothing);
+    imp.weekly_limit.set_sensitive(weekly.enabled);
+    imp.weekly_share.set_title(&weekly.share_label);
+    imp.weekly_share.set_subtitle(&weekly.range);
+    imp.weekly_share
+        .set_range(f64::from(at_limit.lowest), f64::from(at_limit.highest));
+    imp.weekly_share.set_value(f64::from(weekly.at));
+    imp.weekly_share
+        .upcast_ref::<gtk::Widget>()
+        .update_property(&[gtk::accessible::Property::Label(&weekly.at_label)]);
+    imp.weekly_share
+        .set_visible(at_limit.choice != AtLimit::Nothing);
+    imp.weekly_share.set_sensitive(weekly.share_enabled);
     imp.order.set_title(&at_limit.order_label);
     let orders = at_limit.orders.iter();
     listed(
@@ -217,21 +249,50 @@ fn accounts(preferences: &Preferences, machine: &MachineShown) {
 }
 
 // What happens at a limit, or its share, chosen by the person.
-fn chosen(preferences: &Preferences) {
+fn chosen(preferences: &Preferences, share_changed: bool) {
     let Some(machine) = preferences.machine() else {
         return;
     };
     let imp = preferences.imp();
     let at_limit = &machine.at_limit;
+    if !at_limit.enabled || (share_changed && !at_limit.share_enabled) {
+        return;
+    }
+    if share_changed {
+        preferences.host().send(Intent::SetAtLimitShare {
+            at: imp.share.value() as u8,
+        });
+        return;
+    }
     let Some(choice) =
         (at_limit.choices.get(imp.at_limit.selected() as usize)).map(|choice| choice.choice)
     else {
         return;
     };
-    let at = imp.share.value() as u8;
-    if (choice, at) != (at_limit.choice, at_limit.at) {
-        preferences.host().send(Intent::SetAtLimit { choice, at });
+    preferences.host().send(Intent::SetAtLimitChoice { choice });
+}
+
+// Each control sends only the field changed. The actor preserves its current sibling value,
+// and deduplicates there: a rapid reversal can equal the snapshot but still be a new edit.
+fn weekly_chosen(preferences: &Preferences, share_changed: bool) {
+    let Some(machine) = preferences.machine() else {
+        return;
+    };
+    let weekly = &machine.at_limit.weekly;
+    if !weekly.enabled || (share_changed && !weekly.share_enabled) {
+        return;
     }
+    let imp = preferences.imp();
+    let intent = if share_changed {
+        Intent::SetWeeklyLimitShare {
+            at: imp.weekly_share.value() as u8,
+        }
+    } else {
+        Intent::SetWeeklyLimitEnabled {
+            on: imp.weekly_limit.is_active(),
+        }
+    };
+    preferences.host().send(intent);
 }
 
 // Which account goes first, chosen by the person.

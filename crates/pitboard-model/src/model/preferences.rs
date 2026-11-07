@@ -41,6 +41,12 @@ pub(crate) struct Preferences {
     // write leaves the rest of the file readable, and is taken as the nearest share.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) auto_switch_at: Option<i64>,
+    // An absent weekly share inherits the older single share until either field is edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) auto_switch_weekly_at: Option<i64>,
+    // Separate from the number so turning weekly limits back on remembers the chosen share.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) auto_switch_weekly_off: bool,
     // Text, so a choice a later version adds leaves the rest of the file readable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) at_limit: Option<String>,
@@ -89,6 +95,11 @@ impl Preferences {
             .map_or_else(Threshold::default, Threshold::clamped)
     }
 
+    pub(crate) fn weekly_threshold(&self) -> Threshold {
+        self.auto_switch_weekly_at
+            .map_or_else(|| self.threshold(), Threshold::clamped)
+    }
+
     // One a later version adds reads as the default.
     pub(crate) fn order(&self) -> Order {
         self.order
@@ -104,6 +115,7 @@ impl Preferences {
     pub(crate) fn policy(&self) -> Policy {
         Policy {
             threshold: self.threshold(),
+            weekly: (!self.auto_switch_weekly_off).then(|| self.weekly_threshold()),
             order: self.order(),
         }
     }
@@ -252,6 +264,7 @@ mod tests {
             switching.watch_switching(),
             pitboard_core::watch_service::Switching::At(Policy {
                 threshold: Threshold::DEFAULT,
+                weekly: Some(Threshold::DEFAULT),
                 order: Order::ResetsSoonest,
             })
         );
@@ -351,6 +364,29 @@ mod tests {
             assert_eq!(declined(&kept), ["codex"]);
             assert!(kept.auto_switch);
             assert_eq!(kept.threshold().percent(), read);
+        }
+    }
+
+    #[test]
+    fn weekly_preferences_inherit_old_shares_and_keep_an_independent_value_while_off() {
+        let (legacy, read) =
+            Preferences::kept(Some(r#"{"auto_switch":true,"auto_switch_at":93}"#), None);
+        assert!(read);
+        assert_eq!(legacy.policy().weekly, Some(legacy.threshold()));
+        assert_eq!(legacy.weekly_threshold().percent(), 93);
+        for (written, expected) in [(99, 99), (120, 99), (-1, 50)] {
+            let text = format!(
+                r#"{{"auto_switch_at":93,"auto_switch_weekly_at":{written},"auto_switch_weekly_off":true}}"#
+            );
+            let (kept, read) = Preferences::kept(Some(&text), None);
+            assert!(read);
+            assert_eq!(kept.threshold().percent(), 93);
+            assert_eq!(kept.weekly_threshold().percent(), expected);
+            assert_eq!(kept.policy().weekly, None);
+            assert_eq!(
+                Preferences::kept(kept.text().as_deref(), None),
+                (kept, true)
+            );
         }
     }
 }

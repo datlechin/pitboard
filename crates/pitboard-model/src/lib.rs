@@ -63,8 +63,8 @@ pub use present::{
     PageLoad, PanelNotice, PickerAccount, PickerShown, Question, RemovalShown, RowEnd,
     ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool, SigningInText,
     StatusItemShown, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown,
-    WarmDetail, WarmShown, WatchServiceShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool,
-    WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    WarmDetail, WarmShown, WatchServiceShown, WeeklyLimitShown, WelcomeLogin, WelcomeShown,
+    WelcomeStep, WelcomeTool, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,

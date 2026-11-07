@@ -50,9 +50,17 @@ pub(crate) fn add_codex_account(front: Front) -> String {
 
 pub(crate) const SWITCH_BEFORE_RUNNING_OUT: &str = "Switch before a limit runs out";
 
-pub(crate) fn at_limit_tip(at: u8) -> String {
+pub(crate) fn at_limit_tip(policy: pitboard_core::duty::autoswitch::Policy) -> String {
+    let trigger = if policy.weekly == Some(policy.threshold) {
+        format!(
+            "a limit of the account in use reaches {}%",
+            policy.threshold.percent()
+        )
+    } else {
+        super::limit_trigger(policy)
+    };
     format!(
-        "Pitboard notifies you once a limit of the account in use reaches {at}%. It can switch \
+        "Pitboard notifies you once {trigger}. It can switch \
          Claude Code to another of your accounts instead."
     )
 }
@@ -347,7 +355,7 @@ mod tests {
         assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
         assert_eq!(SWITCH_BEFORE_RUNNING_OUT, "Switch before a limit runs out");
         assert_eq!(
-            at_limit_tip(95),
+            at_limit_tip(pitboard_core::duty::autoswitch::Policy::default()),
             "Pitboard notifies you once a limit of the account in use reaches 95%. It can switch \
              Claude Code to another of your accounts instead."
         );

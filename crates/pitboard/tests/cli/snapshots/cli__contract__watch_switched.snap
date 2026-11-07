@@ -23,7 +23,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
         "follows": "polling",
         "within_seconds": 33
       },
-      "reason": "limit"
+      "reason": "limit",
+      "weekly_threshold": 95
     },
     "warnings": [],
     "error": null

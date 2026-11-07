@@ -3308,7 +3308,7 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
         mac,
         Some(SetupStep {
             title: words::SWITCH_BEFORE_RUNNING_OUT.into(),
-            detail: words::at_limit_tip(95),
+            detail: words::at_limit_tip(pitboard_core::duty::autoswitch::Policy::default()),
             actions: vec![
                 Choice {
                     title: words::open_settings(Front::MacMenuBar),
