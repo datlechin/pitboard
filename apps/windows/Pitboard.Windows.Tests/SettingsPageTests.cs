@@ -410,7 +410,7 @@ public sealed class SettingsPageTests
         Assert.AreEqual("Weekly limits 99%", AutomationProperties.GetName(share));
         Assert.AreEqual("From 50% to 99%", Card(share).Description);
         share.Value = 98;
-        Assert.AreEqual(new Intent.SetWeeklyLimitShare(98), model.Sent.Last());
+        Assert.AreEqual(new Intent.SetWeeklyLimitShare(98), model.Sent[^1]);
         Assert.AreEqual(93.0, shortShare.Value);
 
         var changed = initial with
@@ -426,7 +426,7 @@ public sealed class SettingsPageTests
         };
         app.Apply(changed);
         weekly.IsOn = false;
-        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(false), model.Sent.Last());
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(false), model.Sent[^1]);
         app.Apply(changed with
         {
             Revision = 3,
@@ -443,7 +443,7 @@ public sealed class SettingsPageTests
         Assert.AreEqual(98.0, share.Value);
         Assert.IsTrue(shortShare.IsEnabled);
         weekly.IsOn = true;
-        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent.Last());
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent[^1]);
     }
 
     [UITestMethod]

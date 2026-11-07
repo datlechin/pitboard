@@ -262,9 +262,9 @@ public sealed class SettingsViewModelTests
         shown.SetWeeklyLimit(false);
 
         Assert.HasCount(2, model.Sent);
-        Assert.AreEqual(new Intent.SetWeeklyLimitShare(99), model.Sent.First());
+        Assert.AreEqual(new Intent.SetWeeklyLimitShare(99), model.Sent[0]);
         Assert.AreEqual(
-            new Intent.SetWeeklyLimitEnabled(false), model.Sent.Last(),
+            new Intent.SetWeeklyLimitEnabled(false), model.Sent[^1],
             "the toggle must not restore the previous snapshot's 95% while the 99% edit is still being applied");
     }
 
@@ -277,9 +277,9 @@ public sealed class SettingsViewModelTests
         shown.ChooseAtLimit(0);
 
         Assert.HasCount(2, model.Sent);
-        Assert.AreEqual(new Intent.SetAtLimitShare(80), model.Sent.First());
+        Assert.AreEqual(new Intent.SetAtLimitShare(80), model.Sent[0]);
         Assert.AreEqual(
-            new Intent.SetAtLimitChoice(AtLimit.Nothing), model.Sent.Last(),
+            new Intent.SetAtLimitChoice(AtLimit.Nothing), model.Sent[^1],
             "the action choice must not restore the previous snapshot's 95% while the 80% edit is still being applied");
     }
 
@@ -412,7 +412,7 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(shown.SetWeeklyShare(double.NaN));
         Assert.HasCount(sent, model.Sent, "binding or clearing the weekly value must not change either share");
         shown.SetWeeklyLimit(true);
-        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent.Last());
+        Assert.AreEqual(new Intent.SetWeeklyLimitEnabled(true), model.Sent[^1]);
     }
 
     [TestMethod]
