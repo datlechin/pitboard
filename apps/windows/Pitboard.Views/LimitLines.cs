@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Shapes;
 using Pitboard.Core;
 using Windows.Foundation;
 
@@ -89,7 +90,7 @@ public sealed partial class LimitLines : UserControl
         new() { Text = text, TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };
 
     // The accent while there is room, as plan 4.9's mockup draws it, then caution and critical.
-    private static ProgressBar Bar(LimitRow limit)
+    private static Grid Bar(LimitRow limit)
     {
         var bar = new ProgressBar
         {
@@ -103,7 +104,30 @@ public sealed partial class LimitLines : UserControl
             bar.Style = (Style)Application.Current.Resources[limit.Level == UsageLevel.Low ? "LowLimitBarStyle" : "OutLimitBarStyle"];
         }
 
-        return Unspoken(bar);
+        var cell = new Grid { Children = { Unspoken(bar) } };
+        if (limit.Pace is { } pace)
+        {
+            ToolTipService.SetToolTip(cell, pace.Help);
+            if (pace.Standing != PaceStanding.Even)
+            {
+                var mark = new Rectangle
+                {
+                    Width = 2,
+                    Height = 12,
+                    Style = (Style)Application.Current.Resources[pace.Standing == PaceStanding.Over ? "OverPaceMarkStyle" : "UnderPaceMarkStyle"],
+                };
+                AutomationProperties.SetAutomationId(mark, "limit.paceMark");
+                var marks = new Canvas { Children = { Unspoken(mark) }, IsHitTestVisible = false };
+                cell.Children.Add(Unspoken(marks));
+                cell.SizeChanged += (_, size) =>
+                {
+                    Canvas.SetLeft(mark, (size.NewSize.Width * Math.Clamp(pace.Expected, 0, 100) / 100) - 1);
+                    Canvas.SetTop(mark, (size.NewSize.Height - mark.Height) / 2);
+                };
+            }
+        }
+
+        return cell;
     }
 
     private void Show()
@@ -127,6 +151,19 @@ public sealed partial class LimitLines : UserControl
             Place(Unspoken(figure), row, 2);
             Place(Unspoken(Column(limit.Resets)), row, 3);
             row++;
+            // A second line keeps the bars aligned at the narrowest window, and takes no room while pace is off.
+            if (limit.Pace is { } pace)
+            {
+                _grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var said = Column(pace.Said);
+                said.Style = (Style)Application.Current.Resources["SecondaryCaptionTextBlockStyle"];
+                said.TextWrapping = TextWrapping.Wrap;
+                AutomationProperties.SetAutomationId(said, "limit.pace");
+                ToolTipService.SetToolTip(said, pace.Help);
+                Grid.SetColumnSpan(said, 3);
+                Place(Unspoken(said), row, 1);
+                row++;
+            }
         }
 
         Visibility = row > 0 ? Visibility.Visible : Visibility.Collapsed;

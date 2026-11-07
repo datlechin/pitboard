@@ -106,6 +106,10 @@ public sealed partial class AccountsPage : Page
 
     public static Visibility NoteLearnShown(AccountItem item) => Look.Shown(item.Notes.FirstOrDefault()?.Learn is not null);
 
+    public static string RunsOutOf(AccountItem item) => item.RunsOut ?? "";
+
+    public static Visibility RunsOutShown(AccountItem item) => Look.Shown(item.RunsOut is not null);
+
     public static bool Switching(AccountItem item) => item.End is RowEnd.Switching;
 
     public static Visibility SwitchingShown(AccountItem item) => Look.Shown(Switching(item));

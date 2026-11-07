@@ -57,6 +57,7 @@ type Menu = [Vec<(String, &'static str)>; 3];
 #[derive(Clone, PartialEq)]
 struct Details {
     email: Option<String>,
+    runs_out: Option<String>,
     notes: Vec<AccountNote>,
     sign_in: Option<String>,
     warm: Option<(String, pitboard_model::Choice)>,
@@ -73,6 +74,7 @@ impl Details {
         } = &item.detail;
         Details {
             email: email.clone(),
+            runs_out: item.runs_out.clone(),
             notes: item.notes.clone(),
             sign_in: sign_in.clone(),
             warm: (warm.as_ref()).map(|warm| (warm.said.clone(), warm.settings.clone())),
@@ -334,6 +336,15 @@ impl AccountGroup {
         }
         for note in &details.notes {
             rows.push(self.note_row(note, details.offered.as_ref()).upcast());
+        }
+        if let Some(runs_out) = &details.runs_out {
+            rows.push(
+                adw::ActionRow::builder()
+                    .title(runs_out)
+                    .use_markup(false)
+                    .build()
+                    .upcast(),
+            );
         }
         if let Some(sign_in) = &details.sign_in {
             rows.push(property(&words.sign_in, sign_in).upcast());

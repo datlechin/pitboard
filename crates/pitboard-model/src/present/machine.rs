@@ -23,11 +23,21 @@ pub struct MachineShown {
     /// The `pitboard` a terminal runs, as the settings show it.
     pub command_line: CommandLineShown,
     pub at_limit: AtLimitShown,
+    pub pace: PaceShown,
     /// Warming up accounts, as the settings show it.
     pub warm: WarmShown,
     /// The watch service, while no status item keeps Pitboard running once its window closes.
     #[uniffi(default)]
     pub watch_service: Option<WatchServiceShown>,
+}
+
+/// The display preference, independent of automatic switching.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PaceShown {
+    pub on: bool,
+    pub enabled: bool,
+    pub title: String,
+    pub note: String,
 }
 
 /// The watch service, as the settings show it, beside their own title for it.
@@ -221,6 +231,12 @@ pub(crate) fn machine(seen: &Seen) -> MachineShown {
         activity: activity(seen),
         command_line: command_line(seen),
         at_limit: at_limit(seen),
+        pace: PaceShown {
+            on: seen.state.preferences.show_pace,
+            enabled: seen.state.preferences_have_been_read(),
+            title: words::titled(seen.front, "Show Pace", "Show pace"),
+            note: words::PACE_NOTE.into(),
+        },
         warm: warm(seen),
         watch_service: watch_service(seen),
     }

@@ -22,6 +22,18 @@ pub(super) fn follow(preferences: &Preferences) {
     imp.warm_from.set_title(&words.from);
     imp.warm_to.set_title(&words.to);
     let weak = preferences.downgrade();
+    imp.show_pace.connect_active_notify(move |row| {
+        if let Some(preferences) = weak.upgrade()
+            && let Some(machine) = preferences.machine()
+            && machine.pace.enabled
+            && row.is_active() != machine.pace.on
+        {
+            preferences.host().send(Intent::SetShowPace {
+                on: row.is_active(),
+            });
+        }
+    });
+    let weak = preferences.downgrade();
     imp.at_limit.connect_selected_notify(move |_| {
         if let Some(preferences) = weak.upgrade() {
             chosen(&preferences);
@@ -85,6 +97,10 @@ pub(super) fn follow(preferences: &Preferences) {
 
 pub(super) fn show(preferences: &Preferences, machine: &MachineShown) {
     let imp = preferences.imp();
+    imp.show_pace.set_title(&machine.pace.title);
+    imp.show_pace.set_subtitle(&machine.pace.note);
+    imp.show_pace.set_sensitive(machine.pace.enabled);
+    imp.show_pace.set_active(machine.pace.on);
     let at_limit = &machine.at_limit;
     imp.at_limit_group
         .set_title(&glib::markup_escape_text(&at_limit.title));

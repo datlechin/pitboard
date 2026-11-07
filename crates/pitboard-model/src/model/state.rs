@@ -1546,6 +1546,7 @@ impl State {
             }
             Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
             Intent::SetOrder { order } => self.order_set(order, jobs),
+            Intent::SetShowPace { on } => self.show_pace_set(on, jobs),
             Intent::DeclineTip { tip } => self.put_away(tip, jobs),
             Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
             // Keeping the choice shown there writes nothing, and the tip has done its work.
@@ -2623,6 +2624,17 @@ impl State {
             }
         }
         kept
+    }
+
+    // A display change only: no new reading, advice or switch.
+    fn show_pace_set(&mut self, on: bool, jobs: &mut Vec<Job>) {
+        if !self.preferences_read || self.preferences.show_pace == on {
+            return;
+        }
+        self.preferences.show_pace = on;
+        jobs.push(Job::KeepPreferences {
+            preferences: self.preferences.clone(),
+        });
     }
 
     // Taken only once the preferences have been read, so never kept over a file that could

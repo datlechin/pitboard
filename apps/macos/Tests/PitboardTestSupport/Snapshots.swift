@@ -108,6 +108,9 @@ package func snapshot(
                     sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
                     linkTitle: "Is this allowed?",
                     link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed")),
+            pace: PaceShown(
+                on: false, enabled: true, title: "Show Pace",
+                note: "Compare use with an even pace and estimate when a limit will run out."),
             warm: WarmShown(
                 title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",
                 accounts: warming,

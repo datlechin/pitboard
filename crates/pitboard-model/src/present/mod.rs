@@ -60,7 +60,7 @@ pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
-    MachineShown, OrderChoice, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
+    MachineShown, OrderChoice, PaceShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
     WatchServiceShown,
 };
 pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
@@ -172,6 +172,9 @@ pub struct AccountItem {
     pub action: Option<ItemAction>,
     /// The one line under its name in the menu: its limits, or what stands in their way.
     pub summary: String,
+    /// The first limit expected to run out, when pace is shown.
+    #[uniffi(default)]
+    pub runs_out: Option<String>,
     // what needs doing about it, the most pressing first
     pub notes: Vec<AccountNote>,
     pub detail: AccountDetail,
@@ -316,6 +319,23 @@ pub struct ItemOffer {
     pub confirm: Option<Question>,
 }
 
+/// How use compares with an even pace at the last reading.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum PaceStanding {
+    Under,
+    Even,
+    Over,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct LimitPace {
+    /// Expected share used, on the same axis as `LimitRow::percent`.
+    pub expected: f64,
+    pub standing: PaceStanding,
+    pub said: String,
+    pub help: String,
+}
+
 /// One limit of an account, as a row of its bars.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
@@ -339,6 +359,8 @@ pub struct LimitRow {
     pub resets_in: String,
     // the row as VoiceOver says it: "5-hour limit, 42 percent used, resets 3:45 PM"
     pub spoken: String,
+    #[uniffi(default)]
+    pub pace: Option<LimitPace>,
 }
 
 // By its length, for a view that tells limits apart by more than their words.

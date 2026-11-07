@@ -50,6 +50,8 @@ pub(crate) struct Preferences {
     // Which account goes first, by the core's code. Text, as `at_limit` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) order: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) show_pace: bool,
 }
 
 impl Preferences {

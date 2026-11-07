@@ -57,6 +57,14 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     private CommandLineShown CommandLine => Machine.CommandLine;
 
+    public bool ShowsPace => Machine.Pace.On;
+
+    public bool CanShowPace => Machine.Pace.Enabled;
+
+    public string PaceTitle => Machine.Pace.Title;
+
+    public string PaceNote => Machine.Pace.Note;
+
     public bool StartsAtSignIn => _start.On;
 
     public bool CanStartAtSignIn => _start.CanTurnOn;
@@ -247,6 +255,14 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         if (on != _start.On)
         {
             _start.Set(on);
+        }
+    }
+
+    public void SetShowPace(bool on)
+    {
+        if (on != Machine.Pace.On)
+        {
+            _model.Send(new Intent.SetShowPace(on));
         }
     }
 

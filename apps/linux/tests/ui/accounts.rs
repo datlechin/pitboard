@@ -4,7 +4,9 @@
 use adw::prelude::*;
 use atspi::Role;
 use pitboard_linux::window::{AccountGroup, LimitRow, NoticeRow, level_name};
-use pitboard_model::{ActionKind, RowEnd, UsageLevel};
+use pitboard_model::{
+    AccountNote, ActionKind, LimitPace, NoteKind, PaceStanding, RowEnd, UsageLevel,
+};
 
 use super::harness::{App, PATIENCE, Screen, eventually, owned, session};
 use super::views::{self, Viewed, button, every};
@@ -55,6 +57,78 @@ fn each_account_shows_its_limits_with_their_level() {
         }
     }
     assert!(levels.contains(&UsageLevel::Plenty), "{levels:?}");
+}
+
+#[gtk::test]
+fn pace_updates_in_place_and_leaves_no_marker_or_help_when_hidden() {
+    let viewed = Viewed::of("twoTools");
+    let mut limit = viewed
+        .items()
+        .into_iter()
+        .flat_map(|item| item.limits)
+        .next()
+        .unwrap();
+    let row = LimitRow::default();
+    let marker = every::<gtk::DrawingArea>(&row).remove(0);
+    for (standing, said, marked) in [
+        (PaceStanding::Over, "14% over pace", true),
+        (PaceStanding::Under, "14% under pace", true),
+        (PaceStanding::Even, "On pace", false),
+    ] {
+        limit.pace = Some(LimitPace {
+            expected: 45.0,
+            standing,
+            said: said.into(),
+            help: "45% expected by now".into(),
+        });
+        row.show(&limit);
+        assert_eq!(marker.is_visible(), marked);
+        assert_eq!(row.tooltip_text().as_deref(), Some("45% expected by now"));
+        assert!(
+            every::<gtk::Label>(&row)
+                .iter()
+                .any(|label| label.is_visible() && label.label() == said)
+        );
+        assert_eq!(
+            every::<gtk::LevelBar>(&row)[0].value(),
+            limit.percent.clamp(0.0, 100.0)
+        );
+    }
+    limit.pace = None;
+    row.show(&limit);
+    assert!(!marker.is_visible());
+    assert!(row.tooltip_text().is_none());
+    assert!(
+        !every::<gtk::Label>(&row)
+            .iter()
+            .any(|label| label.is_visible() && label.label() == "On pace")
+    );
+}
+
+#[gtk::test]
+fn a_run_out_estimate_keeps_the_accounts_warning_and_disappears_when_removed() {
+    let viewed = Viewed::of("oneTool");
+    let section = viewed.shown.snapshot().sections[0].clone();
+    let mut item = section.accounts[0].clone();
+    let account = group(&viewed, &item.title);
+    let warning = "The last reading is old";
+    let estimate = "At this pace, runs out in 2 hours";
+    item.notes = vec![AccountNote {
+        kind: NoteKind::Stale,
+        text: warning.into(),
+        action: None,
+        learn: None,
+    }];
+    item.runs_out = Some(estimate.into());
+    account.show(&section, &item);
+    let rows = every::<adw::ActionRow>(&account);
+    assert!(rows.iter().any(|row| row.title() == warning));
+    assert!(rows.iter().any(|row| row.title() == estimate));
+    item.runs_out = None;
+    account.show(&section, &item);
+    let rows = every::<adw::ActionRow>(&account);
+    assert!(rows.iter().any(|row| row.title() == warning));
+    assert!(!rows.iter().any(|row| row.title() == estimate));
 }
 
 // Over AT-SPI, as a screen reader's user finds them: the label and the button GTK names by

@@ -57,6 +57,15 @@
         <property name="name">limits</property>
         <property name="icon-name">battery-level-50-symbolic</property>
         <child>
+          <object class="AdwPreferencesGroup">
+            <child>
+              <object class="AdwSwitchRow" id="show_pace">
+                <property name="use-markup">False</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
           <object class="AdwPreferencesGroup" id="at_limit_group">
             <child>
               <object class="AdwComboRow" id="at_limit">

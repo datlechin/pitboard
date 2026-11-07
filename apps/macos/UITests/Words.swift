@@ -51,6 +51,7 @@ enum Words {
     static let doNothing = "Do Nothing"
     static let mostLeft = "Most Left"
     static let resetsSoonest = "Resets Soonest"
+    static let underPace = "under pace"
 
     // The app's own questions, AppKit alerts: Uninstall's, then the one once Pitboard's folder
     // is gone.

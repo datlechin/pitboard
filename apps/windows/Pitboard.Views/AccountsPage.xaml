@@ -128,10 +128,15 @@
                                 TextWrapping="NoWrap" />
                           </Grid>
                         </toolkit:SettingsExpander.Header>
-                        <!-- A line per limit, and one line more only where there is something to do. -->
+                        <!-- Limits, the optional run-out estimate, and the most pressing note. -->
                         <toolkit:SettingsExpander.Description>
                           <StackPanel Spacing="4">
                             <local:LimitLines Limits="{x:Bind Item.Limits, Mode=OneWay}" />
+                            <TextBlock
+                                Text="{x:Bind local:AccountsPage.RunsOutOf(Item), Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind local:AccountsPage.RunsOutShown(Item), Mode=OneWay}"
+                                AutomationProperties.AutomationId="account.runsOut" />
                             <TextBlock
                                 Text="{x:Bind local:AccountsPage.NoteOf(Item), Mode=OneWay}"
                                 Visibility="{x:Bind local:AccountsPage.NoteShown(Item), Mode=OneWay}" />
@@ -182,9 +187,14 @@
                                 <DataTemplate x:DataType="core:LimitRow">
                                   <toolkit:SettingsCard
                                       Header="{x:Bind Name}"
-                                      Description="{x:Bind Used}"
                                       Style="{StaticResource DefaultSettingsExpanderItemStyle}"
                                       AutomationProperties.Name="{x:Bind Name}">
+                                    <toolkit:SettingsCard.Description>
+                                      <StackPanel>
+                                        <TextBlock Text="{x:Bind Used}" />
+                                        <local:LimitPaceText Pace="{x:Bind Pace}" />
+                                      </StackPanel>
+                                    </toolkit:SettingsCard.Description>
                                     <StackPanel HorizontalAlignment="Right">
                                       <TextBlock HorizontalAlignment="Right" Text="{x:Bind Resets}" />
                                       <TextBlock HorizontalAlignment="Right" Text="{x:Bind ResetsIn}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />

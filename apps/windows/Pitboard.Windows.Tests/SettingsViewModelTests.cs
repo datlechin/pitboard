@@ -195,6 +195,30 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
+    public void PaceUsesItsOwnSettingAndDoesNotEchoModelChanges()
+    {
+        var initial = With(1, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false },
+            Pace = machine.Pace with { On = false, Enabled = true },
+        });
+        var (shown, model, app) = Over(initial);
+        Assert.IsTrue(shown.CanShowPace);
+        Assert.IsFalse(shown.ShowsPace);
+        Assert.AreEqual(initial.Machine.Pace.Title, shown.PaceTitle);
+        Assert.AreEqual(initial.Machine.Pace.Note, shown.PaceNote);
+
+        shown.SetShowPace(false);
+        Assert.IsEmpty(model.Sent);
+        shown.SetShowPace(true);
+        CollectionAssert.AreEqual(new Intent[] { new Intent.SetShowPace(true) }, model.Sent.ToArray());
+        app.Apply(initial with { Revision = 2, Machine = initial.Machine with { Pace = initial.Machine.Pace with { On = true } } });
+        shown.SetShowPace(true);
+        Assert.IsTrue(shown.ShowsPace);
+        Assert.HasCount(1, model.Sent);
+    }
+
+    [TestMethod]
     public void EachChangeSendsWhatTheModelTakes()
     {
         var (shown, model, _) = Over(With(1, machine => machine with { Warm = TwoWarmed }));

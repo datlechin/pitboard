@@ -100,6 +100,58 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.windows[Words.limits].waitForExistence(timeout: 5))
     }
 
+    /// The fixture's work account is under pace. Both the row and inspector say so when
+    /// enabled, without predicting that an account under pace will run out.
+    @MainActor
+    func testShowPaceUpdatesTheAccountsAndInspector() throws {
+        let scratch = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let homes = ["HOME", "PITBOARD_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]
+        var environment: [String: String] = [:]
+        for home in homes {
+            let folder = scratch.appending(path: home)
+            try FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true)
+            environment[home] = folder.path
+        }
+        let app = launch(.oneTool, environment: environment)
+        defer {
+            app.terminate()
+            try? FileManager.default.removeItem(at: scratch)
+        }
+        app.openWindow()
+        let row = app.accountRow("claude/work")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        let predicate = NSPredicate(
+            format: "CAST(value, \"NSString\") CONTAINS %@ OR label CONTAINS %@",
+            Words.underPace, Words.underPace)
+        let pace = row.descendants(matching: .any).matching(predicate).firstMatch
+        let detail = app.control("inspector").descendants(matching: .any).matching(predicate)
+            .firstMatch
+        XCTAssertFalse(pace.exists)
+        XCTAssertFalse(detail.exists)
+
+        app.openSettings()
+        app.toolbars.buttons[Words.limits].click()
+        let toggle = app.control("settings.showPace")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        XCTAssertEqual(toggle.value as? Int, 0)
+        toggle.click()
+        XCTAssertTrue(toggle.wait(until: "value == 1", timeout: 5))
+        XCTAssertTrue(pace.waitForExistence(timeout: 5))
+        XCTAssertTrue(detail.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.control("account.runsOut").exists)
+        XCTAssertFalse(app.control("inspector.runsOut").exists)
+        XCTAssertFalse(
+            app.accountRow("claude/personal").descendants(matching: .any)["account.runsOut"]
+                .exists)
+        toggle.click()
+        XCTAssertTrue(toggle.wait(until: "value == 0", timeout: 5))
+        XCTAssertTrue(pace.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(detail.waitForNonExistence(timeout: 5))
+    }
+
     /// The model answers a change after the click, so each read after one waits.
     @MainActor
     func testWhatHappensBeforeAnAccountRunsOut() {

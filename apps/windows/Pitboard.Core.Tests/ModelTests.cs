@@ -140,6 +140,7 @@ public sealed class ModelTests
             Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."));
 
     private static MachineShown Unread() => new(
+        Pace: new PaceShown(On: false, Enabled: true, Title: "Show pace", Note: "Compare use with an even pace and estimate when a limit will run out."),
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
@@ -553,7 +554,8 @@ public sealed class ModelTests
         var limit = new LimitRow(
             Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: 72.4, Figure: "72%",
             Used: "72% used", Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "Resets 09:05",
-            ResetsIn: "in 1 hr 5 min", Spoken: "5-hour limit, 72 percent used, resets 09:05");
+            ResetsIn: "in 1 hr 5 min", Spoken: "5-hour limit, 72 percent used, resets 09:05",
+            Pace: new LimitPace(50, PaceStanding.Over, "22% over pace", "At an even pace, 50% would be used."));
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
         var window = new WindowAccount(
             Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
@@ -563,7 +565,7 @@ public sealed class ModelTests
             Email: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
             NeedsSignIn: false, Standing: AccountStanding.Ready, Unplaced: false, End: new RowEnd.Button(use), Action: use,
-            Summary: "5-hour 72% used",
+            Summary: "5-hour 72% used", RunsOut: null,
             Notes:
             [
                 new AccountNote(
@@ -626,6 +628,9 @@ public sealed class ModelTests
         Assert.AreEqual(UsageLevel.Low, row.Limits[0].Level);
         Assert.IsInstanceOfType<LimitKind.FiveHour>(row.Limits[0].Kind);
         Assert.AreEqual(1_800_003_900L, row.Limits[0].ResetsAt);
+        Assert.AreEqual(limit.Pace, row.Limits[0].Pace);
+        Assert.IsNull(row.RunsOut);
+        Assert.AreEqual(Unread().Pace, snapshot.Machine.Pace);
         Assert.AreEqual(NoteKind.Expiring, row.Notes[0].Kind);
         Assert.AreEqual(1_800_259_200L, row.Detail.SignedInUntil);
         Assert.AreEqual<Intent?>(row.Action!.Intent, row.Actions[0].Intent);

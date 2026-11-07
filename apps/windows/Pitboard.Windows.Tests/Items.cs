@@ -29,7 +29,7 @@ internal static class Items
                 Detail: new AccountDetail(
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
                     ReadAt: null, Read: null, Notes: []),
-                Help: null, Limits: [], Actions: []),
+                Help: null, Limits: [], Actions: [], RunsOut: null),
             inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo(Key(provider, label))));
 
     // What pressing it does, and the button at its row's end that does it.
@@ -62,7 +62,7 @@ internal static class Items
             Figure: $"{percent:0}%", Used: $"{percent:0}% used",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
             ResetsAt: 1_800_007_799, Resets: "Resets 3:45 PM", ResetsIn: "in 2 hr 9 min",
-            Spoken: $"5-hour limit, {percent:0} percent used, resets 3:45 PM");
+            Spoken: $"5-hour limit, {percent:0} percent used, resets 3:45 PM", Pace: null);
 
     // What an account's own menu and expanded row offer to do to it.
     public static AccountAction Action(ActionKind kind, string title, Intent intent, bool enabled = true, Question? confirm = null) =>

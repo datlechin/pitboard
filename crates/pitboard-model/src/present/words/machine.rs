@@ -520,6 +520,10 @@ fn readable(code: &str) -> String {
     capitalised(&code.replace('_', " "))
 }
 
+/// What enabling the pace display does.
+pub(crate) const PACE_NOTE: &str =
+    "Compare use with an even pace and estimate when a limit will run out.";
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Show Pace** in the app’s Limits settings restores each limit’s expected-use marker and
+  pace, with an estimated run-out time for the account in use. It is off by default.
+
 ## [1.0.0-beta.10] - 2026-11-03
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

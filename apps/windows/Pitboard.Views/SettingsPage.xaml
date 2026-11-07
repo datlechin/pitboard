@@ -118,6 +118,17 @@
         </toolkit:SettingsCard>
 
         <TextBlock x:Name="LimitsHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Limits}" />
+        <toolkit:SettingsCard Header="{x:Bind ViewModel.PaceTitle, Mode=OneWay}" Description="{x:Bind ViewModel.PaceNote, Mode=OneWay}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xEC4A;" />
+          </toolkit:SettingsCard.HeaderIcon>
+          <ToggleSwitch
+              IsOn="{x:Bind ViewModel.ShowsPace, Mode=OneWay}"
+              IsEnabled="{x:Bind ViewModel.CanShowPace, Mode=OneWay}"
+              AutomationProperties.Name="{x:Bind ViewModel.PaceTitle, Mode=OneWay}"
+              AutomationProperties.AutomationId="settings.showPace"
+              Toggled="OnShowPaceToggled" />
+        </toolkit:SettingsCard>
         <toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}" AutomationProperties.AutomationId="settings.atLimitGroup">
           <toolkit:SettingsExpander.HeaderIcon>
             <FontIcon Glyph="&#xEC4A;" />

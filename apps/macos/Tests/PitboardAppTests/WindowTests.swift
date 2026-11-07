@@ -125,11 +125,15 @@ import Testing
 
 // A limit's bar is AppKit's level indicator, which took a click on it from the list.
 @MainActor
-@Test func aClickOnALimitsBarReachesItsRow() {
+@Test(arguments: [nil, PaceStanding.under, .even, .over])
+func aClickOnALimitsBarReachesItsRow(standing: PaceStanding?) {
     let limit = LimitRow(
         kind: .fiveHour, name: "5-hour limit", short: "5-hour", percent: 60, figure: "60%",
         used: "60% used", level: .plenty, resetsAt: nil, resets: "Resets 3:22 AM",
-        resetsIn: "in 2 hr", spoken: "5-hour limit, 60 percent used")
+        resetsIn: "in 2 hr", spoken: "5-hour limit, 60 percent used",
+        pace: standing.map {
+            LimitPace(expected: 40, standing: $0, said: "20% over pace", help: "Pace help")
+        })
     let bars = NSHostingView(rootView: UsageBars(limits: [limit]).frame(width: 480))
     let window = NSWindow(
         contentRect: NSRect(origin: .zero, size: bars.fittingSize), styleMask: .borderless,

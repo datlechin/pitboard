@@ -130,6 +130,9 @@ public sealed partial class SettingsPage : Page
     private void OnOpenNotificationSettings(object sender, RoutedEventArgs args) =>
         Context.Open(new Uri(SettingsViewModel.NotificationSettings));
 
+    private void OnShowPaceToggled(object sender, RoutedEventArgs args) =>
+        ViewModel?.SetShowPace(((ToggleSwitch)sender).IsOn);
+
     private void OnAtLimitChosen(object sender, SelectionChangedEventArgs args) =>
         ViewModel?.ChooseAtLimit(((ComboBox)sender).SelectedIndex);
 
