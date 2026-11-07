@@ -35,6 +35,21 @@ extension UsageLevel {
     }
 }
 
+/// Pace colours repeat the model's words without changing the usage bar's severity.
+extension PaceStanding {
+    var tint: Color {
+        switch self {
+        case .over: .red
+        case .under: .green
+        case .even: .secondary
+        }
+    }
+
+    var wordsStyle: AnyShapeStyle {
+        self == .over ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary)
+    }
+}
+
 /// VoiceOver is told a notice's severity in the model's word, `PanelNotice.spokenSeverity`.
 extension Severity {
     var symbol: String {

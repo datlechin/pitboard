@@ -34,13 +34,18 @@ struct AccountInspector: View {
 
     @ViewBuilder private func footnotes(of item: AccountItem) -> some View {
         let notes = item.detail.notes
-        if !notes.isEmpty || item.detail.read != nil {
+        if !notes.isEmpty || item.runsOut != nil || item.detail.read != nil {
             VStack(alignment: .leading, spacing: Design.lineSpacing) {
                 ForEach(notes, id: \.text) { note in
                     Text(note.text).explanatory()
                     if let learn = note.learn, let link = URL(string: learn.link) {
                         Link(learn.title, destination: link).font(.callout)
                     }
+                }
+                if let runsOut = item.runsOut {
+                    Text(runsOut)
+                        .explanatory()
+                        .accessibilityIdentifier("inspector.runsOut")
                 }
                 if let read = item.detail.read {
                     Text(read).explanatory()
@@ -133,11 +138,14 @@ private struct LimitDetail: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Gauge(value: min(max(limit.percent, 0), 100), in: 0...100) {
-                EmptyView()
+            UsageGauge(limit: limit)
+            if let pace = limit.pace {
+                Text(pace.said)
+                    .font(.callout)
+                    .foregroundStyle(pace.standing.wordsStyle)
+                    .monospacedDigit()
+                    .help(pace.help)
             }
-            .gaugeStyle(.linearCapacity)
-            .tint(limit.level.tint)
             if !limit.resets.isEmpty || !limit.resetsIn.isEmpty {
                 HStack(alignment: .firstTextBaseline) {
                     Text(limit.resets)

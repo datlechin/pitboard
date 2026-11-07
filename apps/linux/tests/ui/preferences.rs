@@ -31,6 +31,47 @@ fn reads_again(sent: &[Intent]) -> bool {
 }
 
 #[gtk::test]
+fn show_pace_is_independent_of_automation_and_sends_only_a_changed_value() {
+    let viewed = Viewed::of("oneTool");
+    let preferences = opened(&viewed);
+    viewed.until("display preferences read", |shown| {
+        shown.machine.pace.enabled
+    });
+    let mut snapshot = shown_in(&viewed);
+    let switch = row::<adw::SwitchRow>(&preferences, &snapshot.machine.pace.title);
+    assert_eq!(switch.is_active(), snapshot.machine.pace.on);
+    assert_eq!(
+        switch.subtitle().as_deref(),
+        Some(snapshot.machine.pace.note.as_str())
+    );
+    viewed.sent_since();
+
+    snapshot.machine.at_limit.enabled = false;
+    snapshot.machine.warm.enabled = false;
+    snapshot.machine.pace.on = true;
+    preferences.show(&snapshot);
+    assert!(
+        switch.is_sensitive(),
+        "display remains available without automation"
+    );
+    assert!(switch.is_active());
+    assert!(viewed.sent_since().is_empty(), "drawing sends nothing");
+    switch.set_active(true);
+    assert!(viewed.sent_since().is_empty());
+    switch.set_active(false);
+    assert_eq!(viewed.sent_since(), [Intent::SetShowPace { on: false }]);
+
+    snapshot.machine.pace.enabled = false;
+    preferences.show(&snapshot);
+    assert!(!switch.is_sensitive());
+    switch.set_active(false);
+    assert!(
+        viewed.sent_since().is_empty(),
+        "unread preferences send nothing"
+    );
+}
+
+#[gtk::test]
 fn a_setting_sends_only_a_value_that_differs() {
     let viewed = Viewed::of("oneTool");
     let preferences = opened(&viewed);

@@ -47,6 +47,8 @@ mod imp {
         #[template_child]
         pub(super) limits: TemplateChild<adw::PreferencesPage>,
         #[template_child]
+        pub(super) show_pace: TemplateChild<adw::SwitchRow>,
+        #[template_child]
         pub(super) at_limit_group: TemplateChild<adw::PreferencesGroup>,
         #[template_child]
         pub(super) at_limit: TemplateChild<adw::ComboRow>,

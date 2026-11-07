@@ -178,7 +178,7 @@ public sealed class SettingsPageTests
             .Where(setting => setting is SettingsCard or SettingsExpander && setting.Visibility == Visibility.Visible)
             .ToArray();
 
-        Assert.HasCount(12, settings, "4 in General, 2 in Limits, 3 in Advanced, 2 in Troubleshoot and About");
+        Assert.HasCount(13, settings, "4 in General, 3 in Limits, 3 in Advanced, 2 in Troubleshoot and About");
         Assert.AreEqual(
             "",
             string.Join(", ", settings
@@ -289,6 +289,35 @@ public sealed class SettingsPageTests
 
         Assert.AreEqual(
             AutomationLiveSetting.Assertive, AutomationProperties.GetLiveSetting(Said(page, "Task Scheduler refused the task.")));
+    }
+
+    [UITestMethod]
+    public async Task PaceIsAnIndependentLimitsSettingThatFollowsTheModel()
+    {
+        var initial = With(1, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false },
+        });
+        var model = new StandInModel(initial);
+        var app = new AppModel(model);
+        var page = await Shown(app);
+        var pace = Views.Element<ToggleSwitch>(page, "settings.showPace");
+        Assert.IsTrue(pace.IsEnabled);
+        Assert.IsFalse(pace.IsOn);
+        Assert.AreEqual(initial.Machine.Pace.Title, AutomationProperties.GetName(pace));
+        Assert.Contains(initial.Machine.Pace.Note, Views.Texts(page));
+
+        pace.IsOn = true;
+        Assert.Contains(new Intent.SetShowPace(true), model.Sent);
+        var sent = model.Sent.Count;
+        app.Apply(initial with
+        {
+            Revision = 2,
+            Machine = initial.Machine with { Pace = initial.Machine.Pace with { On = true, Enabled = false } },
+        });
+        Assert.IsTrue(pace.IsOn);
+        Assert.IsFalse(pace.IsEnabled);
+        Assert.HasCount(sent, model.Sent, "binding the saved setting must not send it back");
     }
 
     [UITestMethod]
@@ -651,7 +680,7 @@ public sealed class SettingsPageTests
         await Expand(page, "settings.warm", "work");
 
         var toggles = Views.Visible<ToggleSwitch>(page).ToArray();
-        Assert.HasCount(5, toggles, "start at sign-in, two warm-ups, daily renewal and automatic checks");
+        Assert.HasCount(6, toggles, "start at sign-in, Show Pace, two warm-ups, daily renewal and automatic checks");
         foreach (var toggle in toggles)
         {
             var card = Card(toggle);

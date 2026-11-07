@@ -1405,9 +1405,33 @@ fn busy_limits() -> Vec<Window> {
     ]
 }
 
-// Pace is `pitboard status`'s alone: the apps show no mark, figure, note or menu suffix for it.
 #[test]
-fn no_snapshot_says_pace_or_when_a_limit_runs_out() {
+fn keeping_show_pace_restores_the_limit_words_and_menu_summary() {
+    let mut model = at_noon();
+    let mut machine = Stub::reading(Ok(status(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(busy_limits())
+            .read_at(NOON)
+            .build(),
+    ])));
+    machine.preferences_file = Some(r#"{"show_pace":true}"#.into());
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    let item = rows(&model).remove(0);
+    let pace = busy_limits()[1].pace(NOON, NOON).unwrap();
+    let said = pitboard_core::words::pace_column(&pace);
+    assert!(
+        item.limits[1].spoken.contains(&said),
+        "{}",
+        item.limits[1].spoken
+    );
+    assert!(item.summary.contains(&said), "{}", item.summary);
+}
+
+// Pace stays hidden until the person asks to see it.
+#[test]
+fn pace_and_forecasts_are_hidden_by_default() {
     let (model, _) = reading(vec![
         account(Some("work"))
             .signed_in()
@@ -1420,13 +1444,14 @@ fn no_snapshot_says_pace_or_when_a_limit_runs_out() {
             .build(),
     ]);
     for shown in [model.on_a_mac(), model.on_windows()] {
-        let said = format!("{shown:?}").to_lowercase();
-        let pace = said
-            .split(|c: char| !c.is_alphanumeric())
-            .any(|word| word == "pace");
-        assert!(!pace, "{said}");
-        for runs_out in ["runs out in", "about to run out"] {
-            assert!(!said.contains(runs_out), "{runs_out}: {said}");
+        assert!(!shown.machine.pace.on);
+        for item in shown.sections.iter().flat_map(|section| &section.accounts) {
+            assert!(item.runs_out.is_none());
+            assert!(!item.summary.contains("pace"));
+            for limit in &item.limits {
+                assert!(limit.pace.is_none());
+                assert!(!limit.spoken.contains("pace"));
+            }
         }
     }
 }
@@ -4272,4 +4297,168 @@ fn an_add_this_app_waits_for_is_not_a_notice_too() {
         !ids(&shown).contains(&"awaiting/desktop".into()),
         "its sheet offers the same"
     );
+}
+
+fn showing_pace(accounts: Vec<Account>) -> (Hand, Stub) {
+    let mut model = at_noon();
+    let mut machine = Stub::reading(Ok(status(accounts)));
+    machine.preferences_file = Some(r#"{"show_pace":true}"#.into());
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    (model, machine)
+}
+
+#[test]
+fn pace_is_shared_by_all_fronts_and_only_the_account_in_use_has_a_forecast() {
+    let (model, _) = showing_pace(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(busy_limits())
+            .read_at(NOON)
+            .build(),
+        account(Some("spare"))
+            .limits(busy_limits())
+            .read_at(NOON)
+            .build(),
+    ]);
+    for front in [
+        Front::MacMenuBar,
+        Front::WindowsNotificationArea,
+        Front::Gnome,
+    ] {
+        let shown =
+            crate::present::present_on(front, &model.state, NOON, &crate::present::testing::Utc);
+        let items: Vec<_> = shown
+            .sections
+            .iter()
+            .flat_map(|section| &section.accounts)
+            .collect();
+        for item in &items {
+            for (row, limit) in item.limits.iter().zip(busy_limits()) {
+                let expected = limit.pace(NOON, NOON).unwrap();
+                let pace = row.pace.as_ref().unwrap();
+                assert_eq!(pace.expected, expected.expected);
+                assert_eq!(pace.said, pitboard_core::words::pace_column(&expected));
+                assert!(row.spoken.contains(&pace.said));
+                assert!(item.summary.contains(&pace.said));
+            }
+        }
+        assert!(
+            items
+                .iter()
+                .find(|item| item.in_use)
+                .unwrap()
+                .runs_out
+                .is_some()
+        );
+        assert!(
+            items
+                .iter()
+                .find(|item| !item.in_use)
+                .unwrap()
+                .runs_out
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn pace_uses_the_observation_not_a_later_failed_read_and_only_its_countdown_moves() {
+    let mut account = account(Some("work"))
+        .signed_in()
+        .limits(busy_limits())
+        .read_at(NOON - HOUR)
+        .build();
+    account.read_at = Some(NOON);
+    let (mut model, _) = showing_pace(vec![account]);
+    let before = rows(&model).remove(0);
+    let expected = busy_limits()[1].pace(NOON - HOUR, NOON).unwrap();
+    assert_eq!(
+        before.limits[1].pace.as_ref().unwrap().expected,
+        expected.expected
+    );
+    model.now.epoch_ms += 10 * 60 * 1000;
+    let later = rows(&model).remove(0);
+    assert_eq!(before.limits[1].pace, later.limits[1].pace);
+    assert_ne!(before.runs_out, later.runs_out);
+    model.now.epoch_ms = (NOON + WEEK) * 1000;
+    let reset = rows(&model).remove(0);
+    assert!(reset.limits.iter().all(|row| row.pace.is_none()));
+    assert!(reset.runs_out.is_none());
+}
+
+#[test]
+fn pace_does_not_change_any_widget_text_revision_or_the_status_item() {
+    let (mut model, mut machine) = showing_pace(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(busy_limits())
+            .read_at(NOON)
+            .build(),
+    ]);
+    model.publish();
+    model.run(&mut machine);
+    let before = crate::present::glance(&model.state, NOON, &crate::present::testing::Utc);
+    let revision = model.state.widget_revision();
+    let status_item = model.shown().status_item;
+    let writes = machine.glances.len();
+    model.send(Intent::SetShowPace { on: false });
+    model.run(&mut machine);
+    model.publish();
+    model.run(&mut machine);
+    assert_eq!(
+        before,
+        crate::present::glance(&model.state, NOON, &crate::present::testing::Utc)
+    );
+    assert_eq!(revision, model.state.widget_revision());
+    assert_eq!(status_item, model.shown().status_item);
+    assert_eq!(writes, machine.glances.len());
+}
+
+#[test]
+fn pace_keeps_limit_and_sign_in_warnings_ahead_of_a_forecast() {
+    let mut limits = busy_limits();
+    limits[0].percent = 100.0;
+    let (model, _) = showing_pace(vec![
+        account(Some("full"))
+            .signed_in()
+            .limits(limits)
+            .read_at(NOON)
+            .build(),
+        account(Some("expired"))
+            .standing(Standing::LoginExpired)
+            .limits(busy_limits())
+            .read_at(NOON)
+            .build(),
+    ]);
+    for item in rows(&model) {
+        assert!(item.runs_out.is_none());
+        assert!(!item.summary.contains("pace"));
+    }
+}
+
+#[test]
+fn the_app_omits_pace_where_the_core_cannot_estimate_it() {
+    let limits = vec![
+        window("early", 1.0)
+            .length(WEEK)
+            .resets(Some(NOON + WEEK - 60)),
+        window("unknown-reset", 20.0).length(WEEK),
+        window("unknown-length", 20.0).resets(Some(NOON + DAY)),
+        window("full", 100.0).length(WEEK).resets(Some(NOON + DAY)),
+        window("reset", 20.0).length(WEEK).resets(Some(NOON)),
+        window("future", 20.0)
+            .length(WEEK)
+            .resets(Some(NOON + WEEK + DAY)),
+    ];
+    let (model, _) = showing_pace(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(limits)
+            .read_at(NOON)
+            .build(),
+    ]);
+    let item = rows(&model).remove(0);
+    assert!(item.limits.iter().all(|row| row.pace.is_none()));
+    assert!(item.runs_out.is_none());
 }

@@ -38,6 +38,23 @@ class FixtureTestCase: XCTestCase {
         app.launch()
         return app
     }
+
+    // Settings opens centred, and a tall pane reaches under the Dock of CI's 768-point screen.
+    @MainActor
+    func raise(_ settings: XCUIElement) {
+        move(settings, to: CGPoint(x: settings.frame.minX, y: 40))
+    }
+
+    @MainActor
+    func move(_ window: XCUIElement, to origin: CGPoint) {
+        let frame = window.frame
+        let titleBar = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: 10))
+        titleBar.click(
+            forDuration: 0.3,
+            thenDragTo: titleBar.withOffset(
+                CGVector(dx: origin.x - frame.minX, dy: origin.y - frame.minY)))
+    }
 }
 
 @MainActor

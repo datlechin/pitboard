@@ -364,6 +364,8 @@ pub enum Intent {
     SetAtLimit { choice: AtLimit, at: u8 },
     /// Which account goes first when Pitboard picks one, taken as `SetAtLimit` is.
     SetOrder { order: SwitchOrder },
+    /// Whether to show each limit’s pace, independent of automatic switching.
+    SetShowPace { on: bool },
     /// "Not Now" to a setup tip, kept with the app's preferences.
     DeclineTip { tip: Tip },
     /// What the app's system says of opening the app at login. A setup step offers it for the

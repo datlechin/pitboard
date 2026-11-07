@@ -12,12 +12,26 @@ struct LimitsSettings: View {
     var body: some View {
         let atLimit = model.machine.atLimit
         let warm = model.machine.warm
+        let pace = model.machine.pace
         let share = Binding(
             get: { Int(atLimit.at) },
             set: {
                 model.send(.setAtLimit(choice: atLimit.choice, at: Self.share($0, of: atLimit)))
             })
         Form {
+            Section {
+                Toggle(
+                    pace.title,
+                    isOn: Binding(
+                        get: { pace.on },
+                        set: { model.send(.setShowPace(on: $0)) })
+                )
+                .accessibilityIdentifier("settings.showPace")
+            } footer: {
+                Text(pace.note).footnote()
+            }
+            .disabled(!pace.enabled)
+
             Section {
                 Picker(
                     atLimit.heading,

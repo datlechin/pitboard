@@ -58,6 +58,12 @@ struct AccountRow: View {
                 }
                 .padding(.leading, textInset)
             }
+            if let runsOut = item.runsOut {
+                Text(runsOut)
+                    .explanatory()
+                    .padding(.leading, textInset)
+                    .accessibilityIdentifier("account.runsOut")
+            }
         }
         .padding(.vertical, 4)
         // Under the name, where a list would line it up with the row's last label.

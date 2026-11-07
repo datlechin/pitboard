@@ -161,16 +161,20 @@ test("a site with several accounts' windows is a submenu of their labels, the on
   for (const host of ["claude.ai", "chatgpt.com"]) assert.ok(named.includes(`host: "${host}"`));
 });
 
-test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
+test("the icon's tooltip names Pitboard, then each account in use with its tool and its base limit line", () => {
   assert.ok(catalogue.includes("let mut tip = vec![PITBOARD.to_owned()];"));
   assert.ok(
     catalogue.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'),
   );
+  const tip = present("accounts.rs").match(/let tip = words::bar_tip\(([\s\S]*?)\n    \);/)?.[1];
+  assert.ok(tip, "the status item builds its tooltip");
+  assert.ok(tip.includes(".filter(|account| account.signed_in)"));
+  assert.ok(tip.includes("seen.name_of(account),"));
   assert.ok(
-    present("accounts.rs").includes(
-      ".map(|account| (seen.name_of(account), summary(seen, account))),",
-    ),
+    tip.includes("in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))"),
   );
+  // The icon keeps the base limits even when an account's menu summary includes optional pace.
+  assert.doesNotMatch(tip, /\bsummary\(/);
   assert.ok(catalogue.includes('format!("{label} ({tool})")'));
   assert.equal(
     barTip(moments.after, "windows"),
@@ -335,10 +339,30 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
   // each limit's card, its reset then how long until it
   for (const bound of [
     'Header="{x:Bind Name}"',
-    'Description="{x:Bind Used}"',
+    'Text="{x:Bind Used}"',
     'Text="{x:Bind ResetsIn}"',
   ])
     assert.ok(xaml.includes(bound), bound);
+  // The published figure still shows use alone. The native detail adds a nullable pace line
+  // beside it only after the display preference is turned on.
+  assert.match(
+    xaml,
+    /<toolkit:SettingsCard.Description>\s*<StackPanel>\s*<TextBlock Text="\{x:Bind Used\}" \/>\s*<local:LimitPaceText Pace="\{x:Bind Pace\}" \/>\s*<\/StackPanel>\s*<\/toolkit:SettingsCard.Description>/,
+  );
+  const pace = views("LimitPaceText.cs");
+  assert.ok(pace.includes('_text.Text = pace?.Said ?? "";'));
+  assert.ok(
+    pace.includes("Visibility = pace is null ? Visibility.Collapsed : Visibility.Visible;"),
+  );
+  const preferences = repo("crates/pitboard-model/src/model/preferences.rs");
+  assert.match(
+    preferences,
+    /#\[derive\([^\n]*\bDefault\b[^\n]*\)\]\s*pub\(crate\) struct Preferences/,
+  );
+  assert.match(
+    preferences,
+    /#\[serde\(default, skip_serializing_if = "std::ops::Not::not"\)\]\s*pub\(crate\) show_pace: bool/,
+  );
   assert.ok(catalogue.includes('format!("in {}", span(seconds))'));
   const [card, line] = [row("work").cards[0], row("work").limits[0]];
   assert.deepEqual(

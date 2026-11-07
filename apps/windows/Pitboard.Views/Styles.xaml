@@ -36,6 +36,12 @@
   <Style x:Key="OutLimitBarStyle" TargetType="ProgressBar" BasedOn="{StaticResource DefaultProgressBarStyle}">
     <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
   </Style>
+  <Style x:Key="OverPaceMarkStyle" TargetType="Rectangle">
+    <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+  </Style>
+  <Style x:Key="UnderPaceMarkStyle" TargetType="Rectangle">
+    <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+  </Style>
   <Style x:Key="PageTitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
     <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
   </Style>

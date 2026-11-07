@@ -44,6 +44,7 @@ internal static class Snapshots
             WidgetRevision: 0, Answers: []);
 
     private static MachineShown Unread() => new(
+        Pace: new PaceShown(On: false, Enabled: true, Title: "Show pace", Note: "Compare use with an even pace and estimate when a limit will run out."),
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
             About: "Your PC refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire."),

@@ -394,3 +394,36 @@ fn a_tool_declined_twice_is_kept_once() {
     assert_eq!(model.send(decline(Tool::Claude)), []);
     assert_eq!(machine.kept_preferences.len(), before + 1);
 }
+
+#[test]
+fn pace_is_an_independent_display_preference_kept_across_restarts() {
+    let mut machine = one_of_each();
+    let mut model = started(&mut machine);
+    assert!(!model.shown().machine.pace.on);
+    assert!(model.shown().machine.pace.enabled);
+    let before = model.shown().machine.at_limit;
+    let jobs = model.send(Intent::SetShowPace { on: true });
+    assert!(matches!(jobs.as_slice(), [Job::KeepPreferences { .. }]));
+    model.run(&mut machine);
+    assert!(model.shown().machine.pace.on);
+    assert_eq!(model.shown().machine.at_limit, before);
+    assert!(model.send(Intent::SetShowPace { on: true }).is_empty());
+    assert!(started(&mut machine).shown().machine.pace.on);
+    model.send(Intent::SetShowPace { on: false });
+    model.run(&mut machine);
+    assert!(!started(&mut machine).shown().machine.pace.on);
+}
+
+#[test]
+fn pace_cannot_overwrite_preferences_before_they_are_read_or_when_unreadable() {
+    let mut model = Hand::new();
+    assert!(!model.shown().machine.pace.enabled);
+    assert!(model.send(Intent::SetShowPace { on: true }).is_empty());
+    let mut machine = one_of_each();
+    machine.preferences_unreadable = true;
+    let mut model = started(&mut machine);
+    assert!(!model.shown().machine.pace.enabled);
+    assert!(model.send(Intent::SetShowPace { on: true }).is_empty());
+    assert!(!model.shown().machine.pace.on);
+    assert!(machine.kept_preferences.is_empty());
+}

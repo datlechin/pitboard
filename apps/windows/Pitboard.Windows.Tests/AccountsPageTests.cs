@@ -255,6 +255,49 @@ public sealed class AccountsPageTests
         Assert.IsTrue(Views.Visible<ProgressBar>(spare).All(bar => AutomationProperties.GetAccessibilityView(bar) == AccessibilityView.Raw));
     }
 
+    [UITestMethod]
+    public async Task PaceAndRunOutKeepProblemNotesAndDisappearWhenTurnedOff()
+    {
+        var limit = Items.Limit(59) with { Pace = new LimitPace(25, PaceStanding.Over, "34% over pace", "Expected 25% used") };
+        var account = Work() with
+        {
+            Limits = [limit],
+            RunsOut = "Weekly Fable Extended Thinking limit runs out in 19 hr 5 min at this pace",
+            Notes = [new AccountNote(NoteKind.Expiring, "Sign-in expires in 2 days", Action: null, Learn: null)],
+        };
+        var initial = Listing(account);
+        var (page, _, app) = await Over(initial, width: 592);
+        var row = Row(page, "claude/work");
+        Assert.Contains(account.RunsOut, Views.Texts(row));
+        var forecast = Views.Element<TextBlock>(row, "account.runsOut");
+        forecast.FontSize = 20;
+        page.UpdateLayout();
+        var singleLine = new TextBlock { Text = account.RunsOut, FontSize = forecast.FontSize, FontFamily = forecast.FontFamily };
+        singleLine.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Assert.IsTrue(
+            forecast.ActualHeight > singleLine.DesiredSize.Height * 1.5,
+            $"the long scoped forecast must wrap at the narrowest width: {forecast.ActualHeight} high, one line {singleLine.DesiredSize.Height}");
+        Assert.IsTrue(Bounds(forecast, page).Right <= Bounds(row, page).Right + .5, "the forecast runs outside the row");
+        Assert.Contains(account.Notes[0].Text, Views.Texts(row));
+        Assert.IsTrue(Views.Visible<ProgressBar>(row).Single().ActualWidth >= 80, "pace leaves room for the bar at the narrowest width");
+        var paceText = Views.Element<TextBlock>(row, "limit.pace");
+        Assert.IsTrue(Bounds(paceText, page).Right <= Bounds(row, page).Right + .5, "pace runs outside the row");
+        await Open(row, "in 2 hr 9 min");
+        var detail = Views.Visible<SettingsCard>(row).Single(card => card.Header as string == limit.Name);
+        Assert.Contains(limit.Pace.Said, Views.Texts(detail));
+
+        app.Apply(initial with
+        {
+            Revision = 2,
+            Sections = [Items.Section("claude", null, account with { RunsOut = null, Limits = [limit with { Pace = null }] })],
+        });
+        await Views.Until(
+            () => !Views.Texts(row).Contains(account.RunsOut) && !Views.Texts(row).Contains(limit.Pace.Said),
+            "the old pace or run-out estimate stayed");
+        Assert.DoesNotContain(limit.Pace.Said, Views.Texts(row));
+        Assert.Contains(account.Notes[0].Text, Views.Texts(row));
+    }
+
     // Plan 10 asks this be measured first: a SettingsExpander holding bars keeps its layout. At the window's narrowest,
     // every bar is drawn, the bars of two accounts line up, and the button stays at the row's end.
     [UITestMethod]

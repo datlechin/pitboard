@@ -136,7 +136,12 @@ pub(crate) fn status_item(seen: &Seen, notices: &MenuNotices) -> StatusItemShown
         accounts
             .iter()
             .filter(|account| account.signed_in)
-            .map(|account| (seen.name_of(account), summary(seen, account))),
+            .map(|account| {
+                (
+                    seen.name_of(account),
+                    in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account)),
+                )
+            }),
     );
     StatusItemShown {
         usage: bar_title(accounts, &seen.tools, true),
@@ -349,6 +354,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         id: account.id.clone(),
         qualified: account.key.as_ref().map(Key::qualified),
         summary: summary(seen, account),
+        runs_out: runs_out(seen, account),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -367,7 +373,15 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         limits: account
             .usage
             .as_ref()
-            .map(|usage| usage.windows.iter().map(|l| limit_row(seen, l)).collect())
+            .map(|usage| {
+                usage
+                    .windows
+                    .iter()
+                    .map(|limit| {
+                        paced_limit_row(seen, limit, usage.observed_at.unwrap_or(seen.now))
+                    })
+                    .collect()
+            })
             .unwrap_or_default(),
     }
 }
@@ -648,7 +662,84 @@ pub(crate) fn needs_sign_in(account: &Account) -> bool {
 
 // The line under an account in the menu: its limits, or what stands in their way.
 pub(crate) fn summary(seen: &Seen, account: &Account) -> String {
-    in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))
+    in_place_of_limits(seen, account).unwrap_or_else(|| {
+        if !seen.state.preferences.show_pace || reached_limit(seen, account) {
+            return limits_said(seen, account);
+        }
+        let Some(usage) = &account.usage else {
+            return limits_said(seen, account);
+        };
+        let at = usage.observed_at.unwrap_or(seen.now);
+        let limits: Vec<_> = usage
+            .windows
+            .iter()
+            .map(|limit| {
+                let short = words::limit_short(&said::limit_name(limit), limit.scope.as_deref());
+                let figure = words::used(&said::figure(limit.percent));
+                let figure = match limit.pace(at, seen.now) {
+                    Some(pace) => words::with_pace(&figure, &said::pace_column(&pace)),
+                    None => figure,
+                };
+                (short, figure)
+            })
+            .collect();
+        let summary = words::paced_limits_line(seen.front, &limits);
+        match runs_out(seen, account) {
+            Some(forecast) => words::with_forecast(&summary, &forecast),
+            None => summary,
+        }
+    })
+}
+
+fn reached_limit(seen: &Seen, account: &Account) -> bool {
+    account
+        .usage
+        .as_ref()
+        .is_some_and(|usage| usage.windows.iter().any(|limit| limit.used_up(seen.now)))
+}
+
+fn runs_out(seen: &Seen, account: &Account) -> Option<String> {
+    if !seen.state.preferences.show_pace
+        || !account.signed_in
+        || in_place_of_limits(seen, account).is_some()
+        || reached_limit(seen, account)
+    {
+        return None;
+    }
+    let usage = account.usage.as_ref()?;
+    let at = usage.observed_at.unwrap_or(seen.now);
+    let (limit, seconds) = pitboard_core::usage::pace::first_to_run_out(
+        usage
+            .windows
+            .iter()
+            .map(|limit| (limit, limit.pace(at, seen.now))),
+    )?;
+    Some(words::pace_forecast(
+        &said::scoped_limit_name(limit),
+        seconds,
+    ))
+}
+
+fn paced_limit_row(seen: &Seen, limit: &Window, at: i64) -> LimitRow {
+    let mut row = limit_row(seen, limit);
+    if seen.state.preferences.show_pace
+        && let Some(pace) = limit.pace(at, seen.now)
+    {
+        use pitboard_core::usage::pace::Standing;
+        let said = words::typeset(&said::pace_column(&pace));
+        row.spoken = words::with_pace(&row.spoken, &said);
+        row.pace = Some(super::LimitPace {
+            expected: pace.expected,
+            standing: match pace.standing {
+                Standing::Under => super::PaceStanding::Under,
+                Standing::Even => super::PaceStanding::Even,
+                Standing::Over { .. } => super::PaceStanding::Over,
+            },
+            said,
+            help: words::pace_help(pace.expected),
+        });
+    }
+    row
 }
 
 fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
@@ -721,6 +812,7 @@ pub(crate) fn limit_row(seen: &Seen, limit: &Window) -> LimitRow {
         None => String::new(),
     };
     LimitRow {
+        pace: None,
         kind: kind_of(limit),
         short: words::limit_short(&name, model),
         spoken: words::spoken_limit(&title, limit.percent, &resets),

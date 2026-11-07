@@ -350,6 +350,45 @@ pub(crate) fn failed_outside(title: &str) -> String {
     format!("{title}. Open Pitboard to try again.")
 }
 
+/// Pace is the reading's, so an old reading never drifts towards under pace.
+pub(crate) fn pace_help(expected: f64) -> String {
+    format!(
+        "At the last reading, even use would have reached {} of this limit. Pace is an estimate from use since the window began.",
+        pitboard_core::words::figure(expected)
+    )
+}
+
+pub(crate) fn with_pace(value: &str, pace: &str) -> String {
+    format!("{value}, {pace}")
+}
+
+pub(crate) fn with_forecast(summary: &str, forecast: &str) -> String {
+    format!("{summary}. {forecast}")
+}
+
+pub(crate) fn pace_forecast(limit: &str, seconds: i64) -> String {
+    super::typeset(&capitalised(&pitboard_core::words::runs_out(
+        limit, seconds,
+    )))
+}
+
+// Every value already says both use and pace, so nothing is added after its pace words.
+pub(crate) fn paced_limits_line(front: Front, limits: &[(String, String)]) -> String {
+    limits
+        .iter()
+        .enumerate()
+        .map(|(at, (name, value))| {
+            let name = if at > 0 && front != Front::MacMenuBar {
+                uncapitalised(name)
+            } else {
+                name.clone()
+            };
+            format!("{name} {value}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -627,6 +666,34 @@ mod tests {
                 could_not_switch_from_outside(Front::WindowsNotificationArea)
             ),
             ("Couldn’t Switch".into(), "Couldn’t switch".into())
+        );
+    }
+}
+
+#[cfg(test)]
+mod pace_words_tests {
+    use super::*;
+
+    #[test]
+    fn pace_explains_the_reading_and_keeps_use_before_its_comparison() {
+        assert_eq!(
+            pace_help(42.2),
+            "At the last reading, even use would have reached 42% of this limit. Pace is an estimate from use since the window began."
+        );
+        assert_eq!(
+            paced_limits_line(
+                Front::MacMenuBar,
+                &[("5-hour".into(), with_pace("60% used", "10% over pace"))]
+            ),
+            "5-hour 60% used, 10% over pace"
+        );
+        assert_eq!(
+            pace_forecast("weekly Fable", 3600),
+            "Weekly Fable limit runs out in 1h 00m at this pace"
+        );
+        assert_eq!(
+            pace_forecast("weekly", 0),
+            "Weekly limit is about to run out"
         );
     }
 }
