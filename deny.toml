@@ -34,6 +34,9 @@ ignore = [
   { id = "RUSTSEC-2026-0370", reason = "zvariant is zbus 5's own, merged into zbus 6, which has no blocking API" },
   { id = "RUSTSEC-2026-0371", reason = "zbus_names is zbus 5's own, merged into zbus 6, which has no blocking API" },
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is zbus 5's own, merged into zbus 6, which has no blocking API" },
+  # The fixed libsqlite3-sys 0.39 comes only with rusqlite 0.41, which needs a newer SQLite than
+  # macOS 14 and 15 have: Cargo.toml says why.
+  { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys is built without bundled, so it links macOS's own SQLite and compiles none of the affected copy" },
 ]
 
 [licenses]
