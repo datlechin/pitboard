@@ -457,7 +457,7 @@ test.describe("on Windows", () => {
     await expect(cards.getByRole("button", { name: "Sign in again…" })).toBeVisible();
     await expect(cards.getByRole("button", { name: "Remove account…" })).toBeEnabled();
     await page.keyboard.press("Enter");
-    await expect(toggle("personal")).toHaveAccessibleName("personal, Max 20x, in use");
+    await expect(toggle("personal")).toHaveAccessibleName("personal, Ultra, in use");
     await expect(cards.getByRole("button", { name: "Remove account…" })).toBeDisabled();
     // a press on its header closes it again
     await row("personal").locator('[data-part="label"]').click();
@@ -678,7 +678,7 @@ for (const system of ["gnome", "kde"] as const)
       // the demo has switched to work
       const { group } = await window(page, system);
       await expect(group("work")).toHaveAccessibleName("work");
-      await expect(group("work")).toContainText("Claude Code, Max 20x");
+      await expect(group("work")).toContainText("Claude Code, Ultra");
       await expect(group("work").locator('[data-part="in-use"]')).toHaveText("In Use");
       await expect(group("work").getByRole("button", { name: /^Switch/ })).toBeHidden();
       // named for the account with its tool, as two tools are listed

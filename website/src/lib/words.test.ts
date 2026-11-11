@@ -623,10 +623,10 @@ test("the menu bar item, a row and its button are spoken as present/words/ says 
     assert.ok(ffiAccounts.includes(call), call);
   assert.equal(menuBarSpoken(moments.before), "Pitboard, personal 73%, Claude Code");
   assert.equal(menuBarSpoken(moments.after), "Pitboard, work 40%, Claude Code");
-  assert.equal(accountSpoken(account("work"), moments.after), "work, Max 20x, in use");
+  assert.equal(accountSpoken(account("work"), moments.after), "work, Ultra, in use");
   assert.equal(accountSpoken(account("home", "desktop"), moments.after), "home, in use");
   assert.equal(accountSpoken(account("spare", "codex"), moments.after), "spare, Plus");
   const lapsed = { ...moments.after, now: account("personal").refreshExpiresAt! };
-  assert.equal(accountSpoken(account("personal"), lapsed), "personal, Max 20x, sign-in expired");
+  assert.equal(accountSpoken(account("personal"), lapsed), "personal, Ultra, sign-in expired");
   assert.equal(switchSpoken(account("personal")), "Switch to personal");
 });

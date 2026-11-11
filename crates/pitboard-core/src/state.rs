@@ -281,7 +281,7 @@ pub struct Account {
     /// the account holds a parked login or is in use again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced_at: Option<i64>,
-    /// The plan its login last said, as a label: "Max 20x", "Pro".
+    /// The plan its login last said, as a label: "Ultra", "Pro".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
     /// Which tool's login this is, and whatever only that tool keeps.

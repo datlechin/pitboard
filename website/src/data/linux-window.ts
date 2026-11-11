@@ -179,7 +179,7 @@ export interface Group {
   id: string;
   tool: Tool;
   label: string;
-  // present/words/accounts.rs `tool_and_plan`: "Claude Code, Max 20x"
+  // present/words/accounts.rs `tool_and_plan`: "Claude Code, Ultra"
   description: string | null;
   inUse: boolean;
   button: { title: string; spoken: string } | null;

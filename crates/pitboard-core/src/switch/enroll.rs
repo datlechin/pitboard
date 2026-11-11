@@ -1586,7 +1586,7 @@ mod tests {
 
     #[test]
     fn enrolling_records_the_plan_the_login_says() {
-        for ((tool, make), plan) in MACHINES.into_iter().zip(["Max 20x", "Pro"]) {
+        for ((tool, make), plan) in MACHINES.into_iter().zip(["Ultra", "Pro"]) {
             let m = make("enrol-plan");
             let mut login = login_of(&m, "third", "third-refresh");
             if m.which == ProviderId::Claude {

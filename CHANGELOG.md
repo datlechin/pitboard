@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A Claude Code account on Max 20x shows its plan as Ultra, and one on Max 5x as Max, the
+  names Anthropic gave them on 30 October 2026.
+
 ## [1.0.0-beta.11] - 2026-11-09
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

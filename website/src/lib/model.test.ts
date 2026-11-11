@@ -186,7 +186,7 @@ const row = (label: string, limits: Limit[]): Account => ({
   tool: "claude",
   label,
   email: `${label}@example.com`,
-  plan: "Max 20x",
+  plan: "Ultra",
   limits,
 });
 const workAt = (percent: number) => row("work", [session(percent), weekly(20)]);
@@ -930,7 +930,7 @@ test("a simulated add signs in first, under a name from the email, and reads not
   assert.equal(add("claude", "app"), "travel");
   let travel = model.get().accounts.find((a) => a.label === "travel")!;
   assert.equal(travel.email, "dana@travel.example");
-  assert.equal(travel.plan, "Max 20x");
+  assert.equal(travel.plan, "Ultra");
   assert.deepEqual(model.get().naming, {
     tool: "claude",
     label: "travel",

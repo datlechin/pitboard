@@ -282,6 +282,14 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     // synchronous `fs`.
     read_from_2_1_309("refresh_lock"),
     read_from_2_1_309("login_carries_its_plan"),
+    // Read as bytes on 2026-11-11 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
+    // builds of 2.1.322.
+    PerSystem {
+        name: "profile_names_the_plan",
+        macos: Read("2.1.322"),
+        linux: Read("2.1.322"),
+        windows: Read("2.1.322"),
+    },
     PerSystem {
         name: "windows_home_folder",
         macos: NotRead("macOS keeps the home in `HOME`, which config_file_location reads"),
@@ -1266,12 +1274,35 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.309",
         depends: "provider::claude::document::plan, which reads the plan off a login or a park \
                   of it for `pitboard status`, the app and the account's record, as \
-                  `subscriptionType` capitalised and the multiple `rateLimitTier` ends with",
+                  `subscriptionType` capitalised and the multiple `rateLimitTier` ends with, \
+                  but for the two plans profile_names_the_plan renames",
         probe: &[
             r#"[["claude_max","max"],["claude_pro","pro"],["claude_enterprise","enterprise"],["claude_team","team"]]"#,
             "organization?.rate_limit_tier??null",
             r#"subscriptionTypeSource:"profile",subscriptionTypeVerifiedAt:Date.now()"#,
         ],
+        absent: &[],
+    },
+    Assumption {
+        name: "profile_names_the_plan",
+        fact: "the profile names the plan in `organization.plan_display_name`, which Claude \
+               Code keeps in the config's `oauthAccount.planDisplayName`, never in the login, \
+               and shows as `Claude <name>` in place of the name `subscriptionType` gives. Its \
+               individual plans are Pro, Max and Ultra, and `max` with \
+               `default_claude_max_20x` is still the highest of them. So that plan is Ultra, \
+               and `max` with `default_claude_max_5x` is Max",
+        read_from: "the profile read, which drops a name its pattern rejects; the profile save \
+                    into `oauthAccount`; the plan name shown, which takes that name first; the \
+                    highest-plan check; and the upgrade prompts. Measured on 2026-11-11 in the \
+                    config of one Mac: `Ultra` beside `claude_max` and \
+                    `default_claude_max_20x`. Anthropic renamed Max 20x Ultra and Max 5x Max on \
+                    2026-10-30",
+        // Read on 2026-11-11 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64 builds of
+        // 2.1.322.
+        verified_against: "2.1.322",
+        depends: "provider::claude::document::plan, which names those two plans Ultra and Max, \
+                  since the login it reads keeps only their tier",
+        probe: &["plan_display_name_rejected", "Upgrade to Max or Ultra"],
         absent: &[],
     },
     Assumption {
@@ -2454,6 +2485,7 @@ mod tests {
                 "status_line_input_names_no_account",
                 "refresh_lock",
                 "login_carries_its_plan",
+                "profile_names_the_plan",
                 "windows_home_folder",
                 "windows_open_sharing",
                 "windows_install_layout",

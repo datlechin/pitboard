@@ -199,7 +199,7 @@ Each object in `accounts`:
 | `stale` | string or null | Why the reading is not live, as [Stale codes](/reference/errors#stale-codes) lists. |
 | `provider` | string | `claude`, `codex` or `desktop`. |
 | `qualified` | string or null | The label with its tool, such as `claude/work`. `null` for a login nobody enrolled. |
-| `plan` | string or null | The plan the account's login last said it is on, such as `Max 20x`, `Team 5x` or `Plus`. Pitboard records it when it enrols the account and each time it reads the account's login. `null` where no login Pitboard read said one. |
+| `plan` | string or null | The plan the account's login last said it is on, such as `Ultra`, `Team 5x` or `Plus`. Pitboard records it when it enrols the account and each time it reads the account's login. `null` where no login Pitboard read said one. |
 | `read_at` | integer or null | On the Claude Desktop account in use, when Pitboard last read it in use. `null` on every other account. |
 | `reason` | string or null | On a login Pitboard could not read, use or identify, why, as its store or service said. `null` on every other account. |
 

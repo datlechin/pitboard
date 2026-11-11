@@ -109,8 +109,8 @@ test("each group says what account_group.rs sets from the model", () => {
   assert.deepEqual(
     page.groups.map((g) => [g.label, g.description, g.inUse, g.button?.title ?? null]),
     [
-      ["work", "Claude Code, Max 20x", true, null],
-      ["personal", "Claude Code, Max 20x", false, "Switch"],
+      ["work", "Claude Code, Ultra", true, null],
+      ["personal", "Claude Code, Ultra", false, "Switch"],
       ["main", "Codex, Pro", true, null],
       ["spare", "Codex, Plus", false, "Switch"],
     ],

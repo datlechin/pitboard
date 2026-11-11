@@ -230,7 +230,7 @@ pub struct Row {
     pub parked: Option<Park>,
     pub usage: Option<Snapshot>,
     pub stale: Option<Stale>,
-    /// The plan its login says, or last said where this read did not see it: "Max 20x".
+    /// The plan its login says, or last said where this read did not see it: "Ultra".
     pub plan: Option<String>,
     // when Pitboard last read this login in use, for a tool no read asks: Claude Desktop's
     pub read_at: Option<i64>,
@@ -1873,12 +1873,12 @@ mod tests {
         assert_eq!(
             answers.plans.get("beta-uuid"),
             Some(&Plan {
-                said: Some("Max 20x".into()),
+                said: Some("Ultra".into()),
                 seen: Seen::Parked(service),
             })
         );
         let report = report(&ctx, Permit::for_a_test(), &s, answers);
-        assert_eq!(plan_of(&report, "beta").as_deref(), Some("Max 20x"));
+        assert_eq!(plan_of(&report, "beta").as_deref(), Some("Ultra"));
     }
 
     /// The login may be anybody's, so its plan is filed under nobody.
@@ -1941,7 +1941,7 @@ mod tests {
             .find(|r| r.label.is_none())
             .expect("a row for the login nobody enrolled");
         assert!(stranger.signed_in);
-        assert_eq!(stranger.plan.as_deref(), Some("Max 20x"));
+        assert_eq!(stranger.plan.as_deref(), Some("Ultra"));
     }
 
     #[test]
