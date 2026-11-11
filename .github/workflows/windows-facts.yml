@@ -103,7 +103,7 @@ jobs:
         with:
           cache: false
           targets: ${{ matrix.os == 'windows-11-arm' && 'x86_64-pc-windows-msvc' || '' }}
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: apps/windows/global.json
       # ring compiles its C with clang on ARM64 Windows, and nothing else.
@@ -260,7 +260,7 @@ jobs:
         with:
           triple: ${{ matrix.triple }}
           version: ${{ steps.gate.outputs.version }}
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: apps/windows/global.json
       - uses: ./.github/actions/windows-app-libraries
