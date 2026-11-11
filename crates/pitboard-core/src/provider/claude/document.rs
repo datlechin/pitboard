@@ -112,12 +112,10 @@ pub(crate) fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -
     next
 }
 
-/// `subscriptionType` and the multiple `rateLimitTier` ends in: "Max 20x", "Pro".
 pub(crate) fn plan(document: &Value) -> Option<String> {
     let oauth = oauth_in(document);
-    let named = Some(oauth.get("subscriptionType")?.as_str()?.trim())
-        .filter(|kind| !kind.is_empty())
-        .map(crate::words::capitalised)?;
+    let kind =
+        Some(oauth.get("subscriptionType")?.as_str()?.trim()).filter(|kind| !kind.is_empty())?;
     let multiple = oauth
         .get("rateLimitTier")
         .and_then(Value::as_str)
@@ -127,9 +125,12 @@ pub(crate) fn plan(document: &Value) -> Option<String> {
                 && last.ends_with('x')
                 && last[..last.len() - 1].bytes().all(|b| b.is_ascii_digit())
         });
-    Some(match multiple {
-        Some(multiple) => format!("{named} {multiple}"),
-        None => named,
+    // The login keeps the tier of the old names (the register's `profile_names_the_plan`).
+    Some(match (kind, multiple) {
+        ("max", Some("20x")) => "Ultra".into(),
+        ("max", Some("5x")) => "Max".into(),
+        (kind, Some(multiple)) => format!("{} {multiple}", crate::words::capitalised(kind)),
+        (kind, None) => crate::words::capitalised(kind),
     })
 }
 
@@ -244,38 +245,52 @@ mod tests {
         }
     }
 
+    fn on_plan(kind: Value, tier: Value) -> Value {
+        json!({"claudeAiOauth": {
+            "accessToken": "a",
+            "subscriptionType": kind,
+            "rateLimitTier": tier,
+        }})
+    }
+
     #[test]
     fn the_plan_is_named_with_the_multiple_its_tier_ends_with() {
-        let slice = |kind: Value, tier: Value| {
-            json!({"claudeAiOauth": {
-                "accessToken": "a",
-                "subscriptionType": kind,
-                "rateLimitTier": tier,
-            }})
-        };
         assert_eq!(
-            plan(&slice(json!("max"), json!("default_claude_max_20x"))).as_deref(),
-            Some("Max 20x")
-        );
-        assert_eq!(
-            plan(&slice(json!("team"), json!("default_claude_max_5x"))).as_deref(),
+            plan(&on_plan(json!("team"), json!("default_claude_max_5x"))).as_deref(),
             Some("Team 5x")
         );
         assert_eq!(
-            plan(&slice(json!("pro"), json!("default_claude_ai"))).as_deref(),
+            plan(&on_plan(json!("max"), json!("default_claude_max_10x"))).as_deref(),
+            Some("Max 10x"),
+            "a multiple Anthropic has not renamed is kept"
+        );
+        assert_eq!(
+            plan(&on_plan(json!("pro"), json!("default_claude_ai"))).as_deref(),
             Some("Pro"),
             "a tier that names no multiple adds nothing"
         );
         assert_eq!(
-            plan(&slice(json!("pro"), Value::Null)).as_deref(),
+            plan(&on_plan(json!("pro"), Value::Null)).as_deref(),
             Some("Pro")
         );
         assert_eq!(
-            plan(&slice(Value::Null, json!("default_claude_max_20x"))),
+            plan(&on_plan(Value::Null, json!("default_claude_max_20x"))),
             None
         );
-        assert_eq!(plan(&slice(json!(""), Value::Null)), None);
+        assert_eq!(plan(&on_plan(json!(""), Value::Null)), None);
         assert_eq!(plan(&json!({"claudeAiOauth": {"accessToken": "a"}})), None);
+    }
+
+    #[test]
+    fn a_max_plan_takes_the_name_anthropic_gave_it() {
+        assert_eq!(
+            plan(&on_plan(json!("max"), json!("default_claude_max_20x"))).as_deref(),
+            Some("Ultra")
+        );
+        assert_eq!(
+            plan(&on_plan(json!("max"), json!("default_claude_max_5x"))).as_deref(),
+            Some("Max")
+        );
     }
 
     #[test]
@@ -285,10 +300,10 @@ mod tests {
             "subscriptionType": "max",
             "rateLimitTier": "default_claude_max_20x",
         });
-        assert_eq!(plan(&block).as_deref(), Some("Max 20x"));
+        assert_eq!(plan(&block).as_deref(), Some("Ultra"));
         assert_eq!(
             plan(&json!({"claudeAiOauth": block, "organizationUuid": "o"})).as_deref(),
-            Some("Max 20x")
+            Some("Ultra")
         );
     }
 

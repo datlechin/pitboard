@@ -387,7 +387,7 @@ pub(crate) fn json(report: &Report) -> Value {
             // reads moves.
             "provider": r.provider.code(),
             "qualified": r.key().map(|k| k.qualified()),
-            // What its login says or last said, "Max 20x" or "Plus", or null.
+            // What its login says or last said, "Ultra" or "Plus", or null.
             "plan": r.plan,
             "read_at": r.read_at,
             "reason": r.reason,

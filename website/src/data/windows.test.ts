@@ -280,7 +280,7 @@ test("the Accounts page says what AccountsPage.xaml binds and the core says", ()
   );
   assert.ok(views("LimitLines.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"));
   const personal = rows.find((r) => r.label === "personal")!;
-  assert.equal(personal.spoken, "personal, Max 20x");
+  assert.equal(personal.spoken, "personal, Ultra");
   assert.equal(personal.action?.spoken, "Switch to personal");
   assert.equal(personal.limits[0].spoken, "5-hour limit, 59 percent used, resets 22:00");
   assert.equal(personal.keys, "Delete F2 Control+C");

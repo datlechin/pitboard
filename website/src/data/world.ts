@@ -1,4 +1,4 @@
-// Max 20x shows two of its three limits (the register's `usage_answer_lists_every_limit`), and Codex
+// Ultra shows two of its three limits (the register's `usage_answer_lists_every_limit`), and Codex
 // Pro its weekly limit alone, as docs/concepts/usage.mdx says.
 import { platforms, type Platform } from "../lib/platform.ts";
 
@@ -77,7 +77,7 @@ export const accounts: Account[] = [
     uuid: "5f0c9a52-7d1e-4b8a-9c3f-2e6a1d4b8c07",
     org: "8b2d4e61-3c5a-4f7e-a1d9-6c0e2b7f5a34",
     login: "fcda3e5dfe80953d",
-    plan: "Max 20x",
+    plan: "Ultra",
     limits: [
       { percent: 59, resetsAt: personalPeriodEnds, lengthSeconds: fiveHours },
       { percent: 73, resetsAt: at("2026-10-19T14:50:00"), lengthSeconds: WEEK },
@@ -92,7 +92,7 @@ export const accounts: Account[] = [
     uuid: "c3a7e1f9-5b2d-4e8c-b6a0-9d4f1e2c7b58",
     org: "e4f8a2c6-1d7b-4a3e-9f5c-0b8d6e2a4c91",
     login: "7f344b8dffee70ba",
-    plan: "Max 20x",
+    plan: "Ultra",
     limits: [
       { percent: 12, resetsAt: at("2026-10-13T23:50:00"), lengthSeconds: fiveHours },
       { percent: 40, resetsAt: at("2026-10-16T01:00:00"), lengthSeconds: WEEK },

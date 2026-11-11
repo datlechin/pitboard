@@ -682,7 +682,7 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// document.
     fn slice(&self, live: &Value) -> Result<Value, ProviderError>;
 
-    /// The plan a login or a park of it says, as a label: "Max 20x", "Pro".
+    /// The plan a login or a park of it says, as a label: "Ultra", "Pro".
     fn plan(&self, document: &Value) -> Option<String>;
 
     /// `live` with `incoming` in place of whatever account was there, and nothing of the

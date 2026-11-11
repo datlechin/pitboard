@@ -753,7 +753,7 @@ mod tests {
 
         Pitboard::new(m.ctx.clone()).status(false).expect("a read");
 
-        assert_eq!(recorded_plan(&m, "there").as_deref(), Some("Max 20x"));
+        assert_eq!(recorded_plan(&m, "there").as_deref(), Some("Ultra"));
         assert_eq!(recorded_plan(&m, "here"), None, "its login says none");
 
         let m = codex_machine("identify-plan");
@@ -784,7 +784,7 @@ mod tests {
         super::super::enroll::enroll(settled, &m.key(label), Some(signed)).expect("enrolled");
     }
 
-    /// A login of `who` on Max 20x.
+    /// A login of `who` on Ultra.
     fn on_max(m: &Rig, who: &str, refresh: &str) -> Value {
         let mut login = login_of(m, who, refresh);
         login["claudeAiOauth"]["subscriptionType"] = "max".into();
@@ -792,7 +792,7 @@ mod tests {
         login
     }
 
-    /// Signed in again on Max 20x while a read held the Pro login, parked and then in use.
+    /// Signed in again on Ultra while a read held the Pro login, parked and then in use.
     #[test]
     fn a_plan_read_off_a_login_replaced_meanwhile_is_not_recorded() {
         let m = machine("identify-plan-parked-meanwhile");
@@ -810,7 +810,7 @@ mod tests {
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
 
-        assert_eq!(recorded_plan(&m, "there").as_deref(), Some("Max 20x"));
+        assert_eq!(recorded_plan(&m, "there").as_deref(), Some("Ultra"));
 
         let m = machine("identify-plan-live-meanwhile");
         let mut live = document("here-refresh");
@@ -822,7 +822,7 @@ mod tests {
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
 
-        assert_eq!(recorded_plan(&m, "here").as_deref(), Some("Max 20x"));
+        assert_eq!(recorded_plan(&m, "here").as_deref(), Some("Ultra"));
     }
 
     #[test]
