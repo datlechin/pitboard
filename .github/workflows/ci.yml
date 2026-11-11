@@ -51,7 +51,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/rust
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: nextest@0.9.146
       - run: cargo nextest run --locked --profile ci
@@ -98,7 +98,7 @@ jobs:
         with:
           targets: ${{ matrix.libc == 'musl' && matrix.triple || '' }}
           key: ${{ matrix.libc }}
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: nextest@0.9.146
       # The Secret Service the tests start on a bus of their own (`testing::SecretService`).
@@ -173,7 +173,7 @@ jobs:
           sudo apt-get install -y zsh busybox desktop-file-utils appstream rpm
       # 0.11.0 takes test's -ef from POSIX.1-2024; the Ubuntu image has 0.9.0.
       - if: runner.os == 'Linux'
-        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: shellcheck@0.11.0
       - if: runner.os == 'Linux'
@@ -252,7 +252,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/rust
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: nextest@0.9.146
       # Every test step below lists Credential Manager with the probe this builds, for the
@@ -403,7 +403,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/rust
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: cargo-hack@0.6.45
       # --rust-version installs the rust-version in Cargo.toml and checks with it; the
@@ -431,7 +431,7 @@ jobs:
         with:
           targets: aarch64-apple-darwin x86_64-apple-darwin
       # rusqlite is macOS's alone, so only a Mac proves the floor builds it.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: cargo-hack@0.6.45
       - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-core -p pitboard -p pitboard-model --all-targets --locked
@@ -1317,7 +1317,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/rust
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: cargo-hack@0.6.45
       - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --exclude pitboard-linux --all-targets --locked
@@ -1357,7 +1357,7 @@ jobs:
       - uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
         with:
           args: -color
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: zizmor@1.30.1
       # Offline, so a run fails only on what the repository holds. Informational findings
