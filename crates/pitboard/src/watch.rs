@@ -13,7 +13,7 @@
 //! decisions ([`pitboard_core::duty::written`]), and looks every 2 seconds where nothing can
 //! watch it.
 
-use crate::{Report, emit, followed, located, ui};
+use crate::{Report, emit, followed, located, print_report, ui};
 use clap::Subcommand;
 use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Policy, Skip, Threshold, Why};
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals};
@@ -288,7 +288,7 @@ pub(crate) fn run(
         return emit(&Report::failed(Some("watch"), refused), as_json);
     }
     let warming = pitboard.warm_overview().ok();
-    emit(
+    print_report(
         &Report::done(
             "watch",
             watching_json(switching, warming.as_ref()),
@@ -334,7 +334,7 @@ pub(crate) fn run(
                     return emit(&say(outcome), as_json);
                 }
                 if let Some(report) = told.untold(outcome, say) {
-                    emit(&report, as_json);
+                    print_report(&report, as_json);
                 }
             }
             // Nothing a warm-up comes to ends watching: switching goes on, and the warm-up is
@@ -348,7 +348,7 @@ pub(crate) fn run(
                     }
                 }
                 for report in warm_told.untold(outcome) {
-                    emit(&report, as_json);
+                    print_report(&report, as_json);
                 }
             }
         }
