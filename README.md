@@ -40,7 +40,7 @@ that issued it, and sends nothing for a Claude Desktop account.
 lists every request.
 
 The command line runs on macOS, Windows and Linux. The app runs on macOS 14 or later, on
-Windows 11 24H2 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE
+Windows 10 version 2004 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE
 Tumbleweed, with GNOME or KDE Plasma, and includes the command line. Pitboard for Windows is not
 signed yet. [What you need](https://docs.usepitboard.com/install#what-you-need) says how far each
 system is tested.

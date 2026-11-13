@@ -84,6 +84,8 @@ The system starts the job without your shell's environment. `install` gives it e
   <Tab title="Windows">
     A task in Task Scheduler, `\Pitboard\Renew <SID>`, runs the job each day at the time of day `install` ran, the first time a day later. It runs only while you are signed in to Windows, as you and not elevated, and stops after 10 minutes. Task Scheduler starts a run it missed as soon as it can.
 
+    The task starts `pitboard.exe` through the `pitboardw.exe` beside it, so the job shows no console window. `install` refuses with `schedule_launcher_missing` when `pitboardw.exe` is not there, as after `cargo install`.
+
     A task holds no environment, so `install` writes the proxy variables to `schedule.env` in Pitboard's directory, and each run reads them from there. `install` refuses with `schedule_program_temporary` when the program is in the temporary copy Windows makes of a zip it opened.
   </Tab>
   <Tab title="Linux">
@@ -352,7 +354,7 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
 
   | Code | Name | What it checks |
   | --- | --- | --- |
-  | `system_too_old` | `runs on` | Windows only, when it is older than Windows 11 24H2, build 26100, or Pitboard cannot tell its build. Always fails: see [Pitboard changes nothing on this version of Windows](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows). |
+  | `system_too_old` | `runs on` | Windows only, when it is older than Windows 10 version 2004, build 19041, or Pitboard cannot tell its build. Always fails: see [Pitboard changes nothing on this version of Windows](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows). |
   | `elevated` | `runs as` | Only where Pitboard may change nothing as it runs, or cannot tell whether it may. Always fails: see [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root) and [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator). On Windows, it names User Account Control where that is off. |
   | `homes` | `homes` | Only when a variable naming a home is empty or not a full path. Always fails, and nothing after it is checked. |
   | `security_tool` | `security tool` | macOS only. `/usr/bin/security`, which reads the keychain, is there. |

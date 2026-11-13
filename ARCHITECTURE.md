@@ -157,6 +157,8 @@ The other crates:
 - `crates/pitboard-conformance`: checks a tool's register against a build of the tool.
 - `crates/pitboard-probe`: the Windows measurement probe, never released. `win/` measures, and
   the rest is tested on every system.
+- `crates/pitboardw`: `pitboardw.exe`, which a Windows task starts in place of `pitboard.exe`,
+  shipped beside it and never published to crates.io.
 
 The apps:
 
@@ -285,7 +287,7 @@ keeps it is in the header of the module named.
 - A `\\?\` path is for comparing alone: what Pitboard shows, locks by or hands a tool is
   spelled without it (`a_verbatim_path_is_spelled_as_libuv_and_codex_spell_it`).
 - Pitboard changes nothing as root or under sudo, elevated on Windows, or on a Windows older
-  than 11 24H2, but as root on Linux where root owns every place a change writes
+  than 10 version 2004, but as root on Linux where root owns every place a change writes
   (`home::written`). `permit::gate` alone makes a `Permit`, and every write, deletion,
   scheduler change, tool run and token exchange takes one, so a change that skips it does not
   compile.
@@ -517,6 +519,12 @@ keeps it is in the header of the module named.
   bundle's or Linux's `pitboard-app` (`schedule::fault`, `Os::an_apps_own_program`,
   `a_schedule_running_the_linux_app_is_at_fault`). The MSI's full uninstall takes away only
   the tasks that run its own `bin\pitboard.exe` (`schedule::uninstall_for_app`).
+- A Windows task starts `pitboard.exe` through the `pitboardw.exe` beside it, a GUI program
+  that starts it with no console window and ends it with itself, since Windows before 11 24H2
+  gives a task's console program a window. No job is installed without it, and doctor names
+  it where it is gone (`Os::launcher`, `schedule::missing`,
+  `a_windows_job_needs_the_launcher_beside_its_pitboard`,
+  `the_launcher_runs_pitboard_with_no_console_window`).
 
 ### Tests
 

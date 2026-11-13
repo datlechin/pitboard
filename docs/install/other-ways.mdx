@@ -26,6 +26,8 @@ cargo install --locked pitboard@<version>
 
 On Windows, building from source needs Rust's MSVC toolchain on x64 or ARM64, and clang as well on ARM64.
 
+On Windows, Cargo installs `pitboard.exe` without the `pitboardw.exe` that [daily renewal](/guides/renewal) and the [watch service](/reference/account-commands#the-watch-service) start it through, so both refuse with [`schedule_launcher_missing`](/reference/errors#renewal-schedule). Install from a release file or the app to use them.
+
 ## A release file
 
 Each [release on GitHub](https://github.com/datlechin/pitboard/releases) lists its files with their checksums. To check a file before you open it, follow [Verify a download](/install/verify).
