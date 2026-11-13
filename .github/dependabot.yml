@@ -38,3 +38,7 @@ updates:
       # @astrojs/check takes TypeScript 5 or 6 only.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
+      # 1.65.0's Firefox crashes a page that reads aria-labelledby in both worlds, as getByRole
+      # and an axe scan do (microsoft/playwright#43967), fixed after it.
+      - dependency-name: "@playwright/test"
+        versions: ["1.65.0"]

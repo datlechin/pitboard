@@ -1462,7 +1462,7 @@ jobs:
     # what each takes from apt: WebKit's 117 MB from Ubuntu's mirror ran out the job's 17 minutes
     # in run 40543539968. As the runner's user, who owns the checkout.
     container:
-      image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
       options: --user 1001
     # the test step's fifteen minutes, and seven for the image and the steps before it
     timeout-minutes: 22
