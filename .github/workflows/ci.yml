@@ -346,8 +346,10 @@ jobs:
             if ($left.Count -ne 0) { throw "$folder holds $($left.Name -join ', ')" }
           }
           exit 0
-      # The standard user's fresh profile has no app execution alias to read; the job user's has.
+      # The standard user's fresh profile has no app execution alias to read; the job user's has,
+      # but on windows-2022, whose job user holds none (run 43432408082).
       - name: The job user's own app execution aliases, read only
+        if: matrix.os != 'windows-2022'
         env:
           PITBOARD_TEST_ALIASES: '1'
         run: >
