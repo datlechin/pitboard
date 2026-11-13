@@ -46,10 +46,10 @@ foreach ($name in 'Pitboard.exe', 'Pitboard.dll', 'pitboard_ffi.dll', 'WinSparkl
 }
 $bin = @(Get-ChildItem -LiteralPath (Join-Path $root 'bin') -Force | ForEach-Object Name | Sort-Object)
 if (($bin -join ', ') -cne 'pitboard.exe, pitboardw.exe') { throw "the MSI's bin holds $($bin -join ', '): the user PATH reaches everything in it" }
-$zipped = Split-Path -Parent $CommandLine
-foreach ($name in 'pitboard.exe', 'pitboardw.exe') {
-    if ((Get-Hash (Join-Path $root "bin\$name")) -ne (Get-Hash (Join-Path $zipped $name))) {
-        throw "the MSI's bin\$name is not the zip's, in $zipped"
+$zipped = [ordered]@{ 'pitboard.exe' = $CommandLine; 'pitboardw.exe' = (Join-Path (Split-Path -Parent $CommandLine) 'pitboardw.exe') }
+foreach ($name in $zipped.Keys) {
+    if ((Get-Hash (Join-Path $root "bin\$name")) -ne (Get-Hash $zipped[$name])) {
+        throw "the MSI's bin\$name is not the zip's, $($zipped[$name])"
     }
 }
 if ((Get-Hash (Join-Path $root 'completions\pitboard.ps1')) -ne (Get-Hash $Completions)) {
