@@ -166,7 +166,7 @@ fn os_build() -> Value {
         "major": info.dwMajorVersion,
         "minor": info.dwMinorVersion,
         "build": info.dwBuildNumber,
-        "meets_floor_26100": info.dwBuildNumber >= 26100,
+        "meets_floor_19041": info.dwBuildNumber >= 19041,
         "ubr": "read beside this, from the registry, by the workflow or the owner",
     })
 }

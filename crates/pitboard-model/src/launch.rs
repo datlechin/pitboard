@@ -1828,12 +1828,12 @@ mod tests {
         };
         assert_eq!(code(&unknown, &full).as_deref(), Some("elevated"));
         let below = |host: &pitboard_core::testing::MemoryHost| {
-            host.runs_on(Floor::Below { build: 22631 });
+            host.runs_on(Floor::Below { build: 17763 });
         };
         assert_eq!(
             refused(&below, full.clone()).map(|failure| failure.message),
             Some(sentence(
-                &pitboard_core::error::Error::SystemTooOld { build: Some(22631) }.to_string()
+                &pitboard_core::error::Error::SystemTooOld { build: Some(17763) }.to_string()
             ))
         );
         let floor_unknown = |host: &pitboard_core::testing::MemoryHost| {

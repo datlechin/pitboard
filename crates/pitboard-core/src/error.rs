@@ -2452,7 +2452,7 @@ mod tests {
                 detail: "d".into(),
             },
             Error::Elevated { why: None },
-            Error::SystemTooOld { build: Some(22631) },
+            Error::SystemTooOld { build: Some(17763) },
             Error::WindowsNotReleased,
             Error::LeftLoginChanged { path: "f".into() },
             Error::StoredLoginChanged { path: "f".into() },

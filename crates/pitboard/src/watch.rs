@@ -1177,7 +1177,7 @@ mod tests {
         };
         assert!(ends_watching(&unwritable));
         assert!(ends_watching(&Error::Elevated { why: None }));
-        assert!(ends_watching(&Error::SystemTooOld { build: Some(22631) }));
+        assert!(ends_watching(&Error::SystemTooOld { build: Some(17763) }));
         assert!(ends_watching(&Error::SystemTooOld { build: None }));
         assert!(!ends_watching(&Error::SignedInAccountChanged));
         assert!(!ends_watching(&Error::ParkedLoginExpired {

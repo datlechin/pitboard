@@ -11,7 +11,7 @@ export function application(
     "@type": "SoftwareApplication",
     name: "Pitboard",
     applicationCategory: "DeveloperApplication",
-    operatingSystem: "macOS 14 or later, Windows 11 24H2 or later, Linux",
+    operatingSystem: "macOS 14 or later, Windows 10 version 2004 or later, Linux",
     ...(others.length === 0 ? { softwareVersion: version } : {}),
     downloadUrl: new URL("/download", site).href,
     license: "https://www.apache.org/licenses/LICENSE-2.0",

@@ -255,7 +255,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
     desktop.parked_here = vec![("home-1".into(), Ok(true))];
     let mut f = facts();
     f.os = os;
-    f.floor = crate::host::Floor::Below { build: 22631 };
+    f.floor = crate::host::Floor::Below { build: 17763 };
     f.elevation = crate::host::Elevation::Elevated { why: "with sudo" };
     f.no_argv = true;
     let fallback = |store| FallbackLogin {

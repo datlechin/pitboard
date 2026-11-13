@@ -659,7 +659,8 @@ mod tests {
         at.to_path_buf()
     }
 
-    // An enablement update, as 26200 is over 26100, may leave the binaries' build behind.
+    // An enablement update, as 19045 is over 19041 and 26200 over 26100, may leave the binaries'
+    // build behind.
     #[test]
     fn cmd_exe_carries_the_build_of_the_windows_it_ships_in() {
         let cmd = std::env::var_os("SystemRoot")
