@@ -45,7 +45,7 @@ pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
     let program = crate::schedule::installed_program(ctx);
     let proxies = crate::schedule::installed_proxies(ctx).unwrap_or_default();
     Some(ScheduleFact {
-        gone: gone(ctx, program.as_deref()),
+        gone: gone(ctx, crate::schedule::Job::Renew, program.as_deref()),
         program,
         location,
         task: crate::schedule::task(ctx, crate::schedule::Job::Renew),
@@ -69,7 +69,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     };
     let program = crate::watch_service::installed_program(ctx);
     Some(WatchServiceFact {
-        gone: gone(ctx, program.as_deref()),
+        gone: gone(ctx, crate::schedule::Job::Watch, program.as_deref()),
         program,
         location,
         switching,
@@ -79,8 +79,12 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     })
 }
 
-fn gone(ctx: &Context, program: Option<&std::path::Path>) -> Option<PathBuf> {
-    crate::schedule::missing(ctx.os, program?)
+fn gone(
+    ctx: &Context,
+    job: crate::schedule::Job,
+    program: Option<&std::path::Path>,
+) -> Option<PathBuf> {
+    crate::schedule::missing(ctx, job, program?)
 }
 
 // A path an upgrade or a move took away fails once a day where nobody looks.

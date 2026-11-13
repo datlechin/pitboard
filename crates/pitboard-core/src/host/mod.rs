@@ -1187,6 +1187,12 @@ pub(crate) trait Scheduler: Send + Sync + std::fmt::Debug {
         None
     }
 
+    // The launcher the job starts its Pitboard through, read back from what `put` wrote, where
+    // it names one ([`Os::launcher`]): Task Scheduler's alone.
+    fn launcher(&self, _ctx: &Context, _job: Job) -> Option<PathBuf> {
+        None
+    }
+
     // Whether the job is there as an earlier Pitboard wrote it, which installing again mends:
     // systemd's alone.
     fn outdated(&self, _ctx: &Context, _job: Job) -> bool {

@@ -210,7 +210,12 @@ mod tests {
 
         // As Windows schedules, through Task Scheduler as this machine has it, on any system.
         fn scheduling_tasks() -> ServiceHome {
-            ServiceHome::on(MemoryHost::scheduling_tasks(SID))
+            let machine = ServiceHome::on(MemoryHost::scheduling_tasks(SID));
+            let launcher = crate::host::Os::Windows
+                .launcher(&machine.program())
+                .expect("a launcher's name");
+            std::fs::write(launcher, "").expect("a launcher");
+            machine
         }
 
         fn on(host: Arc<MemoryHost>) -> ServiceHome {

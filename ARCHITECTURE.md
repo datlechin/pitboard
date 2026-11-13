@@ -522,9 +522,10 @@ keeps it is in the header of the module named.
 - A Windows task starts `pitboard.exe` through the `pitboardw.exe` beside it, a GUI program
   that starts it with no console window and ends it with itself, since Windows before 11 24H2
   gives a task's console program a window. No job is installed without it, and doctor names
-  it where it is gone (`Os::launcher`, `schedule::missing`,
+  it where a task names it and it is gone (`Os::launcher`, `schedule::missing`,
   `a_windows_job_needs_the_launcher_beside_its_pitboard`,
-  `the_launcher_runs_pitboard_with_no_console_window`).
+  `only_a_task_that_starts_the_launcher_needs_it`, pitboardw's
+  `the_program_runs_with_a_console_that_has_no_window`).
 
 ### Tests
 

@@ -359,10 +359,11 @@ fn lasting(os: Os, program: &Path, job: Job) -> Result<&Path> {
     Ok(program)
 }
 
-/// The first of what the scheduler starts to run `program` that is not there: its launcher
-/// where it has one, then `program`.
-pub(crate) fn missing(os: Os, program: &Path) -> Option<PathBuf> {
-    os.launcher(program)
+/// The first of what `job` starts that is not there: the launcher it names, where it names one,
+/// then `program`, the Pitboard it runs.
+pub(crate) fn missing(ctx: &Context, job: Job, program: &Path) -> Option<PathBuf> {
+    scheduler(ctx)
+        .and_then(|scheduler| scheduler.launcher(ctx, job))
         .into_iter()
         .chain([program.to_path_buf()])
         .find(|file| !file.is_file())
@@ -566,7 +567,7 @@ pub(crate) fn repair(ctx: &Context, permit: Permit) -> Result<bool> {
 // person's, and doctor names the way back.
 fn broken(ctx: &Context, program: &Path) -> bool {
     let drifted = task(ctx, Job::Renew).is_some_and(|task| !task.drifted.is_empty());
-    !drifted && fault(ctx.os, program, missing(ctx.os, program).is_none()).is_some()
+    !drifted && fault(ctx.os, program, missing(ctx, Job::Renew, program).is_none()).is_some()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -722,6 +723,13 @@ mod tests {
         }
     }
 
+    /// A program at `path` for a task to run, on any system, with the launcher a task starts.
+    fn a_task_program_at(path: &Path) {
+        a_program_at(path);
+        let launcher = Os::Windows.launcher(path).expect("a launcher's name");
+        std::fs::write(launcher, "").expect("a launcher");
+    }
+
     /// A schedule the scheduler will not start leaves nothing behind saying renewal is on.
     #[test]
     fn a_schedule_the_scheduler_will_not_start_is_not_left_on_disk() {
@@ -804,13 +812,28 @@ mod tests {
     fn the_schedule_runs_the_pitboard_the_context_names_and_otherwise_this_one() {
         let home = Scratch::new();
         let ctx = home.ctx();
-        let scheduled = program(&ctx, Job::Renew).expect("this program");
         let running = std::env::current_exe().expect("this test's own program");
-        assert_eq!(
-            std::fs::canonicalize(&scheduled).expect("there"),
-            std::fs::canonicalize(&running).expect("there"),
-            "the command line schedules itself"
-        );
+        match crate::host::OS.launcher(&running) {
+            // Cargo puts no launcher beside a test's program.
+            Some(launcher) => {
+                let refused = program(&ctx, Job::Renew).expect_err("no launcher");
+                assert_eq!(refused.code(), "schedule_launcher_missing");
+                assert!(
+                    refused
+                        .to_string()
+                        .contains(&launcher.display().to_string()),
+                    "{refused}"
+                );
+            }
+            None => {
+                let scheduled = program(&ctx, Job::Renew).expect("this program");
+                assert_eq!(
+                    std::fs::canonicalize(&scheduled).expect("there"),
+                    std::fs::canonicalize(&running).expect("there"),
+                    "the command line schedules itself"
+                );
+            }
+        }
         let bundled = home
             .path()
             .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
@@ -944,11 +967,10 @@ mod tests {
                 "{refused}"
             );
         }
-        assert_eq!(missing(Os::Windows, &installed), Some(launcher.clone()));
         assert_eq!(
-            missing(Os::Linux, &installed),
-            None,
-            "no launcher elsewhere"
+            program_of(Os::Linux, Some(&installed), || unreachable!(), Job::Renew)
+                .expect("no launcher elsewhere"),
+            installed
         );
 
         std::fs::write(&launcher, "").expect("a launcher");
@@ -957,9 +979,6 @@ mod tests {
                 .expect("both there"),
             installed
         );
-        assert_eq!(missing(Os::Windows, &installed), None);
-        std::fs::remove_file(&installed).expect("removed");
-        assert_eq!(missing(Os::Windows, &installed), Some(installed));
     }
 
     /// A copy macOS runs from a temporary place is told by a directory of the path, as the
@@ -1205,8 +1224,8 @@ mod tests {
             .path()
             .join(r"scoop\apps\pitboard\current\pitboard.exe");
         let bundled = home.path().join(r"Programs\Pitboard\bin\pitboard.exe");
-        a_program_at(&scoop);
-        a_program_at(&bundled);
+        a_task_program_at(&scoop);
+        a_task_program_at(&bundled);
         install(
             &ctx.clone().with_schedule_program(scoop.clone()),
             Permit::for_a_test(),
@@ -1262,8 +1281,8 @@ mod tests {
             .path()
             .join(r"scoop\apps\pitboard\current\pitboard.exe");
         let bundled = home.path().join(r"Programs\Pitboard\bin\pitboard.exe");
-        a_program_at(&scoop);
-        a_program_at(&bundled);
+        a_task_program_at(&scoop);
+        a_task_program_at(&bundled);
         let the_app = home.read(&[]).with_schedule_program(bundled.clone());
 
         assert!(
@@ -1325,8 +1344,8 @@ mod tests {
             .path()
             .join(r"scoop\apps\pitboard\current\pitboard.exe");
         let bundled = home.path().join(r"Programs\Pitboard\bin\pitboard.exe");
-        a_program_at(&scoop);
-        a_program_at(&bundled);
+        a_task_program_at(&scoop);
+        a_task_program_at(&bundled);
         let the_app = home.read(&[]).with_schedule_program(bundled.clone());
         let at = crate::watch_service::Switching::At(crate::duty::autoswitch::Policy::default());
         let watching = |ctx: &Context| {
