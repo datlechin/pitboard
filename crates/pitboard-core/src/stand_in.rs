@@ -319,16 +319,15 @@ fn run_job(built: &Path, job: &Job) -> io::Result<()> {
 }
 
 /// The stand-in as `cargo build -p pitboard --example stand-in` builds it, for the test that
-/// is running: in `examples` beside the `deps` it runs from.
+/// is running: in `examples` in the profile's folder the test runs under.
 pub fn built() -> Result<PathBuf, NotBuilt> {
     let test = std::env::current_exe().map_err(|_| NotBuilt { looked_at: None })?;
     built_for(&test)
 }
 
-/// The stand-in built for the test `test`: `<profile>/examples/stand-in` for a test at
-/// `<profile>/deps/<test>`, where Cargo puts both.
+/// The stand-in built for the test `test`: `<profile>/examples/stand-in`, where Cargo puts it.
 fn built_for(test: &Path) -> Result<PathBuf, NotBuilt> {
-    let at = test.parent().and_then(Path::parent).map(|profile| {
+    let at = profile_of(test).map(|profile| {
         profile
             .join("examples")
             .join(format!("stand-in{}", std::env::consts::EXE_SUFFIX))
@@ -337,6 +336,19 @@ fn built_for(test: &Path) -> Result<PathBuf, NotBuilt> {
         Some(at) if at.is_file() => Ok(at),
         looked_at => Err(NotBuilt { looked_at }),
     }
+}
+
+// Cargo puts a test at `<profile>/deps/<test>`, and from 1.100 at
+// `<profile>/build/<package>/<hash>/out/<test>` (Rust 1.100.0's run 43441896630).
+fn profile_of(test: &Path) -> Option<&Path> {
+    let folder = test.parent()?;
+    if folder.file_name()? == "deps" {
+        return folder.parent();
+    }
+    let build = folder.ancestors().nth(3)?;
+    (folder.file_name()? == "out" && build.file_name()? == "build")
+        .then(|| build.parent())
+        .flatten()
 }
 
 /// The stand-in is not built where the running test looks for it.
@@ -1046,7 +1058,21 @@ mod tests {
 
         std::fs::create_dir_all(at.parent().expect("examples")).expect("made");
         std::fs::write(&at, "").expect("built");
-        assert_eq!(built_for(&test), Ok(at));
+        assert_eq!(built_for(&test), Ok(at.clone()));
+        let from_1_100 = scratch
+            .path()
+            .join("debug")
+            .join("build")
+            .join("pitboard")
+            .join("0123456789abcdef")
+            .join("out")
+            .join("cli-0123456789abcdef");
+        assert_eq!(built_for(&from_1_100), Ok(at));
+        assert_eq!(
+            profile_of(&scratch.path().join("debug").join("out").join("cli")),
+            None,
+            "only Cargo's own layouts"
+        );
     }
 
     /// The script is beside the program, under the program's whole name.
