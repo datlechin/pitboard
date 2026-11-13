@@ -242,8 +242,13 @@ fn no_build_for_tests_installs_the_watch_service() {
         "{out}"
     );
 
-    let (out, _, code) = env.run_with(&["watch", "install", "--json"], &given);
-    assert_eq!(code, 1, "{out}");
+    let ran = env
+        .started(env.pitboard_to_schedule(), &["watch", "install", "--json"])
+        .envs(given)
+        .output()
+        .expect("run Pitboard");
+    let out = String::from_utf8_lossy(&ran.stdout).into_owned();
+    assert_eq!(ran.status.code(), Some(1), "{out}");
     assert_eq!(
         envelope(&out)["error"]["code"],
         crate::common::os::schedule_refused_with(),

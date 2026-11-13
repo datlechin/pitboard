@@ -463,6 +463,21 @@ impl Env {
         self.run_with(args, &[])
     }
 
+    /// A copy of this build for a job to name, with the launcher a task starts it through where
+    /// this system has one. Cargo builds none beside the test's own, and no build for tests runs
+    /// a job, so the launcher is an empty file.
+    pub(crate) fn pitboard_to_schedule(&self) -> PathBuf {
+        let folder = self.root.join("scheduled");
+        std::fs::create_dir_all(&folder).expect("a folder");
+        let copy = folder.join(os::program("pitboard"));
+        std::fs::copy(env!("CARGO_BIN_EXE_pitboard"), &copy)
+            .unwrap_or_else(|e| panic!("{} could not be made: {e}", copy.display()));
+        if let Some(launcher) = pitboard_core::testing::launcher(&copy) {
+            std::fs::write(launcher, "").expect("a launcher");
+        }
+        copy
+    }
+
     /// `run`, with `vars` set besides, over what the harness sets or withholds.
     pub(crate) fn run_with(&self, args: &[&str], vars: &[(&str, &str)]) -> (String, String, i32) {
         let mut command = self.command(args);

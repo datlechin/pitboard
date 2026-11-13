@@ -154,133 +154,25 @@ fn console_of_a_run_from_a_parent_started_with(env: &Env, flags: u32) -> Console
     seen
 }
 
-// consoleAllocationPolicy=detached, which RF-E4 measured on the probe's builds. Windows reads it
-// from 11 24H2 on and gives a run with no console to share a window before.
+// consoleAllocationPolicy=detached, which RF-E4 measured on the probe's builds.
 #[test]
-fn a_run_with_no_console_to_share_makes_none_from_24h2_on_and_one_shares_its_parents() {
+fn a_run_with_no_console_to_share_makes_none_and_one_shares_its_parents() {
     let env = Env::new("console-allocation");
     env.put_pitboard_on_path();
-    let build = pitboard_core::testing::windows_build().expect("RtlGetVersion");
-    assert_eq!(
-        console_of_a_run_from_a_parent_started_with(&env, DETACHED_PROCESS),
-        if build >= 26100 {
-            Console::None
-        } else {
-            Console::WithWindow
-        },
-        "build {build}"
-    );
     assert_eq!(
         console_of_a_run_from_a_parent_started_with(&env, CREATE_NO_WINDOW),
         Console::WithoutWindow
     );
-}
-
-// pitboardw.exe, which a task starts, beside the pitboard.exe at `pitboard`.
-fn put_launcher_beside(pitboard: &Path) -> PathBuf {
-    let built = Path::new(env!("CARGO_BIN_EXE_pitboard")).with_file_name("pitboardw.exe");
-    assert!(
-        built.is_file(),
-        "no {}: `cargo build -p pitboardw` builds it",
-        built.display()
-    );
-    let launcher = pitboard.with_file_name("pitboardw.exe");
-    std::fs::copy(&built, &launcher)
-        .unwrap_or_else(|e| panic!("{} could not be made: {e}", launcher.display()));
-    launcher
-}
-
-// Started as a task starts it, with no console to share, on every build.
-#[test]
-fn the_launcher_runs_pitboard_with_no_console_window() {
-    let env = two_accounts("launcher-console");
-    let launcher = put_launcher_beside(&env.put_pitboard_on_path());
-    let mut started = env.started(&launcher, &["statusline"]);
-    started
-        .creation_flags(DETACHED_PROCESS)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut launched = started.spawn().expect("pitboardw.exe starts");
-    let pitboard = wait_for("pitboard.exe under pitboardw.exe", || {
-        child_of(launched.id(), "pitboard.exe")
-    });
-    assert_eq!(console_of(pitboard), Console::WithoutWindow);
-    launched
-        .stdin
-        .take()
-        .expect("its input")
-        .write_all(session("launched", None).as_bytes())
-        .expect("written");
-    let out = launched.wait_with_output().expect("pitboardw.exe ends");
-    assert!(out.status.success(), "{:?}", out.status);
-    assert_eq!(
-        anstream::adapter::strip_str(&String::from_utf8_lossy(&out.stdout))
-            .to_string()
-            .trim_end(),
-        "alpha ?·?  beta ?·?"
-    );
-}
-
-// Task Scheduler keeps what the launcher ends with as the task's last result, which doctor reads.
-#[test]
-fn the_launcher_hands_on_its_arguments_and_ends_as_pitboard_does() {
-    let env = two_accounts("launcher-arguments");
-    let pitboard = env.put_pitboard_on_path();
-    let launcher = put_launcher_beside(&pitboard);
-    for args in [
-        &["--version"][..],
-        &["no-such-command"],
-        &["status", "--json", "two words", "a \"quote\""],
-        &["statusline"],
-    ] {
-        // Only the status line reads its input; the others may end before it is written.
-        let input = match args {
-            ["statusline"] => session("handed on", None),
-            _ => String::new(),
-        };
-        let direct = ran(env.started(&pitboard, args), &input);
-        let launched = ran(env.started(&launcher, args), &input);
-        assert_eq!(launched.status.code(), direct.status.code(), "{args:?}");
-        assert_eq!(launched.stdout, direct.stdout, "{args:?}");
-        assert_eq!(launched.stderr, direct.stderr, "{args:?}");
+    let build = pitboard_core::testing::windows_build().expect("RtlGetVersion");
+    // Before 24H2 the run gets a console with a window, reads no input from it and ends before it
+    // is looked at. pitboardw.exe keeps a task's run windowless there (pitboardw's tests).
+    if build < 26100 {
+        return;
     }
-}
-
-// As Task Scheduler ends a task's program, at Stop or the time limit: pitboard.exe ends with it.
-#[test]
-fn ending_the_launcher_ends_the_pitboard_it_started() {
-    let env = two_accounts("launcher-ended");
-    let launcher = put_launcher_beside(&env.put_pitboard_on_path());
-    let mut launched = env
-        .started(&launcher, &["statusline"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("pitboardw.exe starts");
-    let pitboard = wait_for("pitboard.exe under pitboardw.exe", || {
-        child_of(launched.id(), "pitboard.exe")
-    });
-    launched.kill().expect("ended");
-    launched.wait().expect("waited on");
-    wait_for("pitboard.exe to end", || {
-        (!pitboard_core::testing::may_be_running(pitboard)).then_some(())
-    });
-}
-
-// A launcher with no pitboard.exe beside it ends with HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND).
-#[test]
-fn a_launcher_alone_ends_with_the_error_windows_gave() {
-    let env = Env::new("launcher-alone");
-    let alone = env.root.join("alone");
-    std::fs::create_dir_all(&alone).expect("a folder");
-    let launcher = put_launcher_beside(&alone.join("pitboard.exe"));
-    let out = env
-        .started(&launcher, &["renew", "--scheduled"])
-        .output()
-        .expect("pitboardw.exe ran");
-    assert_eq!(out.status.code(), Some(0x8007_0002_u32 as i32));
+    assert_eq!(
+        console_of_a_run_from_a_parent_started_with(&env, DETACHED_PROCESS),
+        Console::None
+    );
 }
 
 // What a status line's `line` prints, run in `shell` as Claude Code runs it there, from `cwd`

@@ -2433,6 +2433,7 @@ dependencies = [
 name = "pitboardw"
 version = "1.0.0-beta.12"
 dependencies = [
+ "tempfile",
  "windows-sys 0.61.2",
 ]
 
