@@ -113,9 +113,9 @@ impl PitboardModel {
         listener: Arc<dyn Listener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
-        let world = launchable(front, &name)?;
         #[cfg(feature = "fixture")]
         {
+            let world = launchable(front, &name)?;
             let folder = worlds::Folder::shared().map_err(failed)?;
             let launched = worlds::make(world, folder, front).map_err(failed)?;
             Ok(launched.model(listener, local_time))
@@ -123,7 +123,7 @@ impl PitboardModel {
         #[cfg(not(feature = "fixture"))]
         {
             let _ = (listener, local_time);
-            match world {}
+            match launchable(front, &name)? {}
         }
     }
 
@@ -147,9 +147,9 @@ impl PitboardModel {
         notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
-        let world = launchable(front, &name)?;
         #[cfg(feature = "fixture")]
         {
+            let world = launchable(front, &name)?;
             let folder = worlds::Folder::within(std::path::Path::new(&temporary_directory))
                 .map_err(failed)?;
             let launched = worlds::make(world, folder, front).map_err(failed)?;
@@ -165,7 +165,7 @@ impl PitboardModel {
                 notifier,
                 local_time,
             );
-            match world {}
+            match launchable(front, &name)? {}
         }
     }
 }
