@@ -305,10 +305,16 @@ pub(crate) fn ran(ctx: &Context, permit: Permit, job: Job, answer: StoreAnswer) 
 /// The Pitboard `job` should run: the one the context names, or this one, by the path it was
 /// started by.
 pub(crate) fn program(ctx: &Context, job: Job) -> Result<PathBuf> {
-    program_of(ctx.schedule_program(), crate::host::current_program, job)
+    program_of(
+        ctx.os,
+        ctx.schedule_program(),
+        crate::host::current_program,
+        job,
+    )
 }
 
 fn program_of(
+    os: Os,
     named: Option<&Path>,
     running: impl FnOnce() -> std::io::Result<PathBuf>,
     job: Job,
@@ -320,7 +326,7 @@ fn program_of(
             source,
         })?,
     };
-    lasting(&program, job)?;
+    lasting(os, &program, job)?;
     Ok(program)
 }
 
@@ -329,8 +335,9 @@ fn program_of(
 /// refused rather than written down.
 ///
 /// A path inside the copy macOS makes of an app opened where it was downloaded leads
-/// somewhere while that app runs and nowhere once it quits, so it is refused as well.
-fn lasting(program: &Path, job: Job) -> Result<&Path> {
+/// somewhere while that app runs and nowhere once it quits, so it is refused as well, and so
+/// is a program whose launcher is not beside it ([`Os::launcher`]).
+fn lasting(os: Os, program: &Path, job: Job) -> Result<&Path> {
     if in_a_temporary_copy(program) {
         return Err(Error::ScheduleProgramTemporary {
             path: program.to_path_buf(),
@@ -343,7 +350,22 @@ fn lasting(program: &Path, job: Job) -> Result<&Path> {
             job,
         });
     }
+    if let Some(launcher) = os.launcher(program).filter(|launcher| !launcher.is_file()) {
+        return Err(Error::ScheduleLauncherMissing {
+            path: launcher,
+            job,
+        });
+    }
     Ok(program)
+}
+
+/// The first of what the scheduler starts to run `program` that is not there: its launcher
+/// where it has one, then `program`.
+pub(crate) fn missing(os: Os, program: &Path) -> Option<PathBuf> {
+    os.launcher(program)
+        .into_iter()
+        .chain([program.to_path_buf()])
+        .find(|file| !file.is_file())
 }
 
 /// Whether `program` is inside a temporary copy, which is there while it runs and gone once it
@@ -520,7 +542,7 @@ pub(crate) fn repair(ctx: &Context, permit: Permit) -> Result<bool> {
         return Ok(false);
     };
     if !serves(ctx)
-        || lasting(named, Job::Renew).is_err()
+        || lasting(ctx.os, named, Job::Renew).is_err()
         || !installed_program(ctx).is_some_and(|program| broken(ctx, &program))
     {
         return Ok(false);
@@ -544,7 +566,7 @@ pub(crate) fn repair(ctx: &Context, permit: Permit) -> Result<bool> {
 // person's, and doctor names the way back.
 fn broken(ctx: &Context, program: &Path) -> bool {
     let drifted = task(ctx, Job::Renew).is_some_and(|task| !task.drifted.is_empty());
-    !drifted && fault(ctx.os, program, program.is_file()).is_some()
+    !drifted && fault(ctx.os, program, missing(ctx.os, program).is_none()).is_some()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -687,10 +709,17 @@ mod tests {
         }
     }
 
-    /// Put a program at `path`, for a schedule to name.
+    /// Put a program at `path`, for a schedule to name, with the launcher this system starts
+    /// it through.
     fn a_program_at(path: &Path) {
         std::fs::create_dir_all(path.parent().expect("a directory")).expect("its directory");
-        std::fs::write(path, "").expect("a program");
+        for file in crate::host::OS
+            .launcher(path)
+            .into_iter()
+            .chain([path.to_path_buf()])
+        {
+            std::fs::write(file, "").expect("a program");
+        }
     }
 
     /// A schedule the scheduler will not start leaves nothing behind saying renewal is on.
@@ -878,19 +907,59 @@ mod tests {
             .join("Temp1_pitboard-v0.15.0-x86_64-pc-windows-msvc.zip")
             .join("pitboard.exe");
         a_program_at(&unzipped);
-        let refused =
-            program_of(None, || Ok(unzipped.clone()), Job::Renew).expect_err("a copy that goes");
+        let refused = program_of(Os::Windows, None, || Ok(unzipped.clone()), Job::Renew)
+            .expect_err("a copy that goes");
         assert_eq!(refused.code(), "schedule_program_temporary");
         let gone = home.path().join("gone").join("pitboard");
-        let refused = program_of(None, || Ok(gone.clone()), Job::Renew).expect_err("nothing there");
+        let refused = program_of(Os::Linux, None, || Ok(gone.clone()), Job::Renew)
+            .expect_err("nothing there");
         assert_eq!(refused.code(), "schedule_program_missing");
 
         let installed = home.path().join("bin").join("pitboard");
         a_program_at(&installed);
         assert_eq!(
-            program_of(None, || Ok(installed.clone()), Job::Renew).expect("one that lasts"),
+            program_of(Os::Linux, None, || Ok(installed.clone()), Job::Renew)
+                .expect("one that lasts"),
             installed
         );
+    }
+
+    // A task starts pitboardw.exe, which starts the pitboard.exe beside it with no console, so a
+    // pitboard.exe without one is never written into a task: cargo installs pitboard.exe alone.
+    #[test]
+    fn a_windows_job_needs_the_launcher_beside_its_pitboard() {
+        let home = Scratch::new();
+        let installed = home.path().join("bin").join("pitboard.exe");
+        let launcher = home.path().join("bin").join("pitboardw.exe");
+        std::fs::create_dir_all(home.path().join("bin")).expect("a bin");
+        std::fs::write(&installed, "").expect("a program");
+        for job in [Job::Renew, Job::Watch] {
+            let refused = program_of(Os::Windows, Some(&installed), || unreachable!(), job)
+                .expect_err("no launcher");
+            assert_eq!(refused.code(), "schedule_launcher_missing", "{job:?}");
+            assert!(
+                refused
+                    .to_string()
+                    .contains(&launcher.display().to_string()),
+                "{refused}"
+            );
+        }
+        assert_eq!(missing(Os::Windows, &installed), Some(launcher.clone()));
+        assert_eq!(
+            missing(Os::Linux, &installed),
+            None,
+            "no launcher elsewhere"
+        );
+
+        std::fs::write(&launcher, "").expect("a launcher");
+        assert_eq!(
+            program_of(Os::Windows, Some(&installed), || unreachable!(), Job::Renew)
+                .expect("both there"),
+            installed
+        );
+        assert_eq!(missing(Os::Windows, &installed), None);
+        std::fs::remove_file(&installed).expect("removed");
+        assert_eq!(missing(Os::Windows, &installed), Some(installed));
     }
 
     /// A copy macOS runs from a temporary place is told by a directory of the path, as the

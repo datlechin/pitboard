@@ -78,7 +78,8 @@ impl Task {
 // `watch.env`: a definition has no environment, and an argument would show a proxy's password.
 //
 // The watch service starts at the person's own sign-in (`UserId`, documented to take a SID) and
-// runs with no time limit (`PT0S`); renewal runs daily at `start`, for 10 minutes at most.
+// runs with no time limit (`PT0S`); renewal runs daily at `start`, for 10 minutes at most. Each
+// starts `program` through its launcher, so it runs with no console window (`Os::launcher`).
 pub(crate) fn definition(
     job: Job,
     program: &Path,
@@ -145,9 +146,33 @@ pub(crate) fn definition(
   </Actions>
 </Task>
 "#,
-        command = escaped(&program.to_string_lossy()),
+        command = escaped(&launcher(program).to_string_lossy()),
         arguments = escaped(arguments.trim_end()),
     )
+}
+
+fn launcher(program: &Path) -> PathBuf {
+    crate::host::Os::Windows
+        .launcher(program)
+        .unwrap_or_else(|| program.to_path_buf())
+}
+
+// The program a task's command starts: the one beside its launcher, or the command itself, as
+// Pitboard before 1.0.0-beta.13 wrote it. Those ran only where a task's console program gets no
+// window, on Windows 11 24H2 and later, so they are kept.
+fn launched(command: &Path) -> PathBuf {
+    let stem = command.file_stem().and_then(|stem| stem.to_str());
+    match stem.and_then(|stem| stem.strip_suffix(['w', 'W'])) {
+        Some(program) if !program.is_empty() => {
+            let mut name = std::ffi::OsString::from(program);
+            if let Some(extension) = command.extension() {
+                name.push(".");
+                name.push(extension);
+            }
+            command.with_file_name(name)
+        }
+        _ => command.to_path_buf(),
+    }
 }
 
 // A day after it is put, at that time of day, on the machine's clock.
@@ -181,7 +206,7 @@ pub(crate) fn program(xml: &str, job: Job) -> Option<PathBuf> {
         .strip_prefix('"')
         .and_then(|quoted| quoted.strip_suffix('"'))
         .unwrap_or(&command);
-    (!command.is_empty()).then(|| PathBuf::from(command))
+    (!command.is_empty()).then(|| launched(Path::new(command)))
 }
 
 // Task Scheduler leaves a setting out where it is at its default.
@@ -560,7 +585,7 @@ mod tests {
             "<Hidden>true</Hidden>",
             "<WakeToRun>false</WakeToRun>",
             "<ExecutionTimeLimit>PT10M</ExecutionTimeLimit>",
-            r"<Command>C:\Users\Dana\Tools &amp; Apps\pitboard.exe</Command>",
+            r"<Command>C:\Users\Dana\Tools &amp; Apps\pitboardw.exe</Command>",
             "<Arguments>renew --scheduled</Arguments>",
         ] {
             assert_eq!(xml.matches(setting).count(), 1, "{setting}\n{xml}");
@@ -589,7 +614,7 @@ mod tests {
             "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>",
             "<Hidden>true</Hidden>",
             "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>",
-            r"<Command>C:\Users\Dana\Tools &amp; Apps\pitboard.exe</Command>",
+            r"<Command>C:\Users\Dana\Tools &amp; Apps\pitboardw.exe</Command>",
             "<Arguments>watch --scheduled --at 90</Arguments>",
         ] {
             assert_eq!(xml.matches(setting).count(), 1, "{setting}\n{xml}");
@@ -627,6 +652,26 @@ mod tests {
             None
         );
         assert_eq!(program("not a task", Job::Renew), None);
+    }
+
+    // A task an earlier Pitboard wrote starts pitboard.exe itself.
+    #[test]
+    fn a_task_that_starts_pitboard_itself_names_it_as_one_through_its_launcher_does() {
+        let exe = Path::new(r"C:\Program Files\Pitboard\bin\pitboard.exe");
+        let xml = definition(Job::Renew, exe, &[], "2026-10-17T09:30:00", SID);
+        assert!(xml.contains(r"\bin\pitboardw.exe</Command>"), "{xml}");
+        let earlier = xml.replace("pitboardw.exe</Command>", "pitboard.exe</Command>");
+        assert_eq!(program(&earlier, Job::Renew).as_deref(), Some(exe));
+        let upper = xml.replace("pitboardw.exe</Command>", "PITBOARDW.EXE</Command>");
+        assert_eq!(
+            program(&upper, Job::Renew).as_deref(),
+            Some(Path::new(r"C:\Program Files\Pitboard\bin\PITBOARD.EXE"))
+        );
+        let named_w = xml.replace(r"C:\Program Files\Pitboard\bin\pitboardw.exe", "w.exe");
+        assert_eq!(
+            program(&named_w, Job::Renew).as_deref(),
+            Some(Path::new("w.exe"))
+        );
     }
 
     #[test]
@@ -735,9 +780,11 @@ mod tests {
     impl TaskHome {
         fn new() -> TaskHome {
             let scratch = tempfile::tempdir().expect("a scratch home");
-            let program = scratch.path().join("bin").join("pitboard.exe");
-            std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
-            std::fs::write(&program, "").expect("a program");
+            let bin = scratch.path().join("bin");
+            std::fs::create_dir_all(&bin).expect("made");
+            for program in ["pitboard.exe", "pitboardw.exe"] {
+                std::fs::write(bin.join(program), "").expect("a program");
+            }
             TaskHome(scratch, MemoryHost::scheduling_tasks(SID))
         }
 
@@ -1098,7 +1145,9 @@ mod tests {
             std::fs::read_to_string(environment_file(&proxied, Job::Renew)).expect("the proxy");
         let elsewhere = machine.0.path().join("elsewhere").join("pitboard.exe");
         std::fs::create_dir_all(elsewhere.parent().expect("its folder")).expect("made");
-        std::fs::write(&elsewhere, "").expect("another program");
+        for program in ["pitboard.exe", "pitboardw.exe"] {
+            std::fs::write(elsewhere.with_file_name(program), "").expect("another program");
+        }
         machine.1.refuse_next_start();
         let refused = schedule::install(
             &machine

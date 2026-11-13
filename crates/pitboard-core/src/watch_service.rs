@@ -216,7 +216,14 @@ mod tests {
         fn on(host: Arc<MemoryHost>) -> ServiceHome {
             let machine = ServiceHome(tempfile::tempdir().expect("a scratch home"), host);
             std::fs::create_dir_all(machine.program().parent().expect("its folder")).expect("made");
-            std::fs::write(machine.program(), "").expect("a program");
+            let program = machine.program();
+            for file in crate::host::OS
+                .launcher(&program)
+                .into_iter()
+                .chain([program])
+            {
+                std::fs::write(file, "").expect("a program");
+            }
             std::fs::create_dir_all(machine.ctx(&[]).default_pitboard_home())
                 .expect("a Pitboard home");
             machine

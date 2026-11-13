@@ -2163,7 +2163,10 @@ mod tests {
         let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
-        std::fs::write(&program, "").expect("a command line");
+        let launcher = pitboard_core::testing::launcher(&program);
+        for file in launcher.iter().chain([&program]) {
+            std::fs::write(file, "").expect("a command line");
+        }
         let ctx = Context::new(home.clone())
             .with_schedule_program(program)
             .with_memory_stores(MemoryHost::new());

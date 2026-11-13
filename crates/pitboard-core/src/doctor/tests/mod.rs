@@ -122,7 +122,7 @@ pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> Schedule
         )),
         task: None,
         program: Some(PathBuf::from("/usr/local/bin/pitboard")),
-        program_found: true,
+        gone: None,
         network,
         network_differs,
         outdated: false,
@@ -270,7 +270,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
     f.watch_service = Some(WatchServiceFact {
         location: Location::File(PathBuf::from("/home/x/watch.plist")),
         program: Some(PathBuf::from("/usr/local/bin/pitboard")),
-        program_found: true,
+        gone: None,
         switching: None,
         task: None,
         outdated: false,

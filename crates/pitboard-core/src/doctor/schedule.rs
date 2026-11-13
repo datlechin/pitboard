@@ -11,7 +11,8 @@ pub(crate) struct ScheduleFact {
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
     pub(crate) program: Option<PathBuf>,
-    pub(crate) program_found: bool,
+    // The first of what it starts that is not there, as `schedule::missing` reads it.
+    pub(crate) gone: Option<PathBuf>,
     // The proxy variables of the Pitboard that installed it.
     pub(crate) network: NetworkFact,
     // Another proxy, user name, password or exempt host than this run's.
@@ -25,7 +26,7 @@ pub(crate) struct ScheduleFact {
 pub(crate) struct WatchServiceFact {
     pub(crate) location: crate::schedule::Location,
     pub(crate) program: Option<PathBuf>,
-    pub(crate) program_found: bool,
+    pub(crate) gone: Option<PathBuf>,
     pub(crate) switching: Option<crate::watch_service::Switching>,
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
@@ -44,7 +45,7 @@ pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
     let program = crate::schedule::installed_program(ctx);
     let proxies = crate::schedule::installed_proxies(ctx).unwrap_or_default();
     Some(ScheduleFact {
-        program_found: program.as_deref().is_some_and(std::path::Path::is_file),
+        gone: gone(ctx, program.as_deref()),
         program,
         location,
         task: crate::schedule::task(ctx, crate::schedule::Job::Renew),
@@ -68,7 +69,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     };
     let program = crate::watch_service::installed_program(ctx);
     Some(WatchServiceFact {
-        program_found: program.as_deref().is_some_and(std::path::Path::is_file),
+        gone: gone(ctx, program.as_deref()),
         program,
         location,
         switching,
@@ -76,6 +77,10 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
         outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Watch),
         refused: crate::schedule::refused(ctx, crate::schedule::Job::Watch),
     })
+}
+
+fn gone(ctx: &Context, program: Option<&std::path::Path>) -> Option<PathBuf> {
+    crate::schedule::missing(ctx.os, program?)
 }
 
 // A path an upgrade or a move took away fails once a day where nobody looks.
@@ -90,12 +95,13 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
             again,
         ));
     };
-    match crate::schedule::fault(facts.os, program, schedule.program_found) {
+    match crate::schedule::fault(facts.os, program, schedule.gone.is_none()) {
         Some(Fault::Gone) => {
+            let gone = schedule.gone.as_deref().unwrap_or(program);
             return Some(fail(
                 "schedule",
                 "renewal schedule",
-                words::runs_what_is_gone(program.display()),
+                words::runs_what_is_gone(gone.display()),
                 again,
             ));
         }
@@ -174,11 +180,11 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
             again,
         ));
     };
-    if !service.program_found {
+    if let Some(gone) = &service.gone {
         return Some(fail(
             "watch_service",
             "watch service",
-            words::runs_what_is_gone(program.display()),
+            words::runs_what_is_gone(gone.display()),
             again,
         ));
     }

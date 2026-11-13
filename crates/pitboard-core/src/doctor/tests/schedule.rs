@@ -8,6 +8,17 @@ fn at(percent: u8) -> crate::watch_service::Switching {
     })
 }
 
+// A Pitboard at `program` for a job to run, with the launcher this system starts it through.
+fn a_pitboard_at(program: &std::path::Path) {
+    for file in crate::host::OS
+        .launcher(program)
+        .iter()
+        .chain([&program.to_path_buf()])
+    {
+        std::fs::write(file, "").expect("a Pitboard");
+    }
+}
+
 #[test]
 fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
     let mut f = facts();
@@ -22,7 +33,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         )),
         task: None,
         program: Some(PathBuf::from("/opt/homebrew/bin/pitboard")),
-        program_found: true,
+        gone: None,
         network: direct(),
         network_differs: false,
         outdated: false,
@@ -36,7 +47,8 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         words::runs_daily("/opt/homebrew/bin/pitboard")
     );
 
-    f.schedule.as_mut().expect("set above").program_found = false;
+    f.schedule.as_mut().expect("set above").gone =
+        Some(PathBuf::from("/opt/homebrew/bin/pitboard"));
     let checks = evaluate(&f);
     let gone = check(&checks, "schedule");
     assert_eq!(gone.level, Level::Fail, "every renewal from now on fails");
@@ -54,7 +66,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         program: Some(PathBuf::from(
             "/Applications/Pitboard.app/Contents/MacOS/Pitboard",
         )),
-        program_found: true,
+        gone: None,
         network: direct(),
         network_differs: false,
         outdated: false,
@@ -115,7 +127,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
             "/home/x/Library/LaunchAgents/com.datlechin.pitboard.watch.plist",
         )),
         program: program.map(PathBuf::from),
-        program_found: true,
+        gone: None,
         switching: Some(at(90)),
         task,
         outdated: false,
@@ -133,7 +145,8 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
     assert_eq!(found.name, "watch service");
     assert_eq!(section("watch_service"), None, "Pitboard's own");
 
-    f.watch_service.as_mut().expect("set above").program_found = false;
+    f.watch_service.as_mut().expect("set above").gone =
+        Some(PathBuf::from("/opt/homebrew/bin/pitboard"));
     let checks = evaluate(&f);
     let gone = check(&checks, "watch_service");
     assert_eq!(gone.level, Level::Fail, "it switches nothing from now on");
@@ -177,7 +190,7 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
             drifted,
         }),
         program: Some(PathBuf::from(program)),
-        program_found: true,
+        gone: None,
         network: direct(),
         network_differs: false,
         outdated: false,
@@ -254,7 +267,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
             "/home/x/.config/systemd/user/pitboard-watch.service",
         )),
         program: Some(PathBuf::from(program)),
-        program_found: true,
+        gone: None,
         switching: None,
         task: None,
         outdated: true,
@@ -283,7 +296,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
             words::INSTALL_THE_SERVICE_AGAIN
         )
     );
-    f.schedule.as_mut().expect("set above").program_found = false;
+    f.schedule.as_mut().expect("set above").gone = Some(PathBuf::from(program));
     assert_eq!(
         check(&evaluate(&f), "schedule").level,
         Level::Fail,
@@ -296,7 +309,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
         let home = scratch.path().to_path_buf();
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its folder")).expect("a bin");
-        std::fs::write(&program, "").expect("a Pitboard");
+        a_pitboard_at(&program);
         let ctx = Context::new(home.clone())
             .with_memory_stores(crate::host::memory::MemoryHost::new())
             .with_schedule_program(program.clone());
@@ -358,14 +371,28 @@ fn a_schedule_whose_pitboard_is_gone_is_found_on_the_disk() {
     assert!(schedule_fact(&ctx).is_none(), "nothing installed yet");
 
     std::fs::create_dir_all(root.join("bin")).expect("a bin");
-    std::fs::write(&program, "").expect("a Pitboard");
+    let launcher = crate::host::OS.launcher(&program);
+    for file in launcher.iter().chain([&program]) {
+        std::fs::write(file, "").expect("a Pitboard");
+    }
     crate::schedule::install(&ctx, Permit::for_a_test()).expect("installed");
     let fact = schedule_fact(&ctx).expect("installed");
     assert_eq!(fact.program.as_deref(), Some(program.as_path()));
-    assert!(fact.program_found);
+    assert_eq!(fact.gone, None);
 
+    if let Some(launcher) = &launcher {
+        std::fs::remove_file(launcher).expect("taken away");
+        assert_eq!(
+            schedule_fact(&ctx).expect("still installed").gone.as_ref(),
+            Some(launcher),
+            "the launcher a task starts first"
+        );
+    }
     std::fs::remove_file(&program).expect("taken away");
-    assert!(!schedule_fact(&ctx).expect("still installed").program_found);
+    assert_eq!(
+        schedule_fact(&ctx).expect("still installed").gone.as_ref(),
+        launcher.as_ref().or(Some(&program))
+    );
 
     assert!(
         schedule_fact(&ctx.with_pitboard_home(root.join("elsewhere"))).is_none(),
@@ -380,7 +407,7 @@ fn a_task_changed_in_task_scheduler_is_read_where_it_is_kept() {
     let home = scratch.path().to_string_lossy().into_owned();
     let program = scratch.path().join("bin").join("pitboard.exe");
     std::fs::create_dir_all(program.parent().expect("its folder")).expect("a bin");
-    std::fs::write(&program, "").expect("a Pitboard");
+    a_pitboard_at(&program);
     let env: crate::context::Environment =
         [("HOME", home.as_str()), ("USERPROFILE", home.as_str())]
             .into_iter()
@@ -543,7 +570,7 @@ fn the_schedules_proxy_is_read_from_what_install_wrote() {
     let root = scratch.path().to_path_buf();
     let program = root.join("bin/pitboard");
     std::fs::create_dir_all(root.join("bin")).expect("a bin");
-    std::fs::write(&program, "").expect("a Pitboard");
+    a_pitboard_at(&program);
     let machine = crate::host::memory::MemoryHost::new();
     let home = root.to_string_lossy().into_owned();
     let run = |proxy: Option<&str>| {
@@ -651,7 +678,7 @@ fn a_run_that_could_not_open_the_store_is_said_with_when() {
         words::renews_by_time_awake(&words::runs_daily("/usr/local/bin/pitboard"))
     );
     let schedule = f.schedule.as_mut().expect("set above");
-    schedule.program_found = false;
+    schedule.gone = Some(PathBuf::from("/usr/local/bin/pitboard"));
     assert_eq!(check(&evaluate(&f), "schedule").level, Level::Fail);
 }
 
@@ -666,7 +693,7 @@ fn a_switch_of_the_watch_service_that_could_not_open_the_store_is_said_with_when
             "/home/x/.config/systemd/user/pitboard-watch.service",
         )),
         program: Some(PathBuf::from(program)),
-        program_found: true,
+        gone: None,
         switching: Some(at(90)),
         task: None,
         outdated: false,

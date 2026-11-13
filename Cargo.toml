@@ -11,6 +11,7 @@ members = [
     "crates/uniffi-bindgen-csharp",
     "crates/pitboard-conformance",
     "crates/pitboard-probe",
+    "crates/pitboardw",
     "apps/linux",
 ]
 # Every member but the Linux app, whose GTK and libadwaita development files are on no machine
@@ -27,6 +28,7 @@ default-members = [
     "crates/uniffi-bindgen-csharp",
     "crates/pitboard-conformance",
     "crates/pitboard-probe",
+    "crates/pitboardw",
 ]
 
 [workspace.package]

@@ -865,14 +865,18 @@ pub(crate) fn make(world: World, folder: Folder, front: Front) -> Result<Launche
     })
 }
 
-/// The programs of `tools` and the command line inside the stand-in app, each a file that is
-/// there to be found and is never run: a sign-in is played by the fixture's browser, and the
-/// schedule's scheduler starts nothing. Were one run, it would refuse and do nothing.
+/// The programs of `tools` and the command line inside the stand-in app, with the launcher a
+/// job starts it through, each a file that is there to be found and is never run: a sign-in is
+/// played by the fixture's browser, and the schedule's scheduler starts nothing. Were one run,
+/// it would refuse and do nothing.
 fn install(machine: &Stage, tools: &[ProviderId]) -> Result<(), Unmade> {
     for &tool in tools {
         never_run(&Stage::program_in(machine.root(), tool))?;
     }
     never_run(&machine.helper())?;
+    if let Some(launcher) = pitboard_core::testing::launcher(&machine.helper()) {
+        never_run(&launcher)?;
+    }
     std::fs::create_dir_all(machine.bin())?;
     Ok(())
 }

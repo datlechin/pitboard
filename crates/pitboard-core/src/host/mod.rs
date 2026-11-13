@@ -310,6 +310,24 @@ impl Os {
         }
     }
 
+    // What a scheduler starts to run `program`. On Windows, `pitboardw.exe` beside
+    // `pitboard.exe`, which has no console and starts it with none: below Windows 11 24H2 a task
+    // gives a console program a window (docs/facts/windows-runners.md).
+    pub(crate) fn launcher(self, program: &Path) -> Option<PathBuf> {
+        match self {
+            Os::MacOs | Os::Linux => None,
+            Os::Windows => {
+                let mut name = program.file_stem()?.to_os_string();
+                name.push("w");
+                if let Some(extension) = program.extension() {
+                    name.push(".");
+                    name.push(extension);
+                }
+                Some(program.with_file_name(name))
+            }
+        }
+    }
+
     // The program an app itself starts, where no command line is kept, so a schedule that runs
     // it renews nothing. Windows keeps macOS's bundle rule, which no path there meets.
     pub(crate) fn an_apps_own_program(self, program: &Path) -> bool {
