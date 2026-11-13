@@ -1,14 +1,15 @@
 name: Windows builds
 description: >
-  Checks that Rust builds for this runner's own machine, then builds pitboard.exe as a 0.x
-  release is built, in target/gated, unless told not to, and pitboard-probe in target/debug.
+  Checks that Rust builds for this runner's own machine, then builds pitboard.exe and
+  pitboardw.exe as a 0.x release is built, in target/gated, unless told not to, and
+  pitboard-probe in target/debug.
 
 inputs:
   triple:
     description: The target triple of this runner's machine.
     required: true
   gated-pitboard:
-    description: Whether to build pitboard.exe as a 0.x release is built.
+    description: Whether to build pitboard.exe and pitboardw.exe as a 0.x release is built.
     default: 'true'
 
 runs:
@@ -25,13 +26,13 @@ runs:
         test "$host" = "$TRIPLE"
     # No test-support and no cfg, so the release gate is closed. In a folder of its own, so
     # the job's other builds keep theirs.
-    - name: pitboard.exe as a 0.x release builds it
+    - name: pitboard.exe and pitboardw.exe as a 0.x release builds them
       if: inputs.gated-pitboard == 'true'
       shell: bash
       env:
         RUSTFLAGS: -D warnings -C target-feature=+crt-static
         CARGO_TARGET_DIR: target/gated
-      run: cargo build --locked -p pitboard
+      run: cargo build --locked -p pitboard -p pitboardw
     - name: pitboard-probe
       shell: bash
       run: cargo build --locked -p pitboard-probe

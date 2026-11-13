@@ -50,7 +50,7 @@ Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.ZipFile
 $archive = [IO.Compression.ZipFile]::OpenRead($zip)
 try {
     $names = @($archive.Entries | ForEach-Object { $_.FullName })
-    $expected = @('pitboard.exe', 'completions/pitboard.ps1', 'completions/pitboard.bash', 'LICENSE', 'NOTICE', 'README.md') |
+    $expected = @('pitboard.exe', 'pitboardw.exe', 'completions/pitboard.ps1', 'completions/pitboard.bash', 'LICENSE', 'NOTICE', 'README.md') |
         ForEach-Object { "$top/$_" }
     if (($names -join ', ') -ne ($expected -join ', ')) { throw "the zip holds $($names -join ', ')" }
     foreach ($entry in $archive.Entries) {
@@ -62,10 +62,13 @@ try {
         try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
         if (-not $text.Contains($completions[$name])) { throw "$name is not the shell's completions" }
     }
-    $packed = Join-Path $work 'packed.exe'
-    [IO.Compression.ZipFileExtensions]::ExtractToFile($archive.GetEntry("$top/pitboard.exe"), $packed)
-    if ((Get-FileHash -LiteralPath $packed).Hash -ne (Get-FileHash -LiteralPath $exePath).Hash) {
-        throw 'the zip holds another pitboard.exe'
+    $built = @{ 'pitboard.exe' = $exePath; 'pitboardw.exe' = (Join-Path (Split-Path -Parent $exePath) 'pitboardw.exe') }
+    foreach ($name in $built.Keys) {
+        $packed = Join-Path $work "packed-$name"
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($archive.GetEntry("$top/$name"), $packed)
+        if ((Get-FileHash -LiteralPath $packed).Hash -ne (Get-FileHash -LiteralPath $built[$name]).Hash) {
+            throw "the zip holds another $name"
+        }
     }
 } finally {
     $archive.Dispose()
@@ -163,6 +166,8 @@ Assert-Refused 'a build whose version resource names another product' @{ Exe = $
 
 $other = if ($Triple -eq 'x86_64-pc-windows-msvc') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
 Assert-Refused 'a build for the other machine' @{ Exe = $exePath; Triple = $other } 'is not a program for'
+$launcher = Join-Path (Split-Path -Parent $exePath) 'pitboardw.exe'
+Assert-Refused 'a launcher that is a console program' @{ Exe = $exePath; Triple = $Triple; Launcher = $exePath } 'pitboardw.exe is not a GUI program'
 
 $flags = @{ RUSTFLAGS = $env:RUSTFLAGS; CARGO_ENCODED_RUSTFLAGS = $env:CARGO_ENCODED_RUSTFLAGS }
 try {
@@ -173,7 +178,7 @@ try {
     $env:CARGO_ENCODED_RUSTFLAGS = "-C`u{1f}target-feature=+crt-static`u{1f}--cfg`u{1f}pitboard_unreleased_windows"
     Assert-Refused 'a release whose CARGO_ENCODED_RUSTFLAGS open it' @{ Exe = $exePath; Triple = $Triple; Release = $true } 'CARGO_ENCODED_RUSTFLAGS opens'
     $env:CARGO_ENCODED_RUSTFLAGS = $null
-    $release = @{ Exe = $exePath; Triple = $Triple; Release = $true }
+    $release = @{ Exe = $exePath; Triple = $Triple; Release = $true; Launcher = $launcher }
     if ($Probe) { $release.Probe = $Probe }
     & $check @release | Out-Null
     Write-Output 'ok: a build with neither passes as a release'

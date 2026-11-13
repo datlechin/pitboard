@@ -270,7 +270,7 @@ jobs:
           TRIPLE: ${{ matrix.triple }}
         run: >
           ./.github/scripts/check-windows-build.ps1 -Exe target/gated/debug/pitboard.exe
-          -Triple $env:TRIPLE -Probe target/debug/pitboard-probe.exe
+          -Launcher target/gated/debug/pitboardw.exe -Triple $env:TRIPLE -Probe target/debug/pitboard-probe.exe
       # Before windows_refuses, whose build for tests replaces the gated pitboard.exe.
       - name: The release's Windows scripts
         shell: pwsh
@@ -357,8 +357,8 @@ jobs:
         env:
           TRIPLE: ${{ matrix.triple }}
         run: >
-          ./.github/scripts/check-windows-build.ps1 -Exe target/debug/pitboard.exe -Triple $env:TRIPLE
-          -Opened -Strict -Probe target/debug/pitboard-probe.exe
+          ./.github/scripts/check-windows-build.ps1 -Exe target/debug/pitboard.exe -Launcher target/debug/pitboardw.exe
+          -Triple $env:TRIPLE -Opened -Strict -Probe target/debug/pitboard-probe.exe
 
   # The zips release.yml ships from 1.0.0, built by the same action on each image. Nothing is
   # uploaded, so no runnable build of a pull request leaves the runner.
@@ -786,15 +786,15 @@ jobs:
           version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           sh .github/scripts/windows-versions.sh "$version" >> "$GITHUB_OUTPUT"
-      # pitboard.exe for the MSI's bin folder.
-      - name: pitboard_ffi.dll, pitboard_share_ffi.dll and pitboard.exe as a 0.x release builds them
+      # pitboard.exe and pitboardw.exe for the MSI's bin folder.
+      - name: pitboard_ffi.dll, pitboard_share_ffi.dll, pitboard.exe and pitboardw.exe as a 0.x release builds them
         env:
           RUSTFLAGS: -D warnings -C target-feature=+crt-static
           CARGO_TARGET_DIR: target/gated
         run: |
           cargo build --locked --release -p pitboard-ffi
           cargo build --locked --release -p pitboard-share-ffi
-          cargo build --locked --release -p pitboard
+          cargo build --locked --release -p pitboard -p pitboardw
       - name: pitboard_ffi.dll opened, with its fixtures
         run: cargo build --locked --release -p pitboard-ffi --features fixture
       # csharp-windows checks that both libraries give the core's bindings, byte for byte.

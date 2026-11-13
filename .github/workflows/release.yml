@@ -2109,6 +2109,7 @@ jobs:
         run: >
           ./.github/scripts/check-windows-build.ps1 -Triple $env:TRIPLE -Version $env:BASE
           -Exe (Join-Path $env:RUNNER_TEMP "unpacked\pitboard-$env:GITHUB_REF_NAME-$env:TRIPLE\pitboard.exe")
+          -Launcher (Join-Path $env:RUNNER_TEMP "unpacked\pitboard-$env:GITHUB_REF_NAME-$env:TRIPLE\pitboardw.exe")
       - id: numbers
         shell: bash
         env:
