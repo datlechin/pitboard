@@ -331,6 +331,11 @@ public sealed partial class SiteFiguresTests
     [TestMethod]
     public void NotificationCenterFromTheKeyboard()
     {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            Assert.Inconclusive("Windows before 11 has no Notification Center for Windows+N to open, which the site's figure draws");
+        }
+
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         var window = launched.OpenWindow();
         Foreground.Require(window);

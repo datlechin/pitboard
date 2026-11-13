@@ -2,8 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.26100.0</SupportedOSPlatformVersion>
-    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>Pitboard.App</RootNamespace>
     <AssemblyName>Pitboard</AssemblyName>
     <!-- What the settings' About says, until a release's build passes its own, as the macOS project's PITBOARD_VERSION. -->

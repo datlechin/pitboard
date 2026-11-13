@@ -23,7 +23,7 @@ public sealed class UpdateFeedTests
               <title>Pitboard {item.Version}</title>
               <sparkle:version>{item.Version}</sparkle:version>
               <sparkle:shortVersionString>{item.Version}</sparkle:shortVersionString>
-              <sparkle:minimumSystemVersion>10.0.26100</sparkle:minimumSystemVersion>
+              <sparkle:minimumSystemVersion>10.0.19041</sparkle:minimumSystemVersion>
               <enclosure url="https://example.com/{item.Version}-{item.Os}.msi" length="1" type="application/x-msi"
                   sparkle:os="{item.Os}" sparkle:installerArguments="/passive /norestart LAUNCHAFTERINSTALL=1" sparkle:edSignature="c2ln"/>
             </item>
