@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Threading::{
-    DETACHED_PROCESS, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    CREATE_NEW_CONSOLE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
 
 // A folder of the test's own holding pitboardw.exe, and the stand-in as pitboard.exe where asked.
@@ -43,7 +43,7 @@ fn said(out: &Output, what: &str) -> Vec<String> {
         .collect()
 }
 
-// Without it, a console program with no console to share gets one with a window, as a task's.
+// Without it, a console program gets a console of its own with a window, as a task's does.
 #[test]
 fn the_program_runs_with_a_console_that_has_no_window() {
     let (folder, launcher) = installed(true);
@@ -52,7 +52,7 @@ fn the_program_runs_with_a_console_that_has_no_window() {
     assert_ne!(said(&launched, "console "), ["shown"]);
 
     let alone = Command::new(folder.path().join("pitboard.exe"))
-        .creation_flags(DETACHED_PROCESS)
+        .creation_flags(CREATE_NEW_CONSOLE)
         .stdin(Stdio::null())
         .output()
         .expect("ran");

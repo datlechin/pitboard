@@ -754,12 +754,6 @@ jobs:
             runtime: win-arm64
             platform: ARM64
             installer: arm64
-          # Below Windows 11's build 22000, with no Mica, Segoe Fluent Icons or rounded corners, as on Windows 10.
-          - os: windows-2022
-            triple: x86_64-pc-windows-msvc
-            runtime: win-x64
-            platform: x64
-            installer: x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -1044,12 +1038,11 @@ jobs:
           -Results "$env:RUNNER_TEMP/app-tests" -Probe target/debug/pitboard-probe.exe
       # ScreenshotTests' picture of each surface, for the docs and pull requests, also of a run with a test failed. On
       # windows-11-arm a window of the job user's keeps the foreground (CF1), so the test takes none there.
-      # windows-2022's show the app as Windows 10 draws it.
       - name: The app's pictures
-        if: matrix.os != 'windows-11-arm' && (success() || failure())
+        if: matrix.os == 'windows-2025' && (success() || failure())
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-app-pictures${{ matrix.os == 'windows-2022' && '-windows-2022' || '' }}
+          name: windows-app-pictures
           path: |
             ${{ runner.temp }}/app-tests/Pitboard.UITests/**/*.png
             !${{ runner.temp }}/app-tests/Pitboard.UITests/**/site-*.png

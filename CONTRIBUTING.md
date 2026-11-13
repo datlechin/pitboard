@@ -536,8 +536,8 @@ byte, and runs the C# tests against each the same way.
 
 ### The app on CI
 
-CI's `windows-app` job builds and checks the app on `windows-2025`, `windows-11-arm` and
-`windows-2022`, whose build is below Windows 11's. It builds the app in Debug over `pitboard_ffi.dll` opened with its fixtures, and publishes it in
+CI's `windows-app` job builds and checks the app on `windows-2025` and `windows-11-arm`, and
+not on `windows-2022`, whose WebView2 Runtime is older than the account windows need. It builds the app in Debug over `pitboard_ffi.dll` opened with its fixtures, and publishes it in
 Release over the library a release builds. It sets `PITBOARD_REQUIRE_VERSIONINFO=1`, so a
 `pitboard_ffi.dll` or `pitboard_share_ffi.dll` built without its version resource fails the
 build. The Release build takes its update key from `WINDOWS_UPDATE_PUBLIC_KEY`, and CI gives
