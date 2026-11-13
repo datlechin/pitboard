@@ -1,8 +1,8 @@
 name: Windows release
 description: >
-  Builds pitboard.exe for this runner's machine as a release ships it, packs it as
-  pitboard-v<version>-<triple>.zip in the runner's temporary dist folder, and checks the
-  pitboard.exe inside. release.yml builds its Windows zips with this, CI every pull
+  Builds pitboard.exe and pitboardw.exe for this runner's machine as a release ships them,
+  packs them as pitboard-v<version>-<triple>.zip in the runner's temporary dist folder, and
+  checks the two programs inside. release.yml builds its Windows zips with this, CI every pull
   request's, and windows-facts.yml the session bundle's.
 
 inputs:
@@ -29,7 +29,7 @@ runs:
     # RUSTFLAGS replaces every target's own rustflags, so it names the static C runtime, and
     # nothing else. A build without its version resource fails, as SignPath asks for one. One
     # step, so the check reads the environment the build had.
-    - name: pitboard.exe, built, zipped and checked as a release
+    - name: pitboard.exe and pitboardw.exe, built, zipped and checked as a release
       shell: pwsh
       env:
         TRIPLE: ${{ inputs.triple }}
@@ -37,10 +37,11 @@ runs:
         RUSTFLAGS: -C target-feature=+crt-static
         PITBOARD_REQUIRE_VERSIONINFO: '1'
       run: |
-        cargo build --release --locked -p pitboard --target $env:TRIPLE
+        cargo build --release --locked -p pitboard -p pitboardw --target $env:TRIPLE
         if ($LASTEXITCODE -ne 0) { throw "cargo build exited $LASTEXITCODE" }
         $dist = Join-Path $env:RUNNER_TEMP 'dist'
         ./.github/scripts/package-windows.ps1 -Exe "target/$env:TRIPLE/release/pitboard.exe" `
           -Version $env:VERSION -Triple $env:TRIPLE -Out $dist
+        $packed = Join-Path $dist "pitboard-v$env:VERSION-$env:TRIPLE"
         ./.github/scripts/check-windows-build.ps1 -Release -Triple $env:TRIPLE `
-          -Exe (Join-Path $dist "pitboard-v$env:VERSION-$env:TRIPLE\pitboard.exe")
+          -Exe (Join-Path $packed 'pitboard.exe') -Launcher (Join-Path $packed 'pitboardw.exe')

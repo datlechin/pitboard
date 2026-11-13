@@ -15,12 +15,12 @@ test("names each system Pitboard runs on, from the oldest version it supports", 
   assert.ok(repo("apps/macos/project.yml").includes('MACOSX_DEPLOYMENT_TARGET: "14.0"'));
   assert.ok(
     repo("crates/pitboard-core/src/host/mod.rs").includes(
-      "// Windows 11 24H2's build, which Windows Server 2025 shares.",
+      "// Windows 10 version 2004's build, the first a package with an external location registers on.",
     ),
   );
   assert.equal(
     application(site, from("0.15.0", "1.0.0-beta.1")).operatingSystem,
-    "macOS 14 or later, Windows 11 24H2 or later, Linux",
+    "macOS 14 or later, Windows 10 version 2004 or later, Linux",
   );
 });
 

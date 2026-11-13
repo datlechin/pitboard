@@ -879,7 +879,10 @@ mod tests {
         let home = scratch.path().to_path_buf();
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
-        std::fs::write(&program, "").expect("a command line");
+        let launcher = pitboard_core::testing::launcher(&program);
+        for file in launcher.iter().chain([&program]) {
+            std::fs::write(file, "").expect("a command line");
+        }
         let ctx = Context::new(home.clone())
             .with_schedule_program(program)
             .with_memory_stores(MemoryHost::new());
@@ -992,7 +995,10 @@ mod tests {
         let home = scratch.path().to_path_buf();
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
-        std::fs::write(&program, "").expect("a command line");
+        let launcher = pitboard_core::testing::launcher(&program);
+        for file in launcher.iter().chain([&program]) {
+            std::fs::write(file, "").expect("a command line");
+        }
         let pitboard = Pitboard::new(
             Context::new(home)
                 .with_schedule_program(program)
@@ -1177,7 +1183,7 @@ mod tests {
         };
         assert!(ends_watching(&unwritable));
         assert!(ends_watching(&Error::Elevated { why: None }));
-        assert!(ends_watching(&Error::SystemTooOld { build: Some(22631) }));
+        assert!(ends_watching(&Error::SystemTooOld { build: Some(17763) }));
         assert!(ends_watching(&Error::SystemTooOld { build: None }));
         assert!(!ends_watching(&Error::SignedInAccountChanged));
         assert!(!ends_watching(&Error::ParkedLoginExpired {

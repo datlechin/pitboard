@@ -2857,7 +2857,7 @@ mod tests {
         why: crate::host::token::AS_A_SERVICE_ACCOUNT,
     });
     const ELEVATION_UNKNOWN: Refused = Refused::As(Elevation::Unknown);
-    const BELOW_THE_FLOOR: Refused = Refused::On(Floor::Below { build: 22631 });
+    const BELOW_THE_FLOOR: Refused = Refused::On(Floor::Below { build: 17763 });
     const FLOOR_UNKNOWN: Refused = Refused::On(Floor::Unknown);
 
     const REFUSED: [Refused; 6] = [
@@ -3089,21 +3089,21 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_lets_windows_11_24h2_through_and_says_an_older_one_first() {
+    fn the_gate_lets_windows_10_2004_through_and_says_an_older_one_first() {
         let m = machine("gate-floor");
         let pitboard = Pitboard::new(m.ctx.clone());
-        for build in [26100, 26200] {
+        for build in [19041, 19045, 22631, 26100] {
             m.mem
                 .runs_on(crate::host::windows_floor(Some((10, 0, build))));
             assert!(pitboard.permit().is_ok(), "{build}");
         }
         m.mem
-            .runs_on(crate::host::windows_floor(Some((10, 0, 22631))));
+            .runs_on(crate::host::windows_floor(Some((10, 0, 17763))));
         let refused = pitboard.permit().expect_err("refused");
         assert_eq!(refused.code(), "system_too_old");
         assert_eq!(
             refused.to_string(),
-            crate::words::too_old(Some(22631)).refusal
+            crate::words::too_old(Some(17763)).refusal
         );
         m.mem.runs_with(Elevation::Elevated { why: "as root" });
         let first = pitboard.permit().expect_err("refused");
@@ -3328,7 +3328,7 @@ mod tests {
             );
             Refused::lifted(&m);
         }
-        m.mem.runs_on(Floor::Below { build: 22631 });
+        m.mem.runs_on(Floor::Below { build: 17763 });
         m.mem.runs_with(Elevation::Unknown);
         assert_eq!(
             refusing(&pitboard.doctor().checks),

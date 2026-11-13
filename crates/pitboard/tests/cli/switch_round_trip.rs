@@ -826,7 +826,10 @@ fn no_build_for_tests_asks_task_scheduler() {
         .join("Pitboard");
 
     let out = env
-        .command(&["schedule", "install", "--json"])
+        .started(
+            env.pitboard_to_schedule(),
+            &["schedule", "install", "--json"],
+        )
         .env("PITBOARD_HOME", &default)
         .env("HTTPS_PROXY", "http://proxy.example.com:3128")
         .output()

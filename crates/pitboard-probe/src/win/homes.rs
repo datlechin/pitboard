@@ -148,6 +148,17 @@ fn hash_candidates(dir: &Path, r: &crate::redact::Redactor) -> Value {
 /// lives in a registry value the probe did not make, so the runner-facts workflow and the
 /// runbook read it beside this.
 fn os_build() -> Value {
+    let (major, minor, build) = windows_version();
+    json!({
+        "major": major,
+        "minor": minor,
+        "build": build,
+        "meets_floor_19041": build >= 19041,
+        "ubr": "read beside this, from the registry, by the workflow or the owner",
+    })
+}
+
+pub(super) fn windows_version() -> (u32, u32, u32) {
     let mut info = OSVERSIONINFOW {
         dwOSVersionInfoSize: size_of::<OSVERSIONINFOW>() as u32,
         dwMajorVersion: 0,
@@ -162,13 +173,7 @@ fn os_build() -> Value {
             (&mut info as *mut OSVERSIONINFOW).cast(),
         );
     }
-    json!({
-        "major": info.dwMajorVersion,
-        "minor": info.dwMinorVersion,
-        "build": info.dwBuildNumber,
-        "meets_floor_26100": info.dwBuildNumber >= 26100,
-        "ubr": "read beside this, from the registry, by the workflow or the owner",
-    })
+    (info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber)
 }
 
 fn user_profile_directory() -> Option<String> {

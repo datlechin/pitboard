@@ -75,7 +75,8 @@ impl Rig {
     }
 
     // Pitboard's directory moved to the one the schedule renews, which on Windows is not
-    // `.pitboard`.
+    // `.pitboard`, and a command line for its jobs to run, with the launcher a task starts it
+    // through: the test's own program has none beside it.
     pub(crate) fn in_the_default_home(mut self) -> Rig {
         let (here, default) = (home::dir(&self.ctx), self.ctx.default_pitboard_home());
         if here != default {
@@ -83,6 +84,16 @@ impl Rig {
             std::fs::rename(&here, &default).expect("moved");
             self.ctx = self.ctx.clone().with_pitboard_home(default);
         }
+        let program = self.root.path().join("bin").join("pitboard");
+        std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
+        for file in crate::host::OS
+            .launcher(&program)
+            .into_iter()
+            .chain([program.clone()])
+        {
+            std::fs::write(file, "").expect("a program");
+        }
+        self.ctx = self.ctx.clone().with_schedule_program(program);
         self
     }
 

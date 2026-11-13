@@ -370,8 +370,10 @@ together: `rg -F datlechin/scoop-bucket` finds every copy.
 ## winget
 
 Pitboard is two winget packages: `Pitboard.CLI`, the zips, each holding a portable
-`pitboard.exe` with the command alias `pitboard`, and `Pitboard.Pitboard`, the app's per-user
-MSIs once the release builds them. Since winget 1.29 an MSI wins over a portable under one
+`pitboard.exe` with the command alias `pitboard` and a portable `pitboardw.exe` with the alias
+`pitboardw`, and `Pitboard.Pitboard`, the app's per-user MSIs once the release builds them. A
+task names the `pitboard.exe` in winget's `Links` folder, which an upgrade keeps, and starts it
+through the `pitboardw.exe` beside it there. Since winget 1.29 an MSI wins over a portable under one
 identifier, hence two. A beta never reaches winget.
 
 For the latest release from major version 1, the `winget` job takes each package
@@ -395,8 +397,8 @@ published:
    secrets table says.
 2. Run `komac new Pitboard.CLI --version 1.0.0 --publisher Pitboard --urls <x64 zip> <arm64
    zip> --dry-run --output <folder>`, and the same for `Pitboard.Pitboard` with the MSIs. Give
-   the zips the command alias `pitboard`. Every later version keeps the publisher this one
-   names.
+   the zips two nested portables, `pitboard.exe` with the command alias `pitboard` and
+   `pitboardw.exe` with `pitboardw`. Every later version keeps the publisher this one names.
 3. Run `python3 .github/scripts/check-winget-hashes.py <manifests> <the release's SHA256SUMS>`
    and `winget validate --manifest <manifests>` on each, and check `Publisher: Pitboard` in
    the locale manifests and `Scope: user` on the MSIs.

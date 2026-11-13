@@ -1,6 +1,7 @@
 namespace Pitboard.Views;
 
-// Segoe Fluent Icons, the symbols Windows draws its own apps with.
+// Segoe Fluent Icons' code points, the symbols Windows 11 draws its own apps with. Windows 10 has no Segoe Fluent
+// Icons, and WinUI draws each from Segoe MDL2 Assets, which holds every one of them.
 internal static class Glyphs
 {
     public const string Account = "\uE77B";

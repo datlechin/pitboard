@@ -1398,15 +1398,15 @@ pub fn no_scheduler(os: Os, job: Job) -> String {
 }
 
 pub(crate) fn too_old(build: Option<u32>) -> ChangesNothing {
-    let way_out = "It changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
-                   update Windows to use it here.";
+    let way_out = "It changes things on Windows 10 version 2004 and later, and on Windows \
+                   Server 2022 and later: update Windows to use it here.";
     let to_ask_again = "Update Windows to ask again.";
     match build {
         Some(build) => ChangesNothing {
             refusal: format!("Pitboard changes nothing on Windows build {build}. {way_out}"),
             because: format!(
-                "Pitboard runs on Windows build {build}, older than Windows 11 24H2 (build \
-                 {WINDOWS_FLOOR})"
+                "Pitboard runs on Windows build {build}, older than Windows 10 version 2004 \
+                 (build {WINDOWS_FLOOR})"
             ),
             way_out,
             to_ask_again,
@@ -2021,23 +2021,25 @@ mod tests {
 
     #[test]
     fn an_old_windows_is_told_which_it_needs() {
-        let old = too_old(Some(22631));
+        let old = too_old(Some(17763));
         assert_eq!(
             old.refusal,
-            "Pitboard changes nothing on Windows build 22631. It changes things on Windows 11 \
-             24H2 and later, and on Windows Server 2025: update Windows to use it here."
+            "Pitboard changes nothing on Windows build 17763. It changes things on Windows 10 \
+             version 2004 and later, and on Windows Server 2022 and later: update Windows to use \
+             it here."
         );
         assert_eq!(
             old.because,
-            "Pitboard runs on Windows build 22631, older than Windows 11 24H2 (build 26100)"
+            "Pitboard runs on Windows build 17763, older than Windows 10 version 2004 (build \
+             19041)"
         );
         assert_eq!(old.to_ask_again, "Update Windows to ask again.");
         let unknown = too_old(None);
         assert_eq!(
             unknown.refusal,
             "Pitboard changes nothing when it cannot tell which build of Windows it runs on. \
-             It changes things on Windows 11 24H2 and later, and on Windows Server 2025: update \
-             Windows to use it here."
+             It changes things on Windows 10 version 2004 and later, and on Windows Server 2022 \
+             and later: update Windows to use it here."
         );
         assert_eq!(
             unknown.because,

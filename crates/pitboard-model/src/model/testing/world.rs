@@ -189,6 +189,9 @@ impl World {
                 .join("pitboard.exe"),
         };
         a_program_at(&helper);
+        if let Some(launcher) = pitboard_core::testing::launcher(&helper) {
+            a_program_at(&launcher);
+        }
         self.ctx = self.ctx.clone().with_schedule_program(helper.clone());
         self.helper = Some(helper.clone());
         helper

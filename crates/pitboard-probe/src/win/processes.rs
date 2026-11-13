@@ -284,7 +284,13 @@ mod tests {
         };
         // SAFETY: a pseudo-handle for this process.
         let own = machine_of(unsafe { GetCurrentProcess() });
-        assert_eq!(own.map(crate::pe::machine_name), Some(want));
+        // ProcessMachineTypeInfo is read from Windows 11, build 22000, on.
+        let (_, _, build) = super::super::homes::windows_version();
+        assert_eq!(
+            own.map(crate::pe::machine_name),
+            (build >= 22000).then_some(want),
+            "build {build}"
+        );
         assert_eq!(native_machine().map(crate::pe::machine_name), Some(want));
     }
 }

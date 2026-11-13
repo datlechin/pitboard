@@ -160,12 +160,18 @@ fn a_run_with_no_console_to_share_makes_none_and_one_shares_its_parents() {
     let env = Env::new("console-allocation");
     env.put_pitboard_on_path();
     assert_eq!(
-        console_of_a_run_from_a_parent_started_with(&env, DETACHED_PROCESS),
-        Console::None
-    );
-    assert_eq!(
         console_of_a_run_from_a_parent_started_with(&env, CREATE_NO_WINDOW),
         Console::WithoutWindow
+    );
+    let build = pitboard_core::testing::windows_build().expect("RtlGetVersion");
+    // Before 24H2 the run gets a console with a window, reads no input from it and ends before it
+    // is looked at. pitboardw.exe keeps a task's run windowless there (pitboardw's tests).
+    if build < 26100 {
+        return;
+    }
+    assert_eq!(
+        console_of_a_run_from_a_parent_started_with(&env, DETACHED_PROCESS),
+        Console::None
     );
 }
 

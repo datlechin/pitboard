@@ -310,6 +310,24 @@ impl Os {
         }
     }
 
+    // What a scheduler starts to run `program`. On Windows, `pitboardw.exe` beside
+    // `pitboard.exe`, which has no console and starts it with none: below Windows 11 24H2 a task
+    // gives a console program a window (docs/facts/windows-runners.md).
+    pub(crate) fn launcher(self, program: &Path) -> Option<PathBuf> {
+        match self {
+            Os::MacOs | Os::Linux => None,
+            Os::Windows => {
+                let mut name = program.file_stem()?.to_os_string();
+                name.push("w");
+                if let Some(extension) = program.extension() {
+                    name.push(".");
+                    name.push(extension);
+                }
+                Some(program.with_file_name(name))
+            }
+        }
+    }
+
     // The program an app itself starts, where no command line is kept, so a schedule that runs
     // it renews nothing. Windows keeps macOS's bundle rule, which no path there meets.
     pub(crate) fn an_apps_own_program(self, program: &Path) -> bool {
@@ -711,8 +729,8 @@ pub(crate) struct WindowsSettings {
     pub(crate) admin_approval: Option<bool>,
 }
 
-// Windows 11 24H2's build, which Windows Server 2025 shares.
-pub(crate) const WINDOWS_FLOOR: u32 = 26100;
+// Windows 10 version 2004's build, the first a package with an external location registers on.
+pub(crate) const WINDOWS_FLOOR: u32 = 19041;
 
 #[cfg(any(windows, test))]
 pub(crate) fn windows_floor(version: Option<(u32, u32, u32)>) -> Floor {
@@ -1166,6 +1184,12 @@ pub(crate) trait Scheduler: Send + Sync + std::fmt::Debug {
 
     // What the system says of the job beyond what Pitboard wrote: Task Scheduler's alone.
     fn task(&self, _ctx: &Context, _job: Job) -> Option<task::Task> {
+        None
+    }
+
+    // The launcher the job starts its Pitboard through, read back from what `put` wrote, where
+    // it names one ([`Os::launcher`]): Task Scheduler's alone.
+    fn launcher(&self, _ctx: &Context, _job: Job) -> Option<PathBuf> {
         None
     }
 
@@ -1672,16 +1696,25 @@ mod tests {
         );
     }
 
-    // 22631 is Windows 11 23H2, and 19045 Windows 10 22H2.
+    // 19045 is Windows 10 22H2, 19044 LTSC 2021, 20348 Windows Server 2022, 22631 Windows 11
+    // 23H2, 18363 Windows 10 1909 and 17763 LTSC 2019 and Windows Server 2019.
     #[test]
-    fn the_floor_is_windows_11_24h2_with_server_2025_counted() {
-        for met in [(10, 0, 26100), (10, 0, 26200), (10, 0, 27000), (11, 0, 100)] {
+    fn the_floor_is_windows_10_2004_with_server_2022_counted() {
+        for met in [
+            (10, 0, 19041),
+            (10, 0, 19044),
+            (10, 0, 19045),
+            (10, 0, 20348),
+            (10, 0, 22631),
+            (10, 0, 26100),
+            (11, 0, 100),
+        ] {
             assert_eq!(windows_floor(Some(met)), Floor::Met, "{met:?}");
         }
         for (version, build) in [
-            ((10, 0, 26099), 26099),
-            ((10, 0, 22631), 22631),
-            ((10, 0, 19045), 19045),
+            ((10, 0, 19040), 19040),
+            ((10, 0, 18363), 18363),
+            ((10, 0, 17763), 17763),
             ((6, 3, 9600), 9600),
         ] {
             assert_eq!(
@@ -1691,7 +1724,7 @@ mod tests {
             );
         }
         assert_eq!(windows_floor(None), Floor::Unknown);
-        assert_eq!(WINDOWS_FLOOR, 26100);
+        assert_eq!(WINDOWS_FLOOR, 19041);
     }
 
     #[test]

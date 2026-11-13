@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)] [string] $Folder,
     # The ProductVersion windows-versions.sh gives Cargo.toml's version.
     [Parameter(Mandatory)] [string] $MsiVersion,
-    # The pitboard.exe the release's zip for this machine holds, and its completions\pitboard.ps1.
+    # The pitboard.exe the release's zip for this machine holds, with its pitboardw.exe beside it, and its
+    # completions\pitboard.ps1.
     [Parameter(Mandatory)] [string] $CommandLine,
     [Parameter(Mandatory)] [string] $Completions,
     # The MSI carries PitboardShare.exe and its package, as it does where the package is signed.
@@ -40,20 +41,23 @@ Write-Output "The MSI is version $version."
 $root = (Resolve-Path -LiteralPath $Folder).Path
 foreach ($name in 'Pitboard.exe', 'Pitboard.dll', 'pitboard_ffi.dll', 'WinSparkle.dll', 'Pitboard.ico', 'Pitboard.svg', 'Tray\Light\Plenty.ico',
     'Tray\Light\Low.ico', 'Tray\Light\Out.ico', 'Tray\Light\None.ico', 'Tray\Dark\Plenty.ico', 'Tray\Dark\Low.ico', 'Tray\Dark\Out.ico',
-    'Tray\Dark\None.ico', 'bin\pitboard.exe', 'completions\pitboard.ps1') {
+    'Tray\Dark\None.ico', 'bin\pitboard.exe', 'bin\pitboardw.exe', 'completions\pitboard.ps1') {
     if (-not (Test-Path -LiteralPath (Join-Path $root $name) -PathType Leaf)) { throw "the MSI lays out no $name beside Pitboard.exe" }
 }
-$bin = @(Get-ChildItem -LiteralPath (Join-Path $root 'bin') -Force | ForEach-Object Name)
-if ($bin.Count -ne 1) { throw "the MSI's bin holds $($bin -join ', '): the user PATH reaches everything in it" }
-if ((Get-Hash (Join-Path $root 'bin\pitboard.exe')) -ne (Get-Hash $CommandLine)) {
-    throw "the MSI's bin\pitboard.exe is not the zip's, $CommandLine"
+$bin = @(Get-ChildItem -LiteralPath (Join-Path $root 'bin') -Force | ForEach-Object Name | Sort-Object)
+if (($bin -join ', ') -cne 'pitboard.exe, pitboardw.exe') { throw "the MSI's bin holds $($bin -join ', '): the user PATH reaches everything in it" }
+$zipped = [ordered]@{ 'pitboard.exe' = $CommandLine; 'pitboardw.exe' = (Join-Path (Split-Path -Parent $CommandLine) 'pitboardw.exe') }
+foreach ($name in $zipped.Keys) {
+    if ((Get-Hash (Join-Path $root "bin\$name")) -ne (Get-Hash $zipped[$name])) {
+        throw "the MSI's bin\$name is not the zip's, $($zipped[$name])"
+    }
 }
 if ((Get-Hash (Join-Path $root 'completions\pitboard.ps1')) -ne (Get-Hash $Completions)) {
     throw "the MSI's completions\pitboard.ps1 is not the zip's, $Completions"
 }
 $symbols = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.pdb' | ForEach-Object Name)
 if ($symbols) { throw "the MSI lays out $($symbols -join ', ')" }
-Write-Output "It lays out Pitboard.exe with the zip's pitboard.exe alone in bin, the zip's PowerShell completions, and no symbols."
+Write-Output "It lays out Pitboard.exe with the zip's pitboard.exe and pitboardw.exe alone in bin, the zip's PowerShell completions, and no symbols."
 
 # Windows reads the sparse package's logos from its external location, the install folder.
 $shareFiles = 'PitboardShare.exe', 'PitboardShare.msix', 'pitboard_share_ffi.dll',

@@ -221,7 +221,7 @@ fn a_home_that_is_not_a_full_path_still_hears_why_nothing_changes() {
     use crate::context::Environment;
     let env: Environment = [("HOME", "")].into_iter().collect();
     let host = crate::host::memory::MemoryHost::new();
-    host.runs_on(crate::host::Floor::Below { build: 22631 });
+    host.runs_on(crate::host::Floor::Below { build: 17763 });
     host.runs_with(crate::host::Elevation::Unknown);
     let ctx = Context::for_command_line(&env).with_memory_stores(host);
     let codes: Vec<&str> = run(&ctx, &time::moment)

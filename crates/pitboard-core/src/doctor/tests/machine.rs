@@ -421,14 +421,14 @@ fn windows_is_told_how_it_runs_and_which_build_it_needs() {
     facts.elevation = crate::host::Elevation::Elevated {
         why: crate::host::token::IN_EVERY_PROGRAM,
     };
-    facts.floor = crate::host::Floor::Below { build: 22631 };
+    facts.floor = crate::host::Floor::Below { build: 17763 };
     assert_eq!(
         refusing(&facts),
         [
             (
                 "system_too_old",
-                said::too_old(Some(22631)).because,
-                words::changes_nothing_here(said::too_old(Some(22631)).way_out)
+                said::too_old(Some(17763)).because,
+                words::changes_nothing_here(said::too_old(Some(17763)).way_out)
             ),
             elevated(crate::host::token::IN_EVERY_PROGRAM),
         ]

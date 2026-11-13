@@ -50,6 +50,10 @@
       <Component Directory="BinFolder">
         <File Id="CommandLineExe" Source="$(CommandLine)" Name="pitboard.exe" />
       </Component>
+      <!-- What the watch and renewal tasks start pitboard.exe through. -->
+      <Component Directory="BinFolder">
+        <File Id="CommandLineLauncherExe" Source="$(Launcher)" Name="pitboardw.exe" />
+      </Component>
       <Component Directory="CompletionsFolder">
         <File Id="PowerShellCompletions" Source="$(Completions)" Name="pitboard.ps1" />
       </Component>

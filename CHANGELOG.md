@@ -7,6 +7,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Pitboard runs on Windows 10 version 2004 and later, on Windows 11 before 24H2 and on Windows
+  Server 2022, where it refused every change before.
+
+### Changed
+
+- **Breaking:** On Windows, `pitboard schedule install` and `pitboard watch install` refuse with
+  `schedule_launcher_missing` where `pitboardw.exe` is not beside `pitboard.exe`, as after
+  `cargo install`. Install from a release file or the app to turn them on.
+- On Windows, the renewal schedule and the watch service start `pitboard.exe` through
+  `pitboardw.exe`, so no console window shows while they run.
+
 ## [1.0.0-beta.12] - 2026-11-11
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

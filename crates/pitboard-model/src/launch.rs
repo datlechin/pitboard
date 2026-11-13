@@ -1828,12 +1828,12 @@ mod tests {
         };
         assert_eq!(code(&unknown, &full).as_deref(), Some("elevated"));
         let below = |host: &pitboard_core::testing::MemoryHost| {
-            host.runs_on(Floor::Below { build: 22631 });
+            host.runs_on(Floor::Below { build: 17763 });
         };
         assert_eq!(
             refused(&below, full.clone()).map(|failure| failure.message),
             Some(sentence(
-                &pitboard_core::error::Error::SystemTooOld { build: Some(22631) }.to_string()
+                &pitboard_core::error::Error::SystemTooOld { build: Some(17763) }.to_string()
             ))
         );
         let floor_unknown = |host: &pitboard_core::testing::MemoryHost| {
@@ -1885,7 +1885,10 @@ mod tests {
         let home = scratch.path().join("home");
         let helper = home.join("Applications/Pitboard.app/Contents/Helpers/pitboard");
         std::fs::create_dir_all(helper.parent().expect("its folder")).expect("made");
-        std::fs::write(&helper, "").expect("a command line");
+        let launcher = pitboard_core::testing::launcher(&helper);
+        for file in launcher.iter().chain([&helper]) {
+            std::fs::write(file, "").expect("a command line");
+        }
         let app = |pitboard: PathBuf| {
             let (home, helper) = (home.clone(), helper.clone());
             let host = pitboard_core::testing::MemoryHost::new();

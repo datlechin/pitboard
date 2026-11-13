@@ -316,6 +316,11 @@ the user `PATH`, the app starts from Start and at sign-in, Pitboard starts Claud
 Codex's sign-ins, and Pitboard, `claude`, `claude auth login` and `codex` read and write the
 accounts' own homes and Credential Manager items.
 
+The Windows 10 session machine is an x64 PC kept for testing, with Windows 10 22H2 installed
+fresh from Microsoft's own media, that holds the same and nothing else. It measures, with the
+session bundle's x64 build, what only Windows 10 shows. Each rule of this section holds for it,
+and it is an exception wherever the session machine is.
+
 - The session bundle is built only by `windows-facts.yml`'s `session` job, which only the
   owner dispatches, on the branch that holds `Release <version>`, its draft pull request's
   branch once one is open ([Prepare a release](RELEASING.md#prepare-a-release)). It leaves

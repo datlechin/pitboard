@@ -2021,6 +2021,7 @@ function Write-WingetManifest([string] $Folder, [string] $Version, [string] $Url
     Set-Content -LiteralPath (Join-Path $Folder 'Pitboard.CLI.installer.yaml') -Encoding utf8 -Value (
         $common + "InstallerType: zip`nNestedInstallerType: portable`nNestedInstallerFiles:`n" +
         "- RelativeFilePath: pitboard-v$Version-$Triple\pitboard.exe`n  PortableCommandAlias: pitboard`n" +
+        "- RelativeFilePath: pitboard-v$Version-$Triple\pitboardw.exe`n  PortableCommandAlias: pitboardw`n" +
         "Installers:`n- Architecture: $arch`n  InstallerUrl: $Url`n  InstallerSha256: $Sha256`n" +
         "ManifestType: installer`nManifestVersion: 1.10.0`n")
 }

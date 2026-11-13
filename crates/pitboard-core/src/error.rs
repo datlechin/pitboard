@@ -324,6 +324,14 @@ pub enum Error {
         job: crate::schedule::Job,
     },
 
+    /// On Windows a task starts `pitboardw.exe` beside `pitboard.exe`, and `path`, where it
+    /// would be, has none: `cargo install` and `cargo binstall` install `pitboard.exe` alone.
+    #[error("{} would start Pitboard through {}, which is not there. Nothing was {}. Install Pitboard from its zip, Scoop, winget or the app, which carry pitboardw.exe beside pitboard.exe, and {} from there.", job_named(*job), path.display(), job_done(*job), turn_on(*job))]
+    ScheduleLauncherMissing {
+        path: PathBuf,
+        job: crate::schedule::Job,
+    },
+
     /// macOS runs an app opened where it was downloaded from a copy it makes somewhere
     /// temporary, which is there while the app runs and gone once it quits. Windows' Explorer
     /// runs a program opened inside a zip from a copy of it.
@@ -1043,6 +1051,7 @@ impl Error {
             ScheduleNotDefaultHome { .. } => "schedule_not_default_home",
             ScheduleProgramMissing { .. } => "schedule_program_missing",
             ScheduleProgramTemporary { .. } => "schedule_program_temporary",
+            ScheduleLauncherMissing { .. } => "schedule_launcher_missing",
             ScheduleProgramUnnamed => "schedule_program_unnamed",
             ScheduleManagerElsewhere { .. } => "schedule_manager_elsewhere",
             HomeUnwritable { .. } => "home_unwritable",
@@ -1288,11 +1297,15 @@ fn not_default_home(
     )
 }
 
-fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
-    let turn_on = match job {
+fn turn_on(job: crate::schedule::Job) -> &'static str {
+    match job {
         crate::schedule::Job::Renew => "turn on daily renewal",
         crate::schedule::Job::Watch => "install the watch service",
-    };
+    }
+}
+
+fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
+    let turn_on = turn_on(job);
     use crate::schedule::TemporaryCopy;
     match crate::schedule::temporary_copy(path) {
         Some(TemporaryCopy::Zip) => format!(
@@ -2452,7 +2465,7 @@ mod tests {
                 detail: "d".into(),
             },
             Error::Elevated { why: None },
-            Error::SystemTooOld { build: Some(22631) },
+            Error::SystemTooOld { build: Some(17763) },
             Error::WindowsNotReleased,
             Error::LeftLoginChanged { path: "f".into() },
             Error::StoredLoginChanged { path: "f".into() },

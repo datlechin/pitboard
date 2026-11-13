@@ -9,14 +9,14 @@ description: "Install the app or the command line on macOS, Windows or Linux, an
 | System | The command line | The app |
 | --- | --- | --- |
 | macOS | Apple silicon or Intel | macOS 14 or later, on Apple silicon or Intel |
-| Windows | Windows 11 24H2 or later, or Windows Server 2025, on x64 or ARM64 | The same as the command line |
+| Windows | Windows 10 version 2004 or later, Windows 11, or Windows Server 2022 or later, on x64 or ARM64 | The same as the command line |
 | Linux | x86_64 or aarch64, on any distribution | Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma, on x86_64 or aarch64 |
 
 The app includes the command line, so install one or the other. On an older Windows, Pitboard [changes nothing](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows).
 
 You also need Claude Code, OpenAI's Codex CLI or Claude Desktop, signed in to one of your accounts. Claude Desktop accounts need macOS: read [Before you add a Claude Desktop account](/guides/claude-desktop#before-you-add-a-claude-desktop-account) first.
 
-Pitboard for Windows is in beta, and its files are not signed. It was run with real Claude Code logins on 18 October 2026, with Claude Code 2.1.302. Codex sign-ins and switches on Windows have not been measured.
+Pitboard for Windows is in beta, and its files are not signed. It was run with real Claude Code logins on 18 October 2026, with Claude Code 2.1.302, on Windows 11. Codex sign-ins and switches on Windows have not been measured. On Windows 10, Pitboard has not been run with real logins: its tests run on Windows Server 2022, and Windows 10 on Arm is listed from Microsoft's documentation alone.
 
 On Linux, Pitboard was run with real Claude Code and Codex logins on 30 October 2026, with Claude Code 2.1.314 and Codex 0.166.0, on Fedora 44 with GNOME and with KDE Plasma, Ubuntu 26.04 and Debian 13.
 
@@ -37,7 +37,7 @@ On Linux, Pitboard was run with real Claude Code and Codex logins on 30 October 
   <Tab title="Windows">
     <Steps>
       <Step title="Download the installer">
-        From [Download Pitboard](https://usepitboard.com/download#windows), download the ARM64 installer for a PC with an Arm processor, or the x64 one for any other. **Download for Windows** gives the ARM64 one when the browser says the PC has an Arm processor, and **More options** has both. **Settings** > **System** > **About** names the processor under **System type**. The x64 installer also runs on an Arm PC, under emulation.
+        From [Download Pitboard](https://usepitboard.com/download#windows), download the ARM64 installer for a PC with an Arm processor, or the x64 one for any other. **Download for Windows** gives the ARM64 one when the browser says the PC has an Arm processor, and **More options** has both. **Settings** > **System** > **About** names the processor under **System type**. On Windows 11, the x64 installer also runs on an Arm PC, under emulation. Windows 10 on Arm runs the ARM64 one alone.
       </Step>
       <Step title="Open the installer">
         If Windows shows **Windows protected your PC**, select **More info**, then **Run anyway**. What Microsoft Edge shows as it downloads the installer has not been measured. If Smart App Control blocks it, see [Smart App Control blocks Pitboard](/troubleshooting#smart-app-control-blocks-pitboard).

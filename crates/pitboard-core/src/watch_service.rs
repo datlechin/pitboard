@@ -210,13 +210,25 @@ mod tests {
 
         // As Windows schedules, through Task Scheduler as this machine has it, on any system.
         fn scheduling_tasks() -> ServiceHome {
-            ServiceHome::on(MemoryHost::scheduling_tasks(SID))
+            let machine = ServiceHome::on(MemoryHost::scheduling_tasks(SID));
+            let launcher = crate::host::Os::Windows
+                .launcher(&machine.program())
+                .expect("a launcher's name");
+            std::fs::write(launcher, "").expect("a launcher");
+            machine
         }
 
         fn on(host: Arc<MemoryHost>) -> ServiceHome {
             let machine = ServiceHome(tempfile::tempdir().expect("a scratch home"), host);
             std::fs::create_dir_all(machine.program().parent().expect("its folder")).expect("made");
-            std::fs::write(machine.program(), "").expect("a program");
+            let program = machine.program();
+            for file in crate::host::OS
+                .launcher(&program)
+                .into_iter()
+                .chain([program])
+            {
+                std::fs::write(file, "").expect("a program");
+            }
             std::fs::create_dir_all(machine.ctx(&[]).default_pitboard_home())
                 .expect("a Pitboard home");
             machine

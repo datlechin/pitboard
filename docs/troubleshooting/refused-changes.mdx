@@ -1,7 +1,7 @@
 ---
 title: "Fix Pitboard refusing every change"
 sidebarTitle: "Refused changes"
-description: "Fix Pitboard refusing every change as root, under `sudo`, as administrator or on a Windows older than 24H2."
+description: "Fix Pitboard refusing every change as root, under `sudo`, as administrator or on a Windows older than version 2004."
 ---
 
 In each case here, reads such as `pitboard status` and the status line still answer from the last numbers measured, and write nothing.
@@ -39,4 +39,4 @@ On Windows, Pitboard refuses every change with `elevated` when it runs elevated:
 
 ## Pitboard changes nothing on this version of Windows
 
-On a Windows older than Windows 11 24H2, build 26100, Pitboard refuses every change with `system_too_old`. The app still installs and opens. Windows Server 2025 meets the floor. Update Windows to use Pitboard there.
+On a Windows older than Windows 10 version 2004, build 19041, Pitboard refuses every change with `system_too_old`. The app still installs and opens. Windows Server 2022 meets the floor. Update Windows to use Pitboard there.

@@ -147,6 +147,12 @@ pub mod testing {
     pub use crate::switch::enroll::{ScriptedSignIn, SignInScript};
     pub use crate::time::{Clock, FixedClock};
 
+    /// The launcher a job starts `program` through on this system, which a test or a fixture
+    /// puts beside it for the job to be installed.
+    pub fn launcher(program: &std::path::Path) -> Option<std::path::PathBuf> {
+        crate::host::OS.launcher(program)
+    }
+
     /// Every variable Pitboard reads from its environment, by name, which a test withholds
     /// from every command it runs unless it means to pass one on.
     pub fn variables() -> impl Iterator<Item = &'static str> {
@@ -203,6 +209,12 @@ pub mod testing {
 
     pub fn may_be_running(pid: u32) -> bool {
         crate::host::proc::may_be_running(pid)
+    }
+
+    // The build of the Windows this runs on, as the floor reads it.
+    #[cfg(windows)]
+    pub fn windows_build() -> Option<u32> {
+        crate::host::user::version().map(|(_, _, build)| build)
     }
 
     // Every process's id, its parent's and its program's name, from one snapshot.

@@ -6,7 +6,7 @@ Pitboard switches Claude Code and OpenAI's Codex CLI on macOS, Windows and Linux
 
 It shows what each Claude Code and Codex account has left, notifies you in the app before a limit runs out, and can switch Claude Code by itself, from the app or from `pitboard watch install`.
 
-The app runs on macOS 14 or later, on Windows 11 24H2 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma, and includes the command line. [Download Pitboard](https://usepitboard.com/download) gives each system's download. On those Linux distributions, the app and the command line alone install from Pitboard's repository.
+The app runs on macOS 14 or later, on Windows 10 version 2004 or later, and on Debian 13, Ubuntu 26.04, Fedora 43 and later, or openSUSE Tumbleweed, with GNOME or KDE Plasma, and includes the command line. [Download Pitboard](https://usepitboard.com/download) gives each system's download. On those Linux distributions, the app and the command line alone install from Pitboard's repository.
 
 Install the command line alone on macOS, or on a Linux distribution the repository does not cover:
 

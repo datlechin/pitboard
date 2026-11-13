@@ -364,8 +364,9 @@ that is a `cfg` and not a Cargo feature.
 
 Working there takes:
 
-- Windows 11 24H2 or Windows Server 2025, build 26100, or later. An older build refuses every
-  change with `system_too_old`.
+- Windows 10 version 2004, build 19041, or later, or Windows Server 2022. An older build
+  refuses every change with `system_too_old`. Visual Studio's Build Tools no longer list
+  Windows 10 as a host.
 - x64 or ARM64, with Rust's MSVC toolchain. On ARM64, clang as well: ring compiles its C with
   it there.
 - Developer Mode, or the right to make symbolic links, for the tests that make links. Only on
@@ -418,19 +419,19 @@ Run each once more with `-p pitboard-model --all-targets --features fixture` in 
 `--workspace --all-targets`, as CI does, and the workspace once without the `--cfg`, as a
 release is built.
 
-CI's `windows` job runs the PowerShell commands on `windows-2025` and `windows-11-arm`, the tests as
-a fresh standard user through `.github/scripts/test-as-standard-user.ps1`, with an exFAT
+CI's `windows` job runs the PowerShell commands on `windows-2025`, `windows-11-arm` and
+`windows-2022`, the one image below Windows 11 24H2, the tests as a fresh standard user through `.github/scripts/test-as-standard-user.ps1`, with an exFAT
 volume it mounts for the run. The job fails when a run leaves a login item, a scheduled task, a login
 folder, the app's data folder, a link scheme, a notification registration, a start at
-sign-in, a `PATH` entry or a package behind. It also builds `pitboard.exe` as a release is
-built, with no cfg, and checks that a 0.x build refuses and changes nothing, and that a 1.x
+sign-in, a `PATH` entry or a package behind. It also builds `pitboard.exe` and `pitboardw.exe`
+as a release is built, with no cfg, and checks that a 0.x build refuses and changes nothing, and that a 1.x
 build answers with no argument as a fresh standard user, as winget's validation runs a program.
 It holds the opened build to the same. One test reads the app execution aliases in the job
 user's own profile, since a fresh standard user's has none.
 
 CI's `windows-release` job builds the release's zips with `.github/actions/windows-release`,
 as `release.yml` does from 1.0.0. `.github/scripts/check-windows-build.ps1` checks each
-`pitboard.exe` in both jobs, and `test-windows-release.ps1` tests `package-windows.ps1`,
+`pitboard.exe` and `pitboardw.exe` in both jobs, and `test-windows-release.ps1` tests `package-windows.ps1`,
 `check-windows-build.ps1`, `verify-windows-signatures.ps1`, which checks a release's
 signatures, and `pack-session-bundle.ps1`. They run on CI's runners only.
 
@@ -535,8 +536,8 @@ byte, and runs the C# tests against each the same way.
 
 ### The app on CI
 
-CI's `windows-app` job builds and checks the app on `windows-2025` and `windows-11-arm`. It
-builds the app in Debug over `pitboard_ffi.dll` opened with its fixtures, and publishes it in
+CI's `windows-app` job builds and checks the app on `windows-2025` and `windows-11-arm`, and
+not on `windows-2022`, whose WebView2 Runtime is older than the account windows need. It builds the app in Debug over `pitboard_ffi.dll` opened with its fixtures, and publishes it in
 Release over the library a release builds. It sets `PITBOARD_REQUIRE_VERSIONINFO=1`, so a
 `pitboard_ffi.dll` or `pitboard_share_ffi.dll` built without its version resource fails the
 build. The Release build takes its update key from `WINDOWS_UPDATE_PUBLIC_KEY`, and CI gives
@@ -572,8 +573,8 @@ which the session machine runs to measure the app's notifications, and checks th
 an account without `pitboard-probe`'s throwaway marker.
 
 The job also builds two MSIs of `apps/windows/Pitboard.Installer` with WiX v7, from the
-Release build, the `pitboard.exe` a release builds and the PowerShell completions its zip
-holds: one with `PitboardShare.exe` and its package, as a signed release carries them, and one
+Release build, the `pitboard.exe` and `pitboardw.exe` a release builds and the PowerShell
+completions its zip holds: one with `PitboardShare.exe` and its package, as a signed release carries them, and one
 without, as a release with no signer ships.
 WiX runs ICE validation as it builds, with ICE03 off, and
 `.github/scripts/validate-windows-msi.ps1` runs ICE03 after it and refuses any row but WinUI's
