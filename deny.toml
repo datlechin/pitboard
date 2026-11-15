@@ -27,6 +27,9 @@ version = 2
 yanked = "deny"
 ignore = [
   { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained, not vulnerable, and runs only inside askama's derive at build time; every askama release still uses it" },
+  # The fixed libsqlite3-sys 0.39 comes only with rusqlite 0.41, which needs a newer SQLite than
+  # macOS 14 and 15 have.
+  { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys is built without bundled, so it links macOS's own SQLite and compiles none of the affected copy" },
 ]
 
 [licenses]

@@ -1,6 +1,7 @@
 // One line per release for the home page's Recent releases, 60 characters at most. The build
 // fails when a release the table shows has none.
 export const highlights: Record<string, string> = {
+  "0.15.3": "Pitboard switches again after Claude Code signs out.",
   "0.15.2": "Claude Desktop accounts switch after a Claude 3 sign-in.",
   "0.15.1": "Claude Desktop accounts switch again with Claude 3.",
   "0.15.0": "**Add Account** says what to install when a tool is missing.",

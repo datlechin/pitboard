@@ -373,6 +373,7 @@ pub enum Error {
     },
 
     #[error("{}", login_elsewhere(crate::host::OS, email))]
+    // Not raised since 0.15.3; kept so a patch release breaks no match on it.
     LiveCredentialElsewhere { email: String },
 
     #[error(
@@ -516,6 +517,17 @@ pub enum Error {
         tool.name()
     )]
     ReplaceFailed {
+        tool: ProviderId,
+        label: String,
+        detail: String,
+    },
+
+    #[error(
+        "could not put `{label}`'s login where {} reads it ({detail}). `{label}`'s login is \
+         still parked, and nothing was lost.",
+        tool.name()
+    )]
+    InstallFailed {
         tool: ProviderId,
         label: String,
         detail: String,
@@ -1007,6 +1019,7 @@ impl Error {
             SignedInAccountChanged => "signed_in_account_changed",
             LiveLoginRefused { .. } => "live_login_refused",
             ReplaceFailed { .. } => "replace_failed",
+            InstallFailed { .. } => "install_failed",
             AccountOnHold { .. } => "account_on_hold",
             RecoveryUndetermined { .. } | RecoveryUnfinished { .. } | RecoveryStopped { .. } => {
                 "recovery_undetermined"

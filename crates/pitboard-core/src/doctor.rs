@@ -1449,25 +1449,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             "a store Pitboard does not read yet",
             "Treat this as unknown, never as empty.",
         ),
-        // The one wrong diagnosis in this file. If Claude Code's config names somebody as
-        // signed in, "nothing is signed in" is not an observation, it is Pitboard looking
-        // in the wrong place, and it is the failure that would follow Claude Code moving
-        // where it keeps a login.
-        Ok(store::Backend::Absent) if facts.config_account.is_some() => fail(
-            "credential_store",
-            "credential store",
-            format!(
-                "Claude Code's config says {} is signed in, and no store Pitboard reads \
-                 holds that login",
-                facts
-                    .config_account
-                    .as_ref()
-                    .map(|i| i.email.as_str())
-                    .unwrap_or("somebody")
-            ),
-            "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
-             update; if there is none, this is worth reporting.",
-        ),
+        // Whatever the config names, which a sign-out elsewhere leaves behind.
         Ok(store::Backend::Absent) => warn(
             "credential_store",
             "credential store",
@@ -2959,9 +2941,8 @@ fn judge_codex(
                     "{} is absent: nothing is signed in to Codex",
                     facts.auth_file.display()
                 ),
-                "Sign in to one of your enrolled accounts with `codex login`. A switch \
-                 needs an account signed in to park, so `pitboard use` cannot put one \
-                 back while nothing is.",
+                "Put one of your enrolled accounts in use with `pitboard use \
+                 codex/<label>`, or sign in with `codex login`.",
             ),
             None => ok(
                 "codex_auth_file",
@@ -5403,24 +5384,17 @@ mod tests {
         }
     }
 
-    /// The failure that would follow Claude Code moving where it keeps a login: not an
-    /// absence, a mismatch, and the difference is what decides whether the advice is "sign
-    /// in" or "Pitboard is looking in the wrong place".
     #[test]
-    fn a_config_that_names_somebody_signed_in_with_no_login_anywhere_is_a_failure() {
+    fn no_login_anywhere_is_nobody_signed_in_whatever_the_config_names() {
         let mut f = facts();
         f.backend = Ok(store::Backend::Absent);
-        let checks = evaluate(&f);
-        let store = check(&checks, "credential_store");
-        assert_eq!(store.level, Level::Fail);
-        assert!(store.detail.contains("a@b.c"));
-
-        // Nobody signed in at all is an ordinary state with an ordinary answer.
-        f.config_account = None;
-        let checks = evaluate(&f);
-        let store = check(&checks, "credential_store");
-        assert_eq!(store.level, Level::Warn);
-        assert!(store.advice.contains("Nothing is signed in"));
+        for named in [f.config_account.clone(), None] {
+            f.config_account = named;
+            let checks = evaluate(&f);
+            let store = check(&checks, "credential_store");
+            assert_eq!(store.level, Level::Warn);
+            assert!(store.advice.contains("Nothing is signed in"));
+        }
     }
 
     // Enterprise persistence (`credman_attributes`): the login roams with a roaming profile.
@@ -7073,9 +7047,8 @@ mod tests {
             login.detail
         );
 
-        // Accounts enrolled on a machine whose Codex home has gone still get the section.
-        // The way back is signing in: a switch refuses while nothing is signed in, so
-        // advice to switch would send somebody to a command that fails.
+        // Accounts enrolled on a machine whose Codex home has gone still get the section, and
+        // a switch puts a parked one in use while nothing is signed in.
         f.codex = CodexFacts {
             enrolled: 1,
             ..no_codex()
@@ -7085,7 +7058,7 @@ mod tests {
         assert_eq!(file.level, Level::Warn);
         assert!(file.advice.contains("`codex login`"), "{}", file.advice);
         assert!(
-            !file.advice.contains("pitboard use codex/"),
+            file.advice.contains("`pitboard use codex/<label>`"),
             "{}",
             file.advice
         );

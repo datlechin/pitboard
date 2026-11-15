@@ -90,11 +90,7 @@ pub(crate) fn fingerprint_of(document: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
-/// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
-/// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
-/// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
-/// Pitboard would keep offering and renewing it forever.
+// Stored as Claude Code 2.1.325 stores a renewal: the end never moves later.
 pub(crate) fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
     let mut next = document.clone();
     // Whatever else the slice holds is kept; only the tokens move.
@@ -113,11 +109,26 @@ pub(crate) fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -
         "expiresAt".into(),
         json!(now_millis + fresh.expires_in * 1000),
     );
-    if let Some(seconds) = fresh.refresh_token_expires_in {
-        fields.insert(
-            "refreshTokenExpiresAt".into(),
-            json!(now_millis + seconds * 1000),
-        );
+    // From 1 January 2025 to ten years on, as Claude Code takes a date.
+    let plausible = |at: &i64| (1_735_689_600_000..=now_millis + 315_360_000_000).contains(at);
+    let had = fields
+        .get("refreshTokenExpiresAt")
+        .and_then(Value::as_i64)
+        .filter(plausible);
+    let answered = fresh
+        .refresh_token_expires_in
+        .map(|seconds| now_millis + seconds * 1000)
+        .filter(plausible);
+    match had {
+        Some(had) => {
+            fields.insert(
+                "refreshTokenExpiresAt".into(),
+                json!(answered.map_or(had, |at| at.min(had))),
+            );
+        }
+        None => {
+            fields.remove("refreshTokenExpiresAt");
+        }
     }
     if let Some(scopes) = &fresh.scopes {
         fields.insert("scopes".into(), json!(scopes));
@@ -313,25 +324,31 @@ mod tests {
 
     #[test]
     fn a_renewed_login_is_stored_as_claude_code_stores_its_own() {
+        const NOW: i64 = 1_760_000_000_000;
+        const DAY: i64 = 86_400_000;
         let parked = json!({
             "accessToken": "a1", "refreshToken": "r1", "expiresAt": 1,
-            "refreshTokenExpiresAt": 2, "scopes": ["user:inference"],
+            "refreshTokenExpiresAt": NOW + 10 * DAY, "scopes": ["user:inference"],
             "subscriptionType": "max", "rateLimitTier": "default_claude_max_20x"
         });
-        let fresh = api::Renewed {
+        let fresh = |ends_in_days: Option<i64>| api::Renewed {
             access_token: "a2".into(),
             refresh_token: Some("r2".into()),
             expires_in: 60,
-            refresh_token_expires_in: Some(120),
+            refresh_token_expires_in: ends_in_days.map(|days| days * 86_400),
             scopes: None,
             at: None,
             owner: None,
         };
-        let next = renewed(&parked, &fresh, 1_000_000);
+        let next = renewed(&parked, &fresh(Some(5)), NOW);
         assert_eq!(next["accessToken"], "a2");
         assert_eq!(next["refreshToken"], "r2");
-        assert_eq!(next["expiresAt"], 1_060_000);
-        assert_eq!(next["refreshTokenExpiresAt"], 1_120_000);
+        assert_eq!(next["expiresAt"], NOW + 60_000);
+        assert_eq!(
+            next["refreshTokenExpiresAt"],
+            NOW + 5 * DAY,
+            "an earlier end"
+        );
         assert_eq!(
             next["scopes"],
             json!(["user:inference"]),
@@ -342,19 +359,35 @@ mod tests {
             "what renewal does not touch stays"
         );
 
+        assert_eq!(
+            renewed(&parked, &fresh(Some(30)), NOW)["refreshTokenExpiresAt"],
+            NOW + 10 * DAY,
+            "a renewal never moves the end later"
+        );
+
         let kept = api::Renewed {
             refresh_token: None,
-            refresh_token_expires_in: None,
-            ..fresh
+            ..fresh(None)
         };
-        let next = renewed(&parked, &kept, 1_000_000);
+        let next = renewed(&parked, &kept, NOW);
         assert_eq!(
             next["refreshToken"], "r1",
             "the server kept the refresh token"
         );
-        // Claude Code keeps the date it had. Dropping it would make a park that is about to
-        // lapse look as though it never expires.
-        assert_eq!(next["refreshTokenExpiresAt"], 2);
+        assert_eq!(next["refreshTokenExpiresAt"], NOW + 10 * DAY);
+
+        for had in [json!(null), json!(2), json!(NOW + 11 * 365 * DAY)] {
+            let mut undated = parked.clone();
+            undated["refreshTokenExpiresAt"] = had.clone();
+            if had.is_null() {
+                undated
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("refreshTokenExpiresAt");
+            }
+            let next = renewed(&undated, &fresh(Some(30)), NOW);
+            assert!(next.get("refreshTokenExpiresAt").is_none(), "{had}: {next}");
+        }
     }
 
     #[test]
