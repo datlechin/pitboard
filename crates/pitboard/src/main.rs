@@ -320,6 +320,12 @@ impl Report {
 }
 
 fn emit(report: &Report, as_json: bool) -> ExitCode {
+    print_report(report, as_json);
+    ExitCode::from(report.exit)
+}
+
+// A report as one JSON line or as its words, for a command that goes on after it.
+fn print_report(report: &Report, as_json: bool) {
     if as_json {
         let (data, error) = match (&report.result, &report.failure) {
             (Ok(data), None) => (data.clone(), Value::Null),
@@ -367,7 +373,6 @@ fn emit(report: &Report, as_json: bool) -> ExitCode {
         }
         report.warnings.iter().for_each(warn);
     }
-    ExitCode::from(report.exit)
 }
 
 fn warnings(list: &[Warning]) -> Vec<Value> {
