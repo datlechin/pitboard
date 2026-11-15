@@ -349,7 +349,7 @@ mod tests {
         assert_eq!(read_from_build(no_keyring, backends), Reading::Holds);
         assert_eq!(
             read_from_build(no_keyring, &format!("{backends} Bun.secrets.get")),
-            Reading::Appeared(vec!["Bun.secrets"])
+            Reading::Appeared(vec!["Bun.secrets.get"])
         );
     }
 
@@ -366,6 +366,14 @@ mod tests {
             read_from_build(
                 no_keyring,
                 &format!("{backends} libsecret not available. libsecret-1.so.0")
+            ),
+            Reading::Holds
+        );
+        // Bun's list of its own features, in every build of 2.1.325.
+        assert_eq!(
+            read_from_build(
+                no_keyring,
+                &format!("{backends} Bun.cron Bun.secrets the Bun.$ shell")
             ),
             Reading::Holds
         );

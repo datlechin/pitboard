@@ -1250,17 +1250,6 @@ pub fn forget_question(tool: Option<crate::provider::ProviderId>, label: &str) -
 
 // Claude Code's config names `email` as signed in and no store Pitboard reads on `os` holds a
 // login: Pitboard is looking in the wrong place.
-pub(crate) fn named_but_not_found(os: Os, email: &str) -> String {
-    let places = match os {
-        Os::MacOs => "in the keychain or in the file it also reads",
-        Os::Linux => "in .credentials.json",
-        Os::Windows => "in .credentials.json or in Credential Manager",
-    };
-    format!(
-        "Claude Code's config says {email} is signed in, but Pitboard cannot find that login {places}"
-    )
-}
-
 // `name` is the account as the front end says it.
 pub fn replacing(tool: crate::provider::ProviderId, name: &str, detail: &str) -> String {
     format!(
@@ -1536,7 +1525,6 @@ mod tests {
         let linux = Os::Linux;
         let said = [
             wait_for_still(linux, "run this again"),
-            named_but_not_found(linux, "a@example.com"),
             elevated(linux, None).refusal,
             elevated(linux, Some("as root")).because,
             no_scheduler(linux, Job::Renew),

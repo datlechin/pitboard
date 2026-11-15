@@ -247,7 +247,7 @@ fn refused_for_good(status: u16, body: &str) -> bool {
     }
 }
 
-// A GET that spends no quota, which needs `ChatGPT-Account-ID` (`codex_usage_endpoint`).
+// A GET that spends no quota, which needs `chatgpt-account-id` (`codex_usage_endpoint`).
 fn ask_usage(
     ctx: &Context,
     access_token: &str,
@@ -257,7 +257,7 @@ fn ask_usage(
     let mut response = agent(ctx)
         .get(usage_url(ctx))
         .header("Authorization", format!("Bearer {access_token}"))
-        .header("ChatGPT-Account-ID", login.account_id)
+        .header("chatgpt-account-id", login.account_id)
         .call()
         .map_err(|e| network(e.to_string()))?;
     match response.status().as_u16() {

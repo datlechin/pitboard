@@ -6,7 +6,7 @@
 //! reported a switch; the person found out the next time they ran `claude`, by which point
 //! the login they had left was parked and the one they had arrived at did not work.
 
-use super::harness::{audit_lines, machine, owner, recover, state_file};
+use super::harness::{audit_lines, config_names, machine, owner, recover};
 use super::*;
 use crate::api::scripted::Trouble;
 use crate::permit::Permit;
@@ -186,51 +186,40 @@ fn a_switch_from_a_login_already_identified_asks_only_about_the_login_going_in()
     );
 }
 
-/// Two situations with one message until now. Nobody signed in is an ordinary state with an
-/// ordinary answer. Claude Code's config naming somebody as signed in while Pitboard finds
-/// no login anywhere it looks means Pitboard is looking in the wrong place, and writing a
-/// login there would put it where nobody reads.
+// A customer on Claude Code 2.1.325 (2026-11-15) could switch to no account: its login was gone
+// and its config still named the account in use, which Pitboard took for a login kept elsewhere.
 #[test]
-fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
-    let m = machine("elsewhere");
-
-    // Claude Code's config still says who is signed in; the login is not in any store.
-    m.mem.live().delete_everything();
-    let recorded = state_file(&m);
-    let settled = settle(&m.ctx, Permit::for_a_test(), None)
-        .expect("nothing to recover")
-        .0;
-    let failed = switch(settled, &Key::new(ProviderId::Claude, "there"))
-        .expect_err("there is nothing to move");
-    match &failed {
-        Error::LiveCredentialElsewhere { email } => assert_eq!(email, "here@example.com"),
-        other => panic!("got {other:?}"),
+fn a_config_naming_somebody_over_an_empty_store_is_nobody_signed_in() {
+    for named in ["here", "there"] {
+        let m = machine(&format!("named-{named}-over-nothing"));
+        m.mem.live().delete_everything();
+        config_names(&m, named);
+        let settled = settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("nothing to recover")
+            .0;
+        let (outcome, _) = switch(settled, &Key::new(ProviderId::Claude, "there"))
+            .expect("nobody is signed in to switch from");
+        assert!(
+            matches!(&outcome, Outcome::Installed { to, .. } if to == "there"),
+            "{named}: got {outcome:?}"
+        );
+        let config: Value = serde_json::from_str(
+            &std::fs::read_to_string(m.ctx_home().join(".claude.json")).expect("a config"),
+        )
+        .expect("JSON");
+        assert_eq!(
+            config["oauthAccount"]["emailAddress"], "there@example.com",
+            "{named}"
+        );
+        assert_eq!(
+            audit_lines(&m, "in-use"),
+            [
+                (String::new(), "signed_out_outside".to_string()),
+                ("here".to_string(), "login_replaced".to_string()),
+            ],
+            "{named}"
+        );
     }
-    assert_eq!(failed.code(), "live_credential_elsewhere");
-    // Nothing is known of whose login the store holds, so nothing is recorded of it.
-    assert_eq!(state_file(&m), recorded);
-    assert!(crate::audit::read(&m.ctx, 100).is_empty());
-
-    // With nothing in the config either, nobody is signed in, and the switch puts `there`'s
-    // login where Claude Code reads it.
-    std::fs::write(m.ctx_home().join(".claude.json"), "{}").expect("a config");
-    let settled = settle(&m.ctx, Permit::for_a_test(), None)
-        .expect("nothing to recover")
-        .0;
-    let (outcome, _) = switch(settled, &Key::new(ProviderId::Claude, "there"))
-        .expect("nobody is signed in to switch from");
-    assert!(
-        matches!(&outcome, Outcome::Installed { to, .. } if to == "there"),
-        "got {outcome:?}"
-    );
-    // A sign-out outside Pitboard, which took the only login `here` had.
-    assert_eq!(
-        audit_lines(&m, "in-use"),
-        [
-            (String::new(), "signed_out_outside".to_string()),
-            ("here".to_string(), "login_replaced".to_string()),
-        ]
-    );
 }
 
 // The session's fresh PC (2026-10-18) refused `pitboard use a` right after
@@ -353,7 +342,7 @@ fn config_names_now(m: &harness::Rig) -> String {
 #[test]
 fn using_the_account_in_use_writes_claude_codes_config_again() {
     let m = machine("use-names-again");
-    harness::config_names(&m, "there");
+    config_names(&m, "there");
     let live = m.live();
     let pitboard = crate::service::Pitboard::new(m.ctx.clone());
 
@@ -413,7 +402,7 @@ fn using_the_account_in_use_writes_claude_codes_config_again() {
 #[test]
 fn a_config_that_could_not_be_written_again_is_said() {
     let m = machine("use-names-again-refused");
-    harness::config_names(&m, "there");
+    config_names(&m, "there");
     std::fs::write(home::dir(&m.ctx).join("backups"), "").expect("in the way");
     let config = std::fs::read(m.ctx_home().join(".claude.json")).expect("a config");
     let pitboard = crate::service::Pitboard::new(m.ctx.clone());
@@ -476,7 +465,7 @@ fn a_switch_whose_config_could_not_be_written_is_said_to_name_another() {
 #[test]
 fn the_config_is_written_only_while_the_account_is_in_use() {
     let m = machine("name-again");
-    harness::config_names(&m, "there");
+    config_names(&m, "there");
     let pitboard = crate::service::Pitboard::new(m.ctx.clone());
 
     let done = pitboard.update_config("here").expect("in use");

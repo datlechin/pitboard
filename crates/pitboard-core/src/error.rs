@@ -401,9 +401,6 @@ pub enum Error {
         spelling: Spelling,
     },
 
-    #[error("{}", login_elsewhere(crate::host::OS, email))]
-    LiveCredentialElsewhere { email: String },
-
     #[error(
         "the signed-in credential is not shaped like a {} login ({detail}). \
          Run `pitboard doctor` before switching again.",
@@ -1061,7 +1058,6 @@ impl Error {
             LiveCredentialAbsent { .. } => "live_credential_absent",
             LiveStoreUnsupported { .. } => "live_store_unsupported",
             LoginRestricted { .. } => "login_restricted",
-            LiveCredentialElsewhere { .. } => "live_credential_elsewhere",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
             NothingParked { .. } => "nothing_parked",
@@ -1216,7 +1212,6 @@ impl Error {
             | SwitchUnverified { .. }
             | SwitchDidNotHold { .. }
             | SignInNotInstalled { .. }
-            | LiveCredentialElsewhere { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
             | SignInPinnedToConsole { .. }
@@ -1508,15 +1503,6 @@ fn make_readable(os: Os, tool: ProviderId) -> &'static str {
         ProviderId::Codex => "Make Codex's auth.json readable to you again",
         ProviderId::Desktop => "Quit Claude",
     }
-}
-
-fn login_elsewhere(os: Os, email: &str) -> String {
-    format!(
-        "{}. It will not write a login where nobody reads it. This usually means Claude Code has \
-         started keeping logins somewhere Pitboard does not know about yet: check for a Pitboard \
-         update, and report it with `pitboard doctor --json` if there is none.",
-        crate::words::named_but_not_found(os, email)
-    )
 }
 
 // A keychain's ceiling is what `security` reads from stdin; Credential Manager's, 256 pieces.
@@ -1908,30 +1894,17 @@ mod tests {
                 too_large_said
             );
         }
-        for (os, places, readable) in [
-            (
-                Os::MacOs,
-                "in the keychain or in the file it also reads",
-                "Unlock the keychain",
-            ),
+        for (os, readable) in [
+            (Os::MacOs, "Unlock the keychain"),
             (
                 Os::Linux,
-                "in .credentials.json",
                 "Make Claude Code's .credentials.json readable to you again",
             ),
             (
                 Os::Windows,
-                "in .credentials.json or in Credential Manager",
                 "Check that you can read and change Claude Code's folder and its .credentials.json",
             ),
         ] {
-            assert!(
-                login_elsewhere(os, "a@example.com").starts_with(&format!(
-                    "Claude Code's config says a@example.com is signed in, but Pitboard cannot \
-                     find that login {places}. It will not write a login where nobody reads it."
-                )),
-                "{os:?}"
-            );
             assert_eq!(make_readable(os, ProviderId::Claude), readable);
         }
     }
@@ -1967,10 +1940,10 @@ mod tests {
         let named: Vec<String> = ProviderId::ALL
             .iter()
             .map(|tool| make_readable(linux, *tool).to_owned())
-            .chain([
-                login_elsewhere(linux, "a@example.com"),
-                pitboard_open(linux, std::path::Path::new("/home/x/.pitboard")),
-            ])
+            .chain([pitboard_open(
+                linux,
+                std::path::Path::new("/home/x/.pitboard"),
+            )])
             .filter(|said| crate::words::names_what_linux_has_not(said))
             .collect();
         assert!(named.is_empty(), "{named:#?}");

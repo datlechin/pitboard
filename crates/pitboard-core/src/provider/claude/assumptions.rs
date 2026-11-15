@@ -188,7 +188,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         macos: NotRead(
             "this is about the systems without a keychain, and macOS keeps the login in one",
         ),
-        linux: Read(VERIFIED_AGAINST),
+        linux: Read("2.1.325"),
         windows: NotRead(
             "Claude Code's Credential Manager store on Windows calls `Bun.secrets`, which this \
              fact rules out, so read from the Windows build it reports a keyring arrived",
@@ -205,9 +205,9 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     },
     PerSystem {
         name: "project_settings_folder",
-        macos: Read("2.1.310"),
-        linux: Read("2.1.310"),
-        windows: Read("2.1.310"),
+        macos: Read("2.1.325"),
+        linux: Read("2.1.325"),
+        windows: Read("2.1.325"),
     },
     PerSystem {
         name: "install_places",
@@ -442,7 +442,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "windows_token_env",
         macos: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
         linux: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
-        windows: Read("2.1.310"),
+        windows: Read("2.1.325"),
     },
     PerSystem {
         name: "windows_statusline_shell",
@@ -499,13 +499,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     answers("token_refusals"),
     answers("validate_names_the_login"),
     answers("token_answer_names_the_login"),
-    // Read as bytes on 2026-10-24 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
-    // builds of 2.1.309.
+    // Read as bytes on 2026-11-15 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
+    // builds of 2.1.325.
     PerSystem {
         name: "refresh_token_end",
-        macos: Read("2.1.309"),
-        linux: Read("2.1.309"),
-        windows: Read("2.1.309"),
+        macos: Read("2.1.325"),
+        linux: Read("2.1.325"),
+        windows: Read("2.1.325"),
     },
     read_from_2_1_309("auth_precedence"),
     read_from_2_1_309("anthropic_profiles"),
@@ -840,10 +840,14 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                the last behind the `tengu_windows_credman` flag, and on Linux it uses \
                `plaintext` alone, so the login is the file. The `libsecret` in the Linux binary \
                belongs to the Bun runtime it ships in, behind `Bun.secrets`, which Claude \
-               Code's code never calls",
+               Code's code never calls: the bare name is in Bun's own list of its features, and \
+               the Windows store labels its calls `Bun.secrets.get`, `.set` and `.delete`, which \
+               no Linux build holds. `secret-tool`, `kwallet-query` and `.local/share/keyrings` \
+               are in the sandbox's lists of credential helpers and files it keeps commands from",
         read_from: "the secure storage module's backend list and `getSecureStorage`, and the \
-                    whole build searched for every Linux keyring name",
-        verified_against: VERIFIED_AGAINST,
+                    whole build searched for every Linux keyring name, in the linux-x64 build \
+                    of 2.1.325 read as bytes on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "host::linux, and Pitboard's claim that a parked login on Linux is no \
                   less protected than the live one",
         probe: &[
@@ -852,7 +856,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             r#"["keychain","plaintext","windows-credman"]"#,
         ],
         absent: &[
-            "Bun.secrets",
+            "Bun.secrets.get",
+            "Bun.secrets.set",
             "org.freedesktop.secrets",
             "gnome-keyring",
             "SecretService",
@@ -937,23 +942,30 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "Claude Code takes a project's settings from `.claude/settings.json` in the folder \
                it starts in, its working folder, resolved to its real path on macOS and Windows \
                and taken as it is on Linux, and local settings from \
-               `.claude/settings.local.json` at that folder's git root, or in the folder itself \
-               where the root is the home folder or another user's, and always on Windows. \
-               `--project-config-root` moves both. The settings every command composes, \
-               `claude auth login`'s among them, take both",
+               `.claude/settings.local.json` at that folder's git root, a linked worktree's main \
+               checkout's, or in the folder itself where the root is the home folder or another \
+               user's, and always on Windows. Where they come from the root, the folder's own \
+               `.claude/settings.local.json` is read beneath them. `--project-config-root` moves \
+               both. The settings every command composes, `claude auth login`'s among them, \
+               take both",
         read_from: "the settings sources' files, the project and local folders' resolvers with \
-                    the git root's home and owner checks, and the working folder a run starts \
-                    with, `process.cwd()` through `realpathSync` in the darwin-arm64, win32-x64 \
-                    and win32-arm64 builds and as it is in the linux-x64 one, in those four \
-                    builds of 2.1.310, read as bytes on 2026-10-24 and 2026-10-25",
-        verified_against: "2.1.310",
+                    the canonical git root's home and owner checks, the folder's own local file \
+                    read beneath the root's, and the working folder a run starts with, \
+                    `process.cwd()` through `realpathSync` in the darwin-arm64, win32-x64 and \
+                    win32-arm64 builds and as it is in the linux-x64 one, in those four builds \
+                    of 2.1.310, read as bytes on 2026-10-24 and 2026-10-25, and again in the \
+                    four builds of 2.1.325 on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "Claude's Provider::sign_in, which starts `claude auth login` in its private \
                   folder, as Codex's starts `codex login`, so a project's settings in the folder \
                   Pitboard runs from do not reach it, and local ones only from a git repository \
                   other than the home folder that Pitboard's own folder is in",
         probe: &[
-            r#"case"projectSettings":return pe(n.projectConfigDir??"#,
-            r#"return fe(".claude","settings.json");case"localSettings":return fe(".claude","settings.local.json")"#,
+            r#"".claude","settings.json");case"localSettings":return"#,
+            ".projectConfigDir!==void 0)return",
+            "localStoreProbes.normalizedRealHomeDir(",
+            r#"onLegacyLocalSettingsRead?.("cascade")"#,
+            r#""--project-config-root <dir>","Read project settings"#,
             "localSettings: not canonicalizing the consent store to ",
             r#"typeof process.cwd==="function"&&typeof t==="function")try{let r=e();try{n="#,
         ],
@@ -1805,40 +1817,50 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "windows_token_env",
         fact: "on Windows Claude Code signs in with the access token `CLAUDE_CODE_OAUTH_TOKEN` \
-               holds wherever it is set: right after `ANTHROPIC_AUTH_TOKEN`, beside a token the Claude desktop app hands a \
-               session it starts, and before a descriptor or its well-known file, `apiKeyHelper`, a profile and the stored login. \
-               It takes it as an access token alone, with no refresh token and no expiry, so \
-               nothing renews it, scoped `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names \
-               others. Print mode sends its requests with `ANTHROPIC_API_KEY` instead wherever \
-               that is set. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes \
-               `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the \
-               other credentials it names out of the environment Claude Code builds for a \
-               program it starts. A program started with its own environment whole keeps them: \
-               `where.exe`, which windows_statusline_shell's Git Bash finder asks for `git` at \
-               every start where neither `CLAUDE_CODE_GIT_BASH_PATH` nor a Program Files path \
-               names a bash, `git worktree list`, and a `proxyAuthHelper`. \
-               code.claude.com's page of environment variables documents both variables. Read, \
-               not measured: session reading M9 measures a warm-up made so, and that it writes \
-               nothing to its private home or that home's Credential Manager slot",
+               holds wherever it is set, but under `--bare` or `CLAUDE_CODE_SIMPLE`, which read \
+               no OAuth token: right after `ANTHROPIC_AUTH_TOKEN`, beside a token the Claude \
+               desktop app hands a session it starts, and before a descriptor or its well-known \
+               file, `apiKeyHelper`, a profile and the stored login. It takes it as an access \
+               token alone, with no refresh token and no expiry, so nothing renews it, scoped \
+               `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names others. Print mode \
+               sends its requests with `ANTHROPIC_API_KEY` instead wherever that is set. The \
+               environment Claude Code builds for a program it starts never holds \
+               `CLAUDE_CODE_OAUTH_TOKEN`, nor does a `git` its runner starts, and \
+               `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes `ANTHROPIC_API_KEY`, \
+               `ANTHROPIC_AUTH_TOKEN` and the other credentials it names out of that \
+               environment too. A program started with Claude Code's own environment whole \
+               keeps them: the `git worktree list` its session search runs, and a \
+               `proxyAuthHelper`, run only where `CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER` is set. \
+               windows_statusline_shell's Git Bash finder looks for `git` itself, where 2.1.310 \
+               started `where.exe` with that environment whole. code.claude.com's page of \
+               environment variables documents both variables. Read, not measured: session \
+               reading M9 measures a warm-up made so, and that it writes nothing to its private \
+               home or that home's Credential Manager slot",
         read_from: "the two token source checks, each of which takes the variable right after \
-                    `ANTHROPIC_AUTH_TOKEN`, the login getter, which takes it first, the API \
-                    key's source in print mode, the variables the scrub takes out of a child's \
-                    environment and what turns it on, and the `where.exe` lookup the Git Bash \
-                    finder falls back to, started with `env:process.env`, in the win32-x64 and \
+                    `ANTHROPIC_AUTH_TOKEN`, the login getter and its async twin, which take it \
+                    first, the bare-mode check ahead of each, the token it makes of the \
+                    variable, the API key's source in print mode, the names the child \
+                    environment builder always drops and those the scrub adds, what turns the \
+                    scrub on, the git runner's environment, and the `git worktree list` and \
+                    `proxyAuthHelper` started with `process.env`, in the win32-x64 and \
                     win32-arm64 builds of 2.1.303, read as bytes on 2026-10-19 and 2026-10-20, \
-                    and again in those of 2.1.309 on 2026-10-23 and of 2.1.310 on 2026-10-24",
-        verified_against: "2.1.310",
+                    again in those of 2.1.309 on 2026-10-23 and of 2.1.310 on 2026-10-24, and \
+                    in those of 2.1.325 on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "Claude Code's warm-up command on Windows, which hands a run the access token \
                   alone in `CLAUDE_CODE_OAUTH_TOKEN`, with the scrub on and no other variable \
                   that signs it in, and names in `CLAUDE_CODE_GIT_BASH_PATH` the Git Bash \
-                  Pitboard finds, so no `where.exe` is asked for `git` where it finds one",
+                  Pitboard finds, so 2.1.310 and earlier ask no `where.exe` for `git` where it \
+                  finds one",
         probe: &[
-            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||gM()!==null)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            "(){if(i.CLAUDE_CODE_OAUTH_TOKEN)return bp(i.CLAUDE_CODE_OAUTH_TOKEN);",
-            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:eA(),",
-            r#""ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_ARTIFACTS_API_TOKEN""#,
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||"#,
+            "(){let e=!1;if(i.CLAUDE_CODE_OAUTH_TOKEN)return{tokens:",
+            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:",
+            r#"CLAUDE_CODE_OAUTH_SCOPES?.split(/\s+/).filter(Boolean)"#,
+            r#"["ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","#,
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
-            "windowsHide:!0,env:process.env}).trim().split(",
+            r#"["CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_SESSIONS_OAUTH_TOKEN","#,
+            "useToolMemoryCgroup:!1,env:{...process.env,",
         ],
         absent: &[],
     },
@@ -1853,13 +1875,16 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                file there whose name, in lower case, is `bash.exe`, `sh.exe`, `bash` or `sh`, then at \
                `C:\\Program Files\\Git\\bin\\bash.exe`, then at \
                `C:\\Program Files (x86)\\Git\\bin\\bash.exe`, then at `..\\..\\bin\\bash.exe` from \
-               the first `git` that `where.exe` finds outside the working folder. It hands bash \
+               the first `git` it finds itself outside the working folder, in `PATH`'s absolute \
+               folders with `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`. It hands bash \
                the command as written, backslashes and all, so the bare `pitboard statusline` \
                runs the same in either shell",
         read_from: "the Git Bash finder, the hook executor the status line's run goes through, \
                     its default shell, the notice it posts falling back to PowerShell, and the \
                     settings' `statusLine` and the runner that reads its `command`, in the \
-                    win32-x64 and win32-arm64 builds of 2.1.301, read as bytes on 2026-10-16",
+                    win32-x64 and win32-arm64 builds of 2.1.301, read as bytes on 2026-10-16, and \
+                    the finder again in those of 2.1.325 on 2026-11-15, which walk `PATH` \
+                    where 2.1.301 asked `where.exe`",
         verified_against: "2.1.301",
         depends: "doctor's status_line check, which says on Windows which shell runs the status \
                   line and whether a `pitboard` is on the PATH it is handed, and warns where the \
@@ -1869,6 +1894,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             ".CLAUDE_CODE_GIT_BASH_PATH).toLowerCase()",
             r#""C:\\Program Files\\Git\\bin\\bash.exe","C:\\Program Files (x86)\\Git\\bin\\bash.exe""#,
             r#""..","..","bin","bash.exe""#,
+            "{searchCwdFirst:!0}",
             "ran in PowerShell. Commands written for bash can fail there.",
             ".statusLine?.command",
         ],
@@ -2201,22 +2227,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "refresh_token_end",
         fact: "a sign-in sets `refreshTokenExpiresAt` from its answer's \
                `refresh_token_expires_in`, or 30 days on where the answer has none. A renewal \
-               sets it from that field only where its answer has one, and otherwise keeps the \
-               date the login had. Within 3 days of that date a claude.ai login is told `Your \
-               login expires in <n> days · run /login to renew`: Claude Code sends its owner to \
-               sign in again, not to a renewal",
-        read_from: "the sign-in's tokens, the token refresh's answer reader and the save that \
-                    merges it into the login stored, and the `oauth-expiry` notice",
-        verified_against: "2.1.309",
+               never moves that date later: it keeps the earlier of the login's date and the \
+               one its answer gives, keeps the login's where the answer has none, and stores \
+               none where the login had none. A date before 1 January 2025 or more than ten \
+               years on counts as none. Within 3 days of that date a claude.ai login is told \
+               `Your login expires in <n> days · run /login to renew`, and `claude -p` warns \
+               that renewing does not move it: Claude Code sends its owner to sign in again, \
+               not to a renewal",
+        read_from: "the sign-in's tokens, the token refresh's answer reader, the merge both of \
+                    its saves put a login through and the date check it takes, the \
+                    `oauth-expiry` notice and `claude -p`'s warning, in the darwin-arm64, \
+                    linux-x64, win32-x64 and win32-arm64 builds of 2.1.325, read as bytes on \
+                    2026-11-15. 2.1.309's renewal took the answer's date whenever it had one",
+        verified_against: "2.1.325",
         depends: "provider::claude::document::renewed, which keeps the date as Claude Code does, \
-                  and status::Row::standing's Expiring, from doctor::RENEW_WITHIN's 3 days, \
+                  and status::Row::standing's Expiring, from state::RENEW_WITHIN's 3 days, \
                   which `pitboard status`, doctor's parked login check and both apps answer \
                   with a sign-in",
         probe: &[
             "Your login expires in ",
             "run /login to renew",
             ".refresh_token_expires_in,!1)",
-            "refreshTokenExpiresAt:n.refreshTokenExpiresAt??e?.refreshTokenExpiresAt",
+            ".refresh_token_expires_in,!0)",
+            ".refreshTokenExpiresAt:void 0;return{accessToken:",
+            "Date.now()+315360000000}",
+            "Renewing it does not move",
         ],
         absent: &[],
     },

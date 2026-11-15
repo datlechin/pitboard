@@ -196,7 +196,6 @@ fn error_section(code: &str, desktop: bool) -> Option<&'static str> {
         | "claude_config_unreadable"
         | "claude_config_not_json"
         | "live_credential_absent"
-        | "live_credential_elsewhere"
         | "live_credential_shape_unexpected"
         | "live_store_unsupported"
         | "login_restricted"
