@@ -2373,22 +2373,17 @@ mod tests {
         );
     }
 
-    /// Claude Code's config names `here` and Pitboard finds no login where it reads: the
-    /// login is somewhere Pitboard does not look, which is not a sign-out. A read records
-    /// nothing, and says of no account that its login was replaced.
     #[test]
-    fn a_read_that_cannot_find_the_login_claude_code_names_records_nothing() {
-        let m = machine("read-login-elsewhere");
+    fn a_read_of_an_empty_store_shows_nobody_in_use_whatever_the_config_names() {
+        let m = machine("read-signed-out-named");
         m.mem.live().delete_everything();
-        let before = state_file(&m);
 
         let read = Pitboard::new(m.ctx.clone()).status(false).expect("a read");
 
-        assert_eq!(state_file(&m), before);
-        assert!(audit_lines(&m, "in-use").is_empty());
+        assert!(in_use(&read).is_empty(), "{:?}", in_use(&read));
         let said = said(&read);
         assert!(
-            !said.iter().any(|(code, _)| *code == "login_replaced"),
+            said.iter().any(|(code, _)| *code == "login_replaced"),
             "{said:?}"
         );
     }

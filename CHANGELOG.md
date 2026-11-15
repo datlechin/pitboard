@@ -7,6 +7,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** The public API of `pitboard-core` has no `Error::LiveCredentialElsewhere`;
+  [its documentation](https://docs.rs/pitboard-core/0.21.0/pitboard_core/) shows the new one.
+
+### Removed
+
+- **Breaking:** Nothing refuses with `live_credential_elsewhere`, and `pitboard doctor` no longer
+  fails its credential store check where Claude Code's config names an account with no login
+  stored. A script that looks for either can stop.
+
+### Fixed
+
+- Pitboard switches Claude Code to an account where no login is stored and Claude Code's config
+  still names the account that was signed in, as a sign-out in another session leaves it, where
+  it refused every switch.
+- Pitboard shows nobody in use where Claude Code holds no login, whatever its config still names.
+
 ## [1.0.0-beta.13] - 2026-11-13
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

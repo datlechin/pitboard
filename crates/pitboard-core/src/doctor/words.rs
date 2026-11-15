@@ -425,9 +425,6 @@ pub(super) const UNKNOWN_AND_SIGNED_OUT: &str = "Treat this as unknown, never as
      nothing turns Claude Code's Credential Manager store on, its sessions read only \
      .credentials.json, so a login left only in Credential Manager is signed out to them.";
 
-pub(super) const NOWHERE_ANYBODY_READS: &str = "Pitboard will not write a login where nobody \
-     reads it. Check for a Pitboard update; if there is none, this is worth reporting.";
-
 pub(super) const NO_CREDENTIAL_ANYWHERE: &str = "no credential in any backend";
 
 pub(super) const NOTHING_SIGNED_IN: &str = "Nothing is signed in for this slot.";

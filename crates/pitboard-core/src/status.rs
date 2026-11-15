@@ -807,8 +807,7 @@ fn ask_usage(
 /// Pitboard last recorded it to be stands in, so the account in use is not told to sign in
 /// again; what it has left is not asked, since asked under an account standing in, the
 /// numbers of a login a sign-in replaced would be filed under the account it replaced.
-/// Where no login is stored, nobody is recorded only if the tool's own record names nobody
-/// either ([`identify::nobody`]).
+/// Where no login is stored, nobody is recorded ([`identify::nobody`]).
 fn ask_live(
     ctx: &Context,
     permit: Permit,
@@ -821,7 +820,7 @@ fn ask_live(
     let which = tool.id();
     let recorded = || last_known(state, which);
     let nobody = || Answered {
-        found: identify::nobody(read.named.as_deref(), ctx.now()),
+        found: Some(identify::nobody(read.named.as_deref(), ctx.now())),
         ..Answered::learning_nothing(LiveLogin::default())
     };
     let document = match &read.login {
@@ -3223,10 +3222,9 @@ mod tests {
             )]
         );
 
-        state.in_use.insert(
-            ProviderId::Claude.code().into(),
-            identify::nobody(None, 1).expect("a store holding no login"),
-        );
+        state
+            .in_use
+            .insert(ProviderId::Claude.code().into(), identify::nobody(None, 1));
         assert_eq!(
             said(&state),
             [format!(

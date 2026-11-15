@@ -266,21 +266,13 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
             words::NOT_READ_YET,
             words::UNKNOWN_NOT_EMPTY,
         ),
-        // As a switch refuses with `live_credential_elsewhere`.
-        Ok(store::Backend::Absent) => match &facts.config_account {
-            Some(named) => fail(
-                "credential_store",
-                "credential store",
-                said::named_but_not_found(facts.os, &named.email),
-                words::NOWHERE_ANYBODY_READS,
-            ),
-            None => warn(
-                "credential_store",
-                "credential store",
-                words::NO_CREDENTIAL_ANYWHERE,
-                words::NOTHING_SIGNED_IN,
-            ),
-        },
+        // Whatever the config names, which a sign-out elsewhere leaves behind.
+        Ok(store::Backend::Absent) => warn(
+            "credential_store",
+            "credential store",
+            words::NO_CREDENTIAL_ANYWHERE,
+            words::NOTHING_SIGNED_IN,
+        ),
         Err(e) => fail(
             "credential_store",
             "credential store",

@@ -429,22 +429,17 @@ fn a_file_store_is_the_whole_answer_on_linux_and_windows() {
     }
 }
 
-// A mismatch, not an absence: what would follow Claude Code moving where it keeps a login.
 #[test]
-fn a_config_that_names_somebody_signed_in_with_no_login_anywhere_is_a_failure() {
+fn no_login_anywhere_is_nobody_signed_in_whatever_the_config_names() {
     let mut f = facts();
     f.backend = Ok(store::Backend::Absent);
-    let checks = evaluate(&f);
-    let store = check(&checks, "credential_store");
-    assert_eq!(store.level, Level::Fail);
-    assert!(store.detail.contains("a@b.c"));
-
-    // Nobody signed in at all is an ordinary state with an ordinary answer.
-    f.config_account = None;
-    let checks = evaluate(&f);
-    let store = check(&checks, "credential_store");
-    assert_eq!(store.level, Level::Warn);
-    assert_eq!(store.advice, words::NOTHING_SIGNED_IN);
+    for named in [f.config_account.clone(), None] {
+        f.config_account = named;
+        let checks = evaluate(&f);
+        let store = check(&checks, "credential_store");
+        assert_eq!(store.level, Level::Warn);
+        assert_eq!(store.advice, words::NOTHING_SIGNED_IN);
+    }
 }
 
 // Enterprise persistence (`credman_attributes`): the login roams with a roaming profile.
