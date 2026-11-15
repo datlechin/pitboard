@@ -205,9 +205,9 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     },
     PerSystem {
         name: "project_settings_folder",
-        macos: Read("2.1.310"),
-        linux: Read("2.1.310"),
-        windows: Read("2.1.310"),
+        macos: Read("2.1.325"),
+        linux: Read("2.1.325"),
+        windows: Read("2.1.325"),
     },
     PerSystem {
         name: "install_places",
@@ -942,23 +942,30 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "Claude Code takes a project's settings from `.claude/settings.json` in the folder \
                it starts in, its working folder, resolved to its real path on macOS and Windows \
                and taken as it is on Linux, and local settings from \
-               `.claude/settings.local.json` at that folder's git root, or in the folder itself \
-               where the root is the home folder or another user's, and always on Windows. \
-               `--project-config-root` moves both. The settings every command composes, \
-               `claude auth login`'s among them, take both",
+               `.claude/settings.local.json` at that folder's git root, a linked worktree's main \
+               checkout's, or in the folder itself where the root is the home folder or another \
+               user's, and always on Windows. Where they come from the root, the folder's own \
+               `.claude/settings.local.json` is read beneath them. `--project-config-root` moves \
+               both. The settings every command composes, `claude auth login`'s among them, \
+               take both",
         read_from: "the settings sources' files, the project and local folders' resolvers with \
-                    the git root's home and owner checks, and the working folder a run starts \
-                    with, `process.cwd()` through `realpathSync` in the darwin-arm64, win32-x64 \
-                    and win32-arm64 builds and as it is in the linux-x64 one, in those four \
-                    builds of 2.1.310, read as bytes on 2026-10-24 and 2026-10-25",
-        verified_against: "2.1.310",
+                    the canonical git root's home and owner checks, the folder's own local file \
+                    read beneath the root's, and the working folder a run starts with, \
+                    `process.cwd()` through `realpathSync` in the darwin-arm64, win32-x64 and \
+                    win32-arm64 builds and as it is in the linux-x64 one, in those four builds \
+                    of 2.1.310, read as bytes on 2026-10-24 and 2026-10-25, and again in the \
+                    four builds of 2.1.325 on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "Claude's Provider::sign_in, which starts `claude auth login` in its private \
                   folder, as Codex's starts `codex login`, so a project's settings in the folder \
                   Pitboard runs from do not reach it, and local ones only from a git repository \
                   other than the home folder that Pitboard's own folder is in",
         probe: &[
-            r#"case"projectSettings":return pe(n.projectConfigDir??"#,
-            r#"return fe(".claude","settings.json");case"localSettings":return fe(".claude","settings.local.json")"#,
+            r#"".claude","settings.json");case"localSettings":return"#,
+            ".projectConfigDir!==void 0)return",
+            "localStoreProbes.normalizedRealHomeDir(",
+            r#"onLegacyLocalSettingsRead?.("cascade")"#,
+            r#""--project-config-root <dir>","Read project settings"#,
             "localSettings: not canonicalizing the consent store to ",
             r#"typeof process.cwd==="function"&&typeof t==="function")try{let r=e();try{n="#,
         ],
