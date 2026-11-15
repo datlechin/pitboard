@@ -89,7 +89,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     // Measured, not read: a reading of 0.164.0's source dates neither.
     everywhere("codex_identity_is_local", "0.154.0"),
     read_from_0_164_0("codex_renewal"),
-    everywhere("codex_usage_endpoint", "0.154.0"),
+    everywhere("codex_usage_endpoint", "0.169.0"),
     everywhere("codex_revokes_on_its_own_sign_out", VERIFIED_AGAINST),
     read_from_0_164_0("codex_never_follows_a_switch"),
     PerSystem {
@@ -426,18 +426,27 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "codex_usage_endpoint",
         fact: "`GET https://chatgpt.com/backend-api/wham/usage` with `Authorization: Bearer` \
-               and `ChatGPT-Account-ID` answers with `plan_type` and a `rate_limit` holding \
+               and `chatgpt-account-id` answers with `plan_type` and a `rate_limit` holding \
                `primary_window` and `secondary_window`, each `{used_percent, \
                limit_window_seconds, reset_after_seconds, reset_at}` and either of them \
                null. No model request and no quota spent",
         read_from: "a live response from this endpoint, not from a description of it: a \
                     parser written from the source had the windows one level up, the length \
                     in minutes and the reset under another name, and returned nothing while \
-                    the request succeeded",
-        verified_against: "0.154.0",
+                    the request succeeded, measured on 0.154.0. At tag rust-v0.169.0, read on \
+                    2026-11-15, BearerAuthProvider and the backend client's headers_with name \
+                    the header `CHATGPT_ACCOUNT_ID_HEADER`, `chatgpt-account-id`, which an \
+                    HTTP header name is sent as whatever its spelling, and the answer's models \
+                    in codex-backend-openapi-models are the same as at 0.164.0",
+        verified_against: "0.169.0",
         depends: "provider::codex::api::usage, and every limit Pitboard shows for a Codex \
                   account",
-        probe: &["wham/usage", "ChatGPT-Account-ID", "used_percent"],
+        probe: &[
+            "wham/usage",
+            "chatgpt-account-id",
+            "used_percent",
+            "limit_window_seconds",
+        ],
         absent: &[],
     },
     Assumption {
