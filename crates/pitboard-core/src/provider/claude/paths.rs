@@ -151,7 +151,7 @@ fn git_bash_among(
             passed_over: None,
         };
     }
-    // `where.exe git`'s first, its folder's parent's `bin`.
+    // The first `git` on `PATH`, its folder's parent's `bin` (`windows_statusline_shell`).
     let beside_git = || {
         let git = find_among(
             Path::new("git"),

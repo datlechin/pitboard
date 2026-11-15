@@ -442,7 +442,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "windows_token_env",
         macos: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
         linux: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
-        windows: Read("2.1.310"),
+        windows: Read("2.1.325"),
     },
     PerSystem {
         name: "windows_statusline_shell",
@@ -1817,40 +1817,50 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "windows_token_env",
         fact: "on Windows Claude Code signs in with the access token `CLAUDE_CODE_OAUTH_TOKEN` \
-               holds wherever it is set: right after `ANTHROPIC_AUTH_TOKEN`, beside a token the Claude desktop app hands a \
-               session it starts, and before a descriptor or its well-known file, `apiKeyHelper`, a profile and the stored login. \
-               It takes it as an access token alone, with no refresh token and no expiry, so \
-               nothing renews it, scoped `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names \
-               others. Print mode sends its requests with `ANTHROPIC_API_KEY` instead wherever \
-               that is set. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes \
-               `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the \
-               other credentials it names out of the environment Claude Code builds for a \
-               program it starts. A program started with its own environment whole keeps them: \
-               `where.exe`, which windows_statusline_shell's Git Bash finder asks for `git` at \
-               every start where neither `CLAUDE_CODE_GIT_BASH_PATH` nor a Program Files path \
-               names a bash, `git worktree list`, and a `proxyAuthHelper`. \
-               code.claude.com's page of environment variables documents both variables. Read, \
-               not measured: session reading M9 measures a warm-up made so, and that it writes \
-               nothing to its private home or that home's Credential Manager slot",
+               holds wherever it is set, but under `--bare` or `CLAUDE_CODE_SIMPLE`, which read \
+               no OAuth token: right after `ANTHROPIC_AUTH_TOKEN`, beside a token the Claude \
+               desktop app hands a session it starts, and before a descriptor or its well-known \
+               file, `apiKeyHelper`, a profile and the stored login. It takes it as an access \
+               token alone, with no refresh token and no expiry, so nothing renews it, scoped \
+               `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names others. Print mode \
+               sends its requests with `ANTHROPIC_API_KEY` instead wherever that is set. The \
+               environment Claude Code builds for a program it starts never holds \
+               `CLAUDE_CODE_OAUTH_TOKEN`, nor does a `git` its runner starts, and \
+               `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes `ANTHROPIC_API_KEY`, \
+               `ANTHROPIC_AUTH_TOKEN` and the other credentials it names out of that \
+               environment too. A program started with Claude Code's own environment whole \
+               keeps them: the `git worktree list` its session search runs, and a \
+               `proxyAuthHelper`, run only where `CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER` is set. \
+               windows_statusline_shell's Git Bash finder looks for `git` itself, where 2.1.310 \
+               started `where.exe` with that environment whole. code.claude.com's page of \
+               environment variables documents both variables. Read, not measured: session \
+               reading M9 measures a warm-up made so, and that it writes nothing to its private \
+               home or that home's Credential Manager slot",
         read_from: "the two token source checks, each of which takes the variable right after \
-                    `ANTHROPIC_AUTH_TOKEN`, the login getter, which takes it first, the API \
-                    key's source in print mode, the variables the scrub takes out of a child's \
-                    environment and what turns it on, and the `where.exe` lookup the Git Bash \
-                    finder falls back to, started with `env:process.env`, in the win32-x64 and \
+                    `ANTHROPIC_AUTH_TOKEN`, the login getter and its async twin, which take it \
+                    first, the bare-mode check ahead of each, the token it makes of the \
+                    variable, the API key's source in print mode, the names the child \
+                    environment builder always drops and those the scrub adds, what turns the \
+                    scrub on, the git runner's environment, and the `git worktree list` and \
+                    `proxyAuthHelper` started with `process.env`, in the win32-x64 and \
                     win32-arm64 builds of 2.1.303, read as bytes on 2026-10-19 and 2026-10-20, \
-                    and again in those of 2.1.309 on 2026-10-23 and of 2.1.310 on 2026-10-24",
-        verified_against: "2.1.310",
+                    again in those of 2.1.309 on 2026-10-23 and of 2.1.310 on 2026-10-24, and \
+                    in those of 2.1.325 on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "Claude Code's warm-up command on Windows, which hands a run the access token \
                   alone in `CLAUDE_CODE_OAUTH_TOKEN`, with the scrub on and no other variable \
                   that signs it in, and names in `CLAUDE_CODE_GIT_BASH_PATH` the Git Bash \
-                  Pitboard finds, so no `where.exe` is asked for `git` where it finds one",
+                  Pitboard finds, so 2.1.310 and earlier ask no `where.exe` for `git` where it \
+                  finds one",
         probe: &[
-            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||gM()!==null)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            "(){if(i.CLAUDE_CODE_OAUTH_TOKEN)return bp(i.CLAUDE_CODE_OAUTH_TOKEN);",
-            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:eA(),",
-            r#""ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_ARTIFACTS_API_TOKEN""#,
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||"#,
+            "(){let e=!1;if(i.CLAUDE_CODE_OAUTH_TOKEN)return{tokens:",
+            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:",
+            r#"CLAUDE_CODE_OAUTH_SCOPES?.split(/\s+/).filter(Boolean)"#,
+            r#"["ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","#,
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
-            "windowsHide:!0,env:process.env}).trim().split(",
+            r#"["CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_SESSIONS_OAUTH_TOKEN","#,
+            "useToolMemoryCgroup:!1,env:{...process.env,",
         ],
         absent: &[],
     },
@@ -1865,13 +1875,16 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                file there whose name, in lower case, is `bash.exe`, `sh.exe`, `bash` or `sh`, then at \
                `C:\\Program Files\\Git\\bin\\bash.exe`, then at \
                `C:\\Program Files (x86)\\Git\\bin\\bash.exe`, then at `..\\..\\bin\\bash.exe` from \
-               the first `git` that `where.exe` finds outside the working folder. It hands bash \
+               the first `git` it finds itself outside the working folder, in `PATH`'s absolute \
+               folders with `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`. It hands bash \
                the command as written, backslashes and all, so the bare `pitboard statusline` \
                runs the same in either shell",
         read_from: "the Git Bash finder, the hook executor the status line's run goes through, \
                     its default shell, the notice it posts falling back to PowerShell, and the \
                     settings' `statusLine` and the runner that reads its `command`, in the \
-                    win32-x64 and win32-arm64 builds of 2.1.301, read as bytes on 2026-10-16",
+                    win32-x64 and win32-arm64 builds of 2.1.301, read as bytes on 2026-10-16, and \
+                    the finder again in those of 2.1.325 on 2026-11-15, which walk `PATH` \
+                    where 2.1.301 asked `where.exe`",
         verified_against: "2.1.301",
         depends: "doctor's status_line check, which says on Windows which shell runs the status \
                   line and whether a `pitboard` is on the PATH it is handed, and warns where the \
@@ -1881,6 +1894,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             ".CLAUDE_CODE_GIT_BASH_PATH).toLowerCase()",
             r#""C:\\Program Files\\Git\\bin\\bash.exe","C:\\Program Files (x86)\\Git\\bin\\bash.exe""#,
             r#""..","..","bin","bash.exe""#,
+            "{searchCwdFirst:!0}",
             "ran in PowerShell. Commands written for bash can fail there.",
             ".statusLine?.command",
         ],

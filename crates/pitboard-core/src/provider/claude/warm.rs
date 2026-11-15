@@ -57,7 +57,7 @@ pub(crate) fn headless(
             command
                 .env("CLAUDE_CODE_OAUTH_TOKEN", token)
                 .env("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "1");
-            // Told of none, it asks where.exe for git with the token in hand (`windows_token_env`).
+            // Told of none, 2.1.310 asked where.exe for git with the token (`windows_token_env`).
             if let Some(bash) = super::paths::git_bash(ctx).found {
                 command.env("CLAUDE_CODE_GIT_BASH_PATH", bash);
             }
@@ -201,7 +201,7 @@ mod tests {
                     assert_eq!(
                         env["CLAUDE_CODE_GIT_BASH_PATH"],
                         bash.to_string_lossy(),
-                        "so Claude Code asks no where.exe, which would get the token"
+                        "so Claude Code up to 2.1.310 asks no where.exe, which would get the token"
                     );
                     assert_eq!(env["USERPROFILE"], path("home"));
                     assert_eq!((&env["TEMP"], &env["TMP"]), (&path("tmp"), &path("tmp")));
