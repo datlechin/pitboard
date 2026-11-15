@@ -188,7 +188,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         macos: NotRead(
             "this is about the systems without a keychain, and macOS keeps the login in one",
         ),
-        linux: Read(VERIFIED_AGAINST),
+        linux: Read("2.1.325"),
         windows: NotRead(
             "Claude Code's Credential Manager store on Windows calls `Bun.secrets`, which this \
              fact rules out, so read from the Windows build it reports a keyring arrived",
@@ -840,10 +840,14 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                the last behind the `tengu_windows_credman` flag, and on Linux it uses \
                `plaintext` alone, so the login is the file. The `libsecret` in the Linux binary \
                belongs to the Bun runtime it ships in, behind `Bun.secrets`, which Claude \
-               Code's code never calls",
+               Code's code never calls: the bare name is in Bun's own list of its features, and \
+               the Windows store labels its calls `Bun.secrets.get`, `.set` and `.delete`, which \
+               no Linux build holds. `secret-tool`, `kwallet-query` and `.local/share/keyrings` \
+               are in the sandbox's lists of credential helpers and files it keeps commands from",
         read_from: "the secure storage module's backend list and `getSecureStorage`, and the \
-                    whole build searched for every Linux keyring name",
-        verified_against: VERIFIED_AGAINST,
+                    whole build searched for every Linux keyring name, in the linux-x64 build \
+                    of 2.1.325 read as bytes on 2026-11-15",
+        verified_against: "2.1.325",
         depends: "host::linux, and Pitboard's claim that a parked login on Linux is no \
                   less protected than the live one",
         probe: &[
@@ -852,7 +856,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             r#"["keychain","plaintext","windows-credman"]"#,
         ],
         absent: &[
-            "Bun.secrets",
+            "Bun.secrets.get",
+            "Bun.secrets.set",
             "org.freedesktop.secrets",
             "gnome-keyring",
             "SecretService",
