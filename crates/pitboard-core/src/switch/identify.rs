@@ -46,17 +46,15 @@ impl Found {
     }
 }
 
-/// The record of a store holding no login, as found at `at`, where the tool's own record,
-/// `named` as read before the store, names nobody either. Where it names somebody, the login
-/// is somewhere Pitboard does not look ([`super::nothing_signed_in`]), and nothing is known
-/// of whose the store holds.
-pub(crate) fn nobody(named: Option<&str>, at: i64) -> Option<InUse> {
-    named.is_none().then(|| InUse {
+// What the tool's own record names is kept with it: Claude Code leaves it after a sign-out
+// elsewhere, and a sign-in after changes it.
+pub(crate) fn nobody(named: Option<&str>, at: i64) -> InUse {
+    InUse {
         owner: None,
         login: String::new(),
         known_at: at,
-        named: None,
-    })
+        named: named.map(str::to_owned),
+    }
 }
 
 /// Whose `document`, read from `tool`'s store, is. The owner the record names where it is
@@ -359,11 +357,7 @@ pub(crate) fn look(
     let store = super::live_store(ctx, tool)?;
     let named = in_use::named(ctx, which);
     match super::read_stored(tool, &store)? {
-        None => {
-            let nobody = nobody(named.as_deref(), ctx.now())
-                .ok_or_else(|| super::nothing_signed_in(ctx, tool))?;
-            Ok((Live::Nothing, nobody))
-        }
+        None => Ok((Live::Nothing, nobody(named.as_deref(), ctx.now()))),
         Some((_, document)) => {
             let (document, found, lock_lost) = match told(ctx, state, tool, &document) {
                 Ok(Some(found)) => (document, found, false),
@@ -463,9 +457,6 @@ pub(crate) fn untold(error: &Error) -> String {
         Error::IdentityUnverifiable { detail, .. }
         | Error::LiveCredentialShapeUnexpected { detail, .. } => detail.clone(),
         Error::LiveStoreUnsupported { reason, .. } => reason.clone(),
-        Error::LiveCredentialElsewhere { email } => {
-            format!("its config names {email}, and Pitboard cannot find that login")
-        }
         Error::Store(e) => e.to_string(),
         Error::RenewalLost { error, .. } => untold(error),
         other => other.code().replace('_', " "),
@@ -820,6 +811,22 @@ mod tests {
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
 
         assert_eq!(recorded_plan(&m, "here").as_deref(), Some("Max 20x"));
+    }
+
+    #[test]
+    fn a_read_of_an_empty_store_records_nobody_whatever_the_config_names() {
+        let m = machine("identify-empty-store-named");
+        m.mem.live().delete_everything();
+
+        Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+
+        let state = state::load(&m.ctx).expect("state");
+        let record = state.in_use(ProviderId::Claude).expect("a record");
+        assert_eq!(record.owner, None);
+        assert_eq!(
+            record.named,
+            in_use::naming(ProviderId::Claude, &owner("here"))
+        );
     }
 
     #[test]

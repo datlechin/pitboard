@@ -438,18 +438,12 @@ pub(super) fn unidentified_as(
     }
 }
 
-/// Nothing is signed in to this tool, said the way the tool's own files explain it.
-///
-/// Nothing in any store Pitboard reads, and the tool's own record naming somebody as signed
-/// in, are two different situations. The second means Pitboard is looking in the wrong
-/// place, and writing a login there would put it where nobody reads.
-pub(super) fn nothing_signed_in(ctx: &Context, tool: &'static dyn Provider) -> Error {
-    match tool.own_record(ctx) {
-        Some(found) => Error::LiveCredentialElsewhere { email: found.email },
-        None => Error::LiveCredentialAbsent {
-            tool: tool.id(),
-            label: None,
-        },
+// Whatever the tool's own record names: Claude Code reads where Pitboard does
+// (`credential_service_name`, `live_chain_order`), and a sign-out elsewhere leaves the record.
+pub(super) fn nothing_signed_in(_ctx: &Context, tool: &'static dyn Provider) -> Error {
+    Error::LiveCredentialAbsent {
+        tool: tool.id(),
+        label: None,
     }
 }
 
@@ -551,7 +545,6 @@ fn switch_as(settled: Settled, key: &Key, refused: OnRefusal) -> Result<(Outcome
     // switch moves out of when it records the one it moves to, whatever it named before.
     let outgoing = match identify::now(&ctx, permit, &mut state, tool) {
         Ok(identify::Live::Login(outgoing)) => outgoing,
-        // `look` refuses where the tool's own record names somebody, whose login is elsewhere.
         Ok(identify::Live::Nothing) => {
             return put_in(state, &ctx, permit, tool, key, &target, Going::Nothing);
         }
@@ -636,7 +629,7 @@ fn restorable(ctx: &Context, state: &State, key: &Key, target: &Account) -> Resu
 enum Going {
     // A login whose refresh token its service refuses for good, which no longer works.
     Refused,
-    // No account's login, with the tool's own record naming nobody: a tool never signed in.
+    // No account's login: a tool never signed in, or signed out whatever its own record names.
     Nothing,
 }
 

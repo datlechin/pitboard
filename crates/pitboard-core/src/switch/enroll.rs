@@ -1534,39 +1534,36 @@ mod tests {
         );
     }
 
-    /// Claude Code's config names `here` and Pitboard finds no login where it reads: the
-    /// login is somewhere Pitboard does not look, so whose it is cannot be told, and `here`
-    /// is still the account Pitboard last saw in use. A sign-in to `here` is parked and said
-    /// as for any login whose account cannot be told, and the record still names `here`.
+    // A customer on 0.15.2 (2026-11-15) signed in again here and could still switch to no
+    // account: Claude Code's login gone and its config still naming `here`.
     #[test]
-    fn a_sign_in_while_the_login_claude_code_names_cannot_be_found_is_parked_and_said() {
-        let m = machine("untold-elsewhere");
+    fn a_sign_in_after_the_login_claude_code_names_is_gone_can_be_switched_to() {
+        let m = machine("signed-out-named");
         m.mem.live().delete_everything();
 
-        let (enrolled, warnings) =
+        let (_, warnings) =
             enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2")).expect("parked");
-
-        assert!(matches!(enrolled, Enrolled::Renewed { .. }), "{enrolled:?}");
-        let said: Vec<String> = warnings
-            .iter()
-            .filter(|w| w.code() == "sign_in_parked_not_in_use")
-            .map(ToString::to_string)
-            .collect();
-        assert_eq!(said.len(), 1, "{warnings:?}");
         assert!(
-            said[0]
-                .contains("its config names here@example.com, and Pitboard cannot find that login"),
-            "{}",
-            said[0]
+            !warnings
+                .iter()
+                .any(|w| w.code() == "sign_in_parked_not_in_use"),
+            "{warnings:?}"
         );
-        assert_eq!(
+        assert!(
             state::load(&m.ctx)
                 .expect("state")
                 .account_in_use(ProviderId::Claude)
-                .map(Account::key),
-            Some(m.key("here"))
+                .is_none()
         );
-        assert!(harness::audit_lines(&m, "in-use").is_empty());
+
+        let settled = settle(&m.ctx, Permit::for_a_test(), Some(m.which))
+            .expect("nothing to recover")
+            .0;
+        let (outcome, _) = switch(settled, &m.key("here")).expect("nobody is signed in");
+        assert!(
+            matches!(&outcome, Outcome::Installed { to, .. } if to == "here"),
+            "{outcome:?}"
+        );
     }
 
     /// Signing in again to a parked account renews its park whoever is signed in, as it

@@ -373,6 +373,7 @@ pub enum Error {
     },
 
     #[error("{}", login_elsewhere(crate::host::OS, email))]
+    // Not raised since 0.15.3; kept so a patch release breaks no match on it.
     LiveCredentialElsewhere { email: String },
 
     #[error(
