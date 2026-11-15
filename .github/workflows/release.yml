@@ -1619,9 +1619,10 @@ jobs:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
           set -euo pipefail
+          # Read from the file: Homebrew 7 loads a cask of an untrusted tap only for a command
+          # that names it in full, as the README's `brew install` does, and `brew info` refused.
           cask_version() {
-            brew info --json=v2 --cask datlechin/tap/pitboard |
-              python3 -c "import json,sys; print(json.load(sys.stdin)['casks'][0]['version'])"
+            sed -n 's/^  version "\(.*\)"$/\1/p' "$(brew --repository datlechin/tap)/Casks/pitboard.rb"
           }
           # The push and this clone are two machines talking to GitHub, so the tap is given
           # a couple of minutes to be servable before it is called stale.
