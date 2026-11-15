@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0-beta.14] - 2026-11-15
+
+_On macOS, an update may take away a widget or control you placed, which then needs adding
+again._
+
 ### Changed
 
 - **Breaking:** The public API of `pitboard-core` has no `Error::LiveCredentialElsewhere`;
@@ -686,6 +691,27 @@ again._
   never run, so a new computer with nothing enrolled no longer reads as broken.
 - `pitboard doctor`, **This Mac** and **This PC** show Codex's checks once Pitboard finds `codex`,
   before Codex has run for the first time.
+
+## [0.15.3] - 2026-11-15
+
+_On macOS, an update may take away a widget or control you placed, which then needs adding
+again._
+
+### Changed
+
+- `pitboard doctor` warns that nothing is signed in, instead of failing its credential store
+  check, where Claude Code's config names an account and no login is stored.
+
+### Fixed
+
+- Pitboard switches Claude Code to an account where no login is stored and Claude Code's config
+  still names the account that was signed in, as a sign-out in another session leaves it, where
+  it refused every switch with `live_credential_elsewhere`.
+- `pitboard use` puts an account's login in place where nothing is signed in to Claude Code or
+  Codex, where it refused with `live_credential_absent`.
+- Pitboard shows nobody in use where Claude Code holds no login, whatever its config still names.
+- A Claude Code login Pitboard renews keeps the earlier of its end date and the one Anthropic
+  gives, as Claude Code 2.1.325 does, so a parked login is no longer shown as good past its end.
 
 ## [0.15.2] - 2026-10-28
 
@@ -1608,7 +1634,8 @@ again._
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.13...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.14...HEAD
+[1.0.0-beta.14]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.13...v1.0.0-beta.14
 [1.0.0-beta.13]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.12...v1.0.0-beta.13
 [1.0.0-beta.12]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.11...v1.0.0-beta.12
 [1.0.0-beta.11]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.10...v1.0.0-beta.11
@@ -1621,6 +1648,7 @@ again._
 [1.0.0-beta.3]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v1.0.0-beta.1
+[0.15.3]: https://github.com/datlechin/pitboard/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/datlechin/pitboard/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/datlechin/pitboard/compare/v0.14.0...v0.15.0
