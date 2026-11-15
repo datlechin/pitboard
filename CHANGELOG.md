@@ -24,6 +24,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still names the account that was signed in, as a sign-out in another session leaves it, where
   it refused every switch.
 - Pitboard shows nobody in use where Claude Code holds no login, whatever its config still names.
+- A Claude Code login Pitboard renews keeps the earlier of its end date and the one Anthropic
+  gives, as Claude Code 2.1.325 does, so a parked login is no longer shown as good past its end.
 
 ## [1.0.0-beta.13] - 2026-11-13
 

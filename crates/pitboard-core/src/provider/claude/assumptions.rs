@@ -499,13 +499,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     answers("token_refusals"),
     answers("validate_names_the_login"),
     answers("token_answer_names_the_login"),
-    // Read as bytes on 2026-10-24 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
-    // builds of 2.1.309.
+    // Read as bytes on 2026-11-15 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
+    // builds of 2.1.325.
     PerSystem {
         name: "refresh_token_end",
-        macos: Read("2.1.309"),
-        linux: Read("2.1.309"),
-        windows: Read("2.1.309"),
+        macos: Read("2.1.325"),
+        linux: Read("2.1.325"),
+        windows: Read("2.1.325"),
     },
     read_from_2_1_309("auth_precedence"),
     read_from_2_1_309("anthropic_profiles"),
@@ -2213,22 +2213,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "refresh_token_end",
         fact: "a sign-in sets `refreshTokenExpiresAt` from its answer's \
                `refresh_token_expires_in`, or 30 days on where the answer has none. A renewal \
-               sets it from that field only where its answer has one, and otherwise keeps the \
-               date the login had. Within 3 days of that date a claude.ai login is told `Your \
-               login expires in <n> days · run /login to renew`: Claude Code sends its owner to \
-               sign in again, not to a renewal",
-        read_from: "the sign-in's tokens, the token refresh's answer reader and the save that \
-                    merges it into the login stored, and the `oauth-expiry` notice",
-        verified_against: "2.1.309",
+               never moves that date later: it keeps the earlier of the login's date and the \
+               one its answer gives, keeps the login's where the answer has none, and stores \
+               none where the login had none. A date before 1 January 2025 or more than ten \
+               years on counts as none. Within 3 days of that date a claude.ai login is told \
+               `Your login expires in <n> days · run /login to renew`, and `claude -p` warns \
+               that renewing does not move it: Claude Code sends its owner to sign in again, \
+               not to a renewal",
+        read_from: "the sign-in's tokens, the token refresh's answer reader, the merge both of \
+                    its saves put a login through and the date check it takes, the \
+                    `oauth-expiry` notice and `claude -p`'s warning, in the darwin-arm64, \
+                    linux-x64, win32-x64 and win32-arm64 builds of 2.1.325, read as bytes on \
+                    2026-11-15. 2.1.309's renewal took the answer's date whenever it had one",
+        verified_against: "2.1.325",
         depends: "provider::claude::document::renewed, which keeps the date as Claude Code does, \
-                  and status::Row::standing's Expiring, from doctor::RENEW_WITHIN's 3 days, \
+                  and status::Row::standing's Expiring, from state::RENEW_WITHIN's 3 days, \
                   which `pitboard status`, doctor's parked login check and both apps answer \
                   with a sign-in",
         probe: &[
             "Your login expires in ",
             "run /login to renew",
             ".refresh_token_expires_in,!1)",
-            "refreshTokenExpiresAt:n.refreshTokenExpiresAt??e?.refreshTokenExpiresAt",
+            ".refresh_token_expires_in,!0)",
+            ".refreshTokenExpiresAt:void 0;return{accessToken:",
+            "Date.now()+315360000000}",
+            "Renewing it does not move",
         ],
         absent: &[],
     },
