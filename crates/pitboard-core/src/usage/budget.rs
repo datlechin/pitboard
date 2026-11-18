@@ -16,7 +16,8 @@
 //! moves at most 100% in five hours, so that is three minutes; a weekly window, a hundred.
 //! Whatever the floor is, it is far below what changes anybody's decision, and it collapses
 //! the repeated asking to one request per account per few minutes however many front ends
-//! are running.
+//! are running. The account in use is asked about at the five-hour pace whatever limits it
+//! lists: a week can be spent in hours, and the automatic switch acts on what is read here.
 //!
 //! Nothing here is secret. It is names, times and counts.
 
@@ -33,6 +34,8 @@ use std::path::PathBuf;
 /// With no reading to derive it from, a minute: enough to collapse a burst of front ends
 /// starting together, short enough that nobody notices.
 const UNKNOWN_FLOOR: i64 = 60;
+
+const IN_USE_FLOOR: i64 = 5 * crate::time::HOUR / 100;
 
 pub(crate) fn floor_for(reading: Option<&Snapshot>) -> i64 {
     let shortest = reading
@@ -151,6 +154,7 @@ pub(crate) fn may_ask(
     id: &str,
     last_reading: Option<&Snapshot>,
     ask: Ask,
+    in_use: bool,
 ) -> Option<Held> {
     let ledger = load(ctx);
     let entry = ledger.get(id)?;
@@ -160,8 +164,13 @@ pub(crate) fn may_ask(
         let held = entry.held();
         return (ask == Ask::WhenDue || held == Held::RateLimited).then_some(held);
     }
-    (ask == Ask::WhenDue && now - record.answered_at < floor_for(last_reading))
-        .then_some(Held::Fresh)
+    let floor = floor_for(last_reading);
+    let floor = if in_use {
+        floor.min(IN_USE_FLOOR)
+    } else {
+        floor
+    };
+    (ask == Ask::WhenDue && now - record.answered_at < floor).then_some(Held::Fresh)
 }
 
 /// What one request turned out to be, for recording afterwards.
@@ -355,7 +364,7 @@ mod tests {
     #[test]
     fn an_account_nobody_has_asked_about_is_asked_about() {
         let (ctx, _clock, _s) = machine();
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue, false), None);
     }
 
     #[test]
@@ -369,16 +378,46 @@ mod tests {
         );
 
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue),
+            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue, false),
             Some(Held::Fresh)
         );
         clock.advance(179);
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue),
+            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue, false),
             Some(Held::Fresh)
         );
         clock.advance(2);
-        assert_eq!(may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue), None);
+        assert_eq!(
+            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue, false),
+            None
+        );
+    }
+
+    #[test]
+    fn the_account_in_use_is_asked_about_at_the_five_hour_pace_whatever_limits_it_lists() {
+        let (ctx, clock, _s) = machine();
+        let weekly = reading(&["weekly_all"]);
+        record(
+            &ctx,
+            Permit::for_a_test(),
+            &[("acc".into(), Outcome::Answered)],
+        );
+        clock.advance(179);
+        assert_eq!(
+            may_ask(&ctx, "acc", Some(&weekly), Ask::WhenDue, true),
+            Some(Held::Fresh)
+        );
+        clock.advance(1);
+        assert_eq!(
+            may_ask(&ctx, "acc", Some(&weekly), Ask::WhenDue, true),
+            None
+        );
+        assert_eq!(
+            may_ask(&ctx, "acc", Some(&weekly), Ask::WhenDue, false),
+            Some(Held::Fresh),
+            "a parked account keeps its own floor"
+        );
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue, true), None);
     }
 
     #[test]
@@ -390,7 +429,7 @@ mod tests {
             &[("acc".into(), Outcome::Answered)],
         );
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&reading(&["five_hour"])), Ask::Now),
+            may_ask(&ctx, "acc", Some(&reading(&["five_hour"])), Ask::Now, false),
             None
         );
     }
@@ -406,11 +445,11 @@ mod tests {
             &[("acc".into(), Outcome::RateLimited(Some(300)))],
         );
         assert_eq!(
-            may_ask(&ctx, "acc", None, Ask::Now),
+            may_ask(&ctx, "acc", None, Ask::Now, false),
             Some(Held::RateLimited)
         );
         clock.advance(301);
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now, false), None);
     }
 
     /// A wait Pitboard chose after failing to reach the service is its own guess, and
@@ -424,10 +463,10 @@ mod tests {
             &[("acc".into(), Outcome::Unreachable)],
         );
         assert_eq!(
-            may_ask(&ctx, "acc", None, Ask::WhenDue),
+            may_ask(&ctx, "acc", None, Ask::WhenDue, false),
             Some(Held::Unreachable)
         );
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now, false), None);
     }
 
     /// The reason was told by the wait's length alone, and an account never answered
@@ -442,7 +481,7 @@ mod tests {
             &[("acc".into(), Outcome::Unreachable)],
         );
         assert_eq!(
-            may_ask(&ctx, "acc", None, Ask::WhenDue),
+            may_ask(&ctx, "acc", None, Ask::WhenDue, false),
             Some(Held::Unreachable)
         );
     }
@@ -460,14 +499,14 @@ mod tests {
         );
         std::fs::write(path(&ctx), written).unwrap();
         assert_eq!(
-            may_ask(&ctx, "asked", None, Ask::Now),
+            may_ask(&ctx, "asked", None, Ask::Now, false),
             Some(Held::RateLimited)
         );
         assert_eq!(
-            may_ask(&ctx, "short", None, Ask::WhenDue),
+            may_ask(&ctx, "short", None, Ask::WhenDue, false),
             Some(Held::Unreachable)
         );
-        assert_eq!(may_ask(&ctx, "short", None, Ask::Now), None);
+        assert_eq!(may_ask(&ctx, "short", None, Ask::Now, false), None);
     }
 
     /// What Anthropic said to wait is believed over anything Pitboard would pick.
@@ -480,11 +519,11 @@ mod tests {
             &[("acc".into(), Outcome::RateLimited(Some(300)))],
         );
 
-        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue).is_some());
+        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue, false).is_some());
         clock.advance(299);
-        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue).is_some());
+        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue, false).is_some());
         clock.advance(2);
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue, false), None);
     }
 
     #[test]
@@ -527,7 +566,10 @@ mod tests {
             &[("acc".into(), Outcome::Answered)],
         );
         assert!(holds(&ctx).is_empty());
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), Some(Held::Fresh));
+        assert_eq!(
+            may_ask(&ctx, "acc", None, Ask::WhenDue, false),
+            Some(Held::Fresh)
+        );
     }
 
     #[test]
@@ -540,6 +582,6 @@ mod tests {
         );
         forget(&ctx, Permit::for_a_test(), "acc");
         assert!(holds(&ctx).is_empty());
-        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue, false), None);
     }
 }

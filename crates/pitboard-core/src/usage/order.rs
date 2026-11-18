@@ -8,8 +8,8 @@
 use super::{LimitKind, Snapshot, Window, budget, same_reset};
 use std::cmp::Ordering;
 
-// A front end that acts by itself reads each account more often than a usage check waits at most
-// on a service out of reach: an older reading is of an account nobody could ask about.
+// Past an account's own wait between reads, the most a usage check waits on a service out of
+// reach: an older reading is of an account nobody could ask about.
 const FRESH: i64 = budget::UNREACHABLE_MOST;
 
 /// The shares that trigger a switch, with no weekly trigger where `weekly` is `None`.
@@ -176,7 +176,8 @@ pub fn resets_first(
     shares: impl Into<Shares>,
     now: i64,
 ) -> Option<Room> {
-    let fresh = theirs.answered_at.is_some_and(|at| now - at <= FRESH);
+    let most = budget::floor_for(Some(theirs)) + FRESH;
+    let fresh = theirs.answered_at.is_some_and(|at| now - at <= most);
     let first = Week::of(theirs, now).comes_before(Week::of(mine, now));
     if !fresh || !first || five_hours(&theirs.windows, now) > five_hours(&mine.windows, now) {
         return None;
@@ -460,15 +461,27 @@ mod tests {
     fn resets_first_wants_a_reading_anthropic_gave_lately() {
         let mine = max(30.0, 5);
         let mut old = max(0.0, 1);
-        old.answered_at = Some(NOW - FRESH - 1);
+        let most = budget::floor_for(Some(&old)) + FRESH;
+        old.answered_at = Some(NOW - most - 1);
         assert!(resets_first(&old, &mine, 95u8, NOW).is_none());
-        old.answered_at = Some(NOW - FRESH);
+        old.answered_at = Some(NOW - most);
         assert!(resets_first(&old, &mine, 95u8, NOW).is_some());
         old.answered_at = None;
         assert!(
             resets_first(&old, &mine, 95u8, NOW).is_none(),
             "not Anthropic's"
         );
+    }
+
+    #[test]
+    fn an_account_read_less_often_is_as_fresh_as_its_own_wait_between_reads() {
+        let mine = max(30.0, 5);
+        let mut ultra = reading(vec![window("weekly_all", 40.0, DAY)]);
+        let most = budget::floor_for(Some(&ultra)) + FRESH;
+        ultra.answered_at = Some(NOW - most);
+        assert!(resets_first(&ultra, &mine, 95u8, NOW).is_some());
+        ultra.answered_at = Some(NOW - most - 1);
+        assert!(resets_first(&ultra, &mine, 95u8, NOW).is_none());
     }
 
     #[test]

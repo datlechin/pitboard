@@ -750,7 +750,7 @@ fn ask_usage(
     remembered: Option<&Snapshot>,
     ask: Ask,
 ) -> Asked {
-    if let Some(held) = budget::may_ask(ctx, id, remembered, ask) {
+    if let Some(held) = budget::may_ask(ctx, id, remembered, ask, login == Login::Live) {
         let stale = match held {
             budget::Held::Fresh => Stale::AskedRecently,
             budget::Held::RateLimited => Stale::RateLimited,
