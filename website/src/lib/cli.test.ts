@@ -594,8 +594,18 @@ test("pitboard watch --once decides once, as the watch does", async () => {
   assert.equal(model.get().inUse.claude, "work");
 });
 
+// personal, in use on the page, as the automatic switch put it there
+function personalByPitboard() {
+  const s = structuredClone(model.get());
+  const id = s.accounts.find((a) => a.tool === "claude" && a.label === "personal")!.id;
+  s.lastUsedAt[id] = s.now - 3 * HOUR;
+  s.arrived = { id, at: s.now - 3 * HOUR };
+  model.set(s);
+}
+
 test("pitboard watch --order resets-soonest moves before the share and says each week's reset", async () => {
   reset();
+  personalByPitboard();
   const early =
     "Switched Claude Code from personal to work: work's week resets at Oct 16 01:00, before personal's at Oct 19 14:50. Claude Code sessions already running follow within 33 seconds.";
   assert.deepEqual(await said("macos", "watch --once --order resets-soonest"), [early]);
@@ -606,6 +616,7 @@ test("pitboard watch --order resets-soonest moves before the share and says each
     "Watching personal: 73% of its weekly limit, as of 20:50.",
   ]);
   reset();
+  personalByPitboard();
   const step = await run(machine("macos"), ["watch", "--order", "resets-soonest"]);
   advance(clock.menuBar + 30);
   assert.deepEqual(text(step.runs!.next(model.get())), [`20:51:30 ${early}`]);

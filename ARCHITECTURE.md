@@ -443,7 +443,9 @@ keeps it is in the header of the module named.
   but a replacement with an actually used-up weekly limit is still refused. Missing readings,
   settling and per-reset attempt protections do not depend on the selected shares.
   Old scalar settings and `--at` services apply their share to both periods; the first edit
-  preserves the other period. Resets Soonest remains a separate reason to switch early.
+  preserves the other period. Resets Soonest remains a separate reason to switch early, and
+  only from an account the automatic switch put in use. A limit already left holds an account
+  only where a person put it back: `Ledger::arrived` forgets it when Pitboard does.
 - Limit controls send only the field edited. The actor preserves the other fields from its
   current preferences, so a late snapshot cannot undo an earlier edit.
 - The app ignores an automatic look or a non-switch outcome made for an earlier policy,

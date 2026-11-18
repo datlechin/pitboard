@@ -29,10 +29,12 @@
 //! - switch to an account at any enabled share, or with any limit used up;
 //! - switch back by itself. The next time the account in use reaches the share, the best
 //!   account there is is chosen again, which may be the one it left;
-//! - switch away from one limit of an account twice before that limit resets. Somebody who
-//!   put it back in use meant to;
+//! - switch away from one limit of an account twice before that limit resets, where a person
+//!   put it back in use. They meant to. An account Pitboard put back is left again;
+//! - move before the share away from an account a person put in use;
 //! - switch away from an account within `SETTLING_SECONDS` of its being put in use, by
-//!   anyone;
+//!   anyone. An account Pitboard put in use is left as soon as Anthropic has answered about it
+//!   since;
 //! - try more than `ATTEMPTS` times for one limit before it resets, counting only the
 //!   attempts that failed for a reason trying again will not mend. One that might, such as
 //!   Anthropic out of reach, is tried again later each time, up to
@@ -471,7 +473,13 @@ pub(crate) fn decide(
             },
         );
     };
-    if let Some(until) = settling(state, current, now) {
+    let put_in_use = put_in_use(state, current);
+    let landed = ledger.brought(&row.id, put_in_use)
+        && reading
+            .answered_at
+            .zip(put_in_use)
+            .is_some_and(|(read, put)| read > put);
+    if !landed && let Some(until) = settling(state, current, now) {
         return hold(limit, Skip::Settling { until });
     }
     let waiting = reached
@@ -535,6 +543,7 @@ fn early(
     let current = row.key()?;
     let reading = answered(row)?;
     if policy.order != Order::ResetsSoonest
+        || !ledger.brought(&row.id, put_in_use(state, &current))
         || settling(state, &current, now).is_some()
         || ledger.early_waits(now)
     {
@@ -569,12 +578,12 @@ fn goes<'a>(rows: &'a [Row], current: &'a Key, now: i64) -> impl Iterator<Item =
     })
 }
 
-/// Until when the account `current` settles, where it was put in use less than
-/// `SETTLING_SECONDS` ago.
+fn put_in_use(state: &State, current: &Key) -> Option<i64> {
+    state.get(current).and_then(|account| account.last_used_at)
+}
+
 fn settling(state: &State, current: &Key, now: i64) -> Option<i64> {
-    state
-        .get(current)
-        .and_then(|account| account.last_used_at)
+    put_in_use(state, current)
         .filter(|at| (0..SETTLING_SECONDS).contains(&(now - at)))
         .map(|at| at + SETTLING_SECONDS)
 }
@@ -602,6 +611,15 @@ pub(crate) struct Ledger {
     early: BTreeMap<String, Tried>,
     #[serde(skip_serializing_if = "Option::is_none")]
     asked: Option<Asked>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arrived: Option<Arrived>,
+}
+
+// The account the automatic switch last put in use, and when that switch was done.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct Arrived {
+    id: String,
+    at: i64,
 }
 
 /// Whose login Claude Code has stored, asked under the lock and not told, since it was last
@@ -759,6 +777,23 @@ impl Ledger {
     /// The switch for `plan` was made.
     pub(crate) fn switched(&mut self, plan: &Plan) {
         self.trying_for(plan).switched = true;
+    }
+
+    // What was kept of the account's limits is of before Pitboard brought it back.
+    pub(crate) fn arrived(&mut self, plan: &Plan, at: i64) {
+        let theirs = format!("{}/", plan.to_id);
+        self.limits.retain(|key, _| !key.starts_with(&theirs));
+        self.arrived = Some(Arrived {
+            id: plan.to_id.clone(),
+            at,
+        });
+    }
+
+    // Anyone who put the account in use after the automatic switch did has the last word.
+    fn brought(&self, id: &str, put_in_use: Option<i64>) -> bool {
+        self.arrived.as_ref().is_some_and(|arrived| {
+            arrived.id == id && put_in_use.is_some_and(|at| at <= arrived.at)
+        })
     }
 
     /// The switch for `plan` was refused over the account it would have switched to, and
@@ -2342,8 +2377,27 @@ mod tests {
         )
     }
 
+    // Only an account Pitboard put in use is moved away from before the share.
+    fn by_pitboard(rows: &[Row], ledger: &Ledger) -> (State, Ledger) {
+        let mut state = state_of(rows);
+        let mut ledger = ledger.clone();
+        let label = rows
+            .iter()
+            .find(|row| row.signed_in)
+            .expect("in use")
+            .id
+            .as_str();
+        account_put_in_use(&mut state, label, NOW - THREE_HOURS);
+        ledger.arrived = Some(Arrived {
+            id: label.to_owned(),
+            at: NOW - THREE_HOURS,
+        });
+        (state, ledger)
+    }
+
     fn soonest(rows: &[Row], ledger: &Ledger, now: i64) -> Decision {
-        decided_by(&state_of(rows), rows, ledger, SOONEST, now)
+        let (state, ledger) = by_pitboard(rows, ledger);
+        decided_by(&state, rows, &ledger, SOONEST, now)
     }
 
     fn early_plan(rows: &[Row]) -> Plan {
@@ -2368,7 +2422,8 @@ mod tests {
             let mut candidate = weekly("spare", false, 10.0, 1);
             candidate.usage.as_mut().unwrap().windows[1].percent = used;
             let rows = [weekly("work", true, 30.0, 5), candidate];
-            let decision = at_policy(&rows, policy);
+            let (state, ledger) = by_pitboard(&rows, &Ledger::default());
+            let decision = decided_by(&state, &rows, &ledger, policy, NOW);
             assert_eq!(
                 to(&decision).is_some(),
                 accepted,
@@ -2486,10 +2541,11 @@ mod tests {
     fn an_early_move_waits_while_the_account_in_use_settles() {
         let rows = [weekly("work", true, 30.0, 5), weekly("soon", false, 0.0, 1)];
         let mut state = state_of(&rows);
-        put_in_use(&mut state, NOW - 60);
-        let decision = decided_by(&state, &rows, &Ledger::default(), SOONEST, NOW);
+        let mut ledger = Ledger::default();
+        brought(&mut state, &mut ledger, "work", NOW - 60);
+        let decision = decided_by(&state, &rows, &ledger, SOONEST, NOW);
         assert!(matches!(decision, Decision::Below { .. }), "{decision:?}");
-        let later = decided_by(&state, &rows, &Ledger::default(), SOONEST, NOW + 240);
+        let later = decided_by(&state, &rows, &ledger, SOONEST, NOW + 240);
         assert!(matches!(later, Decision::Switch(_)), "{later:?}");
     }
 
@@ -2591,5 +2647,137 @@ mod tests {
         assert!(written.contains(r#""early":{"soon":"#), "{written}");
         clock.advance(crate::time::DAY + 61);
         assert_eq!(Ledger::load(&ctx), Ledger::default());
+    }
+
+    const THREE_HOURS: i64 = 3 * 3600;
+
+    fn account_put_in_use(state: &mut State, label: &str, at: i64) {
+        let account = state.accounts.iter_mut().find(|a| a.label == label);
+        account.expect("enrolled").last_used_at = Some(at);
+    }
+
+    fn brought(state: &mut State, ledger: &mut Ledger, label: &str, at: i64) {
+        account_put_in_use(state, label, at);
+        let plan = Plan {
+            from: Key::new(ProviderId::Claude, "elsewhere"),
+            from_id: "elsewhere".into(),
+            to: Key::new(ProviderId::Claude, label),
+            to_id: label.into(),
+            why: Why::Limit(window("session", 96.0)),
+        };
+        ledger.arrived(&plan, at);
+    }
+
+    fn left_at(ledger: &mut Ledger, label: &str, limit: &Window, at: i64) {
+        let plan = Plan {
+            from: Key::new(ProviderId::Claude, label),
+            from_id: label.into(),
+            to: Key::new(ProviderId::Claude, "elsewhere"),
+            to_id: "elsewhere".into(),
+            why: Why::Limit(limit.clone()),
+        };
+        ledger.attempt(&plan, at);
+        ledger.switched(&plan);
+    }
+
+    #[test]
+    fn an_account_pitboard_put_back_is_left_again_at_the_share() {
+        let limit = week(99.0, 1);
+        let rows = [
+            row("seat", true, vec![window("session", 10.0), limit.clone()]),
+            row("ultra", false, vec![week(8.0, 4)]),
+        ];
+        let mut state = state_of(&rows);
+        let mut ledger = Ledger::default();
+        left_at(&mut ledger, "seat", &limit, NOW - 2 * crate::time::DAY);
+        brought(&mut state, &mut ledger, "seat", NOW - THREE_HOURS);
+        let decision = decided_by(&state, &rows, &ledger, Policy::default(), NOW);
+        assert_eq!(to(&decision), Some("ultra"), "{decision:?}");
+    }
+
+    #[test]
+    fn a_limit_left_stands_where_a_person_put_the_account_back_after_pitboard_did() {
+        let limit = week(99.0, 1);
+        let rows = [
+            row("seat", true, vec![window("session", 10.0), limit.clone()]),
+            row("ultra", false, vec![week(8.0, 4)]),
+        ];
+        let mut state = state_of(&rows);
+        let mut ledger = Ledger::default();
+        brought(&mut state, &mut ledger, "seat", NOW - THREE_HOURS);
+        left_at(&mut ledger, "seat", &limit, NOW - 2 * 3600);
+        account_put_in_use(&mut state, "seat", NOW - 3600);
+        let decision = decided_by(&state, &rows, &ledger, Policy::default(), NOW);
+        assert!(
+            matches!(
+                decision,
+                Decision::Hold(Hold {
+                    why: Skip::AlreadyLeft,
+                    ..
+                })
+            ),
+            "{decision:?}"
+        );
+    }
+
+    #[test]
+    fn no_early_move_leaves_an_account_a_person_put_in_use() {
+        let rows = [weekly("ultra", true, 0.0, 4), weekly("seat", false, 0.0, 1)];
+        let mut state = state_of(&rows);
+        account_put_in_use(&mut state, "ultra", NOW - THREE_HOURS);
+        let ledger = Ledger::default();
+        let decision = decided_by(&state, &rows, &ledger, SOONEST, NOW);
+        assert!(matches!(decision, Decision::Below { .. }), "{decision:?}");
+
+        let mut ledger = Ledger::default();
+        brought(&mut state, &mut ledger, "ultra", NOW - THREE_HOURS);
+        let decision = decided_by(&state, &rows, &ledger, SOONEST, NOW);
+        assert_eq!(to(&decision), Some("seat"), "{decision:?}");
+
+        account_put_in_use(&mut state, "ultra", NOW - 2 * 3600);
+        let decision = decided_by(&state, &rows, &ledger, SOONEST, NOW);
+        assert!(
+            matches!(decision, Decision::Below { .. }),
+            "a person's pick after Pitboard's: {decision:?}"
+        );
+    }
+
+    #[test]
+    fn an_account_pitboard_put_in_use_settles_until_anthropic_answers_about_it() {
+        let put = NOW - 60;
+        let rows = |read: i64| {
+            let mut seat = row("seat", true, vec![week(100.0, 1)]);
+            seat.usage.as_mut().unwrap().answered_at = Some(read);
+            [seat, row("ultra", false, vec![week(0.0, 5)])]
+        };
+        let mut state = state_of(&rows(put));
+        let mut ledger = Ledger::default();
+        brought(&mut state, &mut ledger, "seat", put);
+        let settling = |decision: Decision| {
+            matches!(
+                decision,
+                Decision::Hold(Hold {
+                    why: Skip::Settling { .. },
+                    ..
+                })
+            )
+        };
+        let policy = Policy::default();
+        assert!(settling(decided_by(
+            &state,
+            &rows(put),
+            &ledger,
+            policy,
+            NOW
+        )));
+        let read = rows(put + 1);
+        assert_eq!(
+            to(&decided_by(&state, &read, &ledger, policy, NOW)),
+            Some("ultra")
+        );
+        assert!(
+            settling(decided_by(&state, &read, &Ledger::default(), policy, NOW)),
+            "a person's pick settles for the whole five minutes"
+        );
     }
 }

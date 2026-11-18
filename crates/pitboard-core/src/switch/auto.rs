@@ -137,6 +137,7 @@ pub(crate) fn automatically(settled: Settled, policy: Policy) -> Result<(Auto, V
             warnings,
         )) => {
             ledger.switched(&plan);
+            ledger.arrived(&plan, ctx.now());
             // The switch was made. A record of it that could not be written costs at most
             // one more attempt at a limit of the account it left, should that account be
             // put back in use before it resets.
@@ -254,7 +255,7 @@ mod tests {
     use super::super::*;
     use crate::api::scripted::Trouble;
     use crate::duty::autoswitch::{
-        Auto, Blind, Decision, Ledger, Look, Policy, SETTLING_SECONDS, Skip, Why, decide,
+        Auto, Blind, Decision, Ledger, Look, Plan, Policy, SETTLING_SECONDS, Skip, Why, decide,
     };
     use crate::duty::cadence::{ATTEMPTS, RETRY_SECONDS};
     use crate::permit::Permit;
@@ -768,6 +769,7 @@ mod tests {
                 let mut once = Ledger::default();
                 once.attempt(&plan, NOW);
                 once.switched(&plan);
+                once.arrived(&plan, NOW);
                 once
             },
             "one attempt, which switched"
@@ -1684,7 +1686,73 @@ mod tests {
             .with_clock(Arc::clone(&clock) as Arc<dyn Clock>);
         weeks(&m, "here", 30.0, 5);
         weeks(&m, "there", 0.0, 1);
+        brought_by_pitboard(&m, "here");
         (m, clock)
+    }
+
+    // Only an account Pitboard put in use is moved away from before the share.
+    fn brought_by_pitboard(m: &Rig, label: &str) {
+        let at = m.ctx.now() - HOUR;
+        let mut state = state::load(&m.ctx).expect("state");
+        let account = state.accounts.iter_mut().find(|a| a.label == label);
+        account.expect("enrolled").last_used_at = Some(at);
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        let mut ledger = Ledger::load(&m.ctx);
+        let plan = Plan {
+            from: m.key("elsewhere"),
+            from_id: "elsewhere".into(),
+            to: m.key(label),
+            to_id: label.into(),
+            why: Why::Limit(window("session", 96.0)),
+        };
+        ledger.arrived(&plan, at);
+        ledger.save(&m.ctx, Permit::for_a_test()).expect("saved");
+    }
+
+    #[test]
+    fn a_person_who_picks_an_account_is_not_moved_before_the_share() {
+        let (m, clock) = there_resets_first("auto-early-picked");
+        clock.advance(SETTLING_SECONDS);
+        Pitboard::new(m.ctx.clone())
+            .switch_to("there")
+            .expect("switched");
+        clock.advance(SETTLING_SECONDS);
+        Pitboard::new(m.ctx.clone())
+            .switch_to("here")
+            .expect("switched back");
+        clock.advance(SETTLING_SECONDS);
+        weeks(&m, "here", 30.0, 5);
+        weeks(&m, "there", 0.0, 1);
+        assert!(matches!(
+            soonest(&m).expect("decided").value,
+            Auto::Watching { .. }
+        ));
+    }
+
+    #[test]
+    fn an_account_pitboard_brought_back_is_left_again_through_the_switch() {
+        let (m, clock) = nearly_out("auto-left-again", 96.0);
+        let first = auto(&m).expect("a switch").value;
+        assert!(
+            matches!(&first, Auto::Switched { to, .. } if to == "there"),
+            "{first:?}"
+        );
+        clock.advance(SETTLING_SECONDS);
+        measured(&m, "here", 10.0, 10.0);
+        measured(&m, "there", 96.0, 10.0);
+        let back = auto(&m).expect("a switch back").value;
+        assert!(
+            matches!(&back, Auto::Switched { to, .. } if to == "here"),
+            "{back:?}"
+        );
+        clock.advance(SETTLING_SECONDS);
+        measured(&m, "here", 96.0, 10.0);
+        measured(&m, "there", 10.0, 10.0);
+        let again = auto(&m).expect("left again").value;
+        assert!(
+            matches!(&again, Auto::Switched { to, .. } if to == "there"),
+            "{again:?}"
+        );
     }
 
     fn soonest(m: &Rig) -> crate::service::Changing<Auto> {

@@ -147,6 +147,8 @@ export interface State extends World {
   ledger: Record<string, number>;
   // autoswitch.rs `Ledger::early`: by account moved to, its week's reset or 0, and when
   early: Record<string, { week: number; at: number }>;
+  // autoswitch.rs `Ledger::arrived`: the account the automatic switch last put in use, and when
+  arrived: { id: string; at: number } | null;
   // reasons not to switch already told, until the next switch
   autoTold: string[];
   autoStanding: AutoStanding | null;
@@ -221,6 +223,7 @@ export function start(): State {
     switchedBack: null,
     ledger: {},
     early: {},
+    arrived: null,
     autoTold: [],
     autoStanding: null,
     warm: {
@@ -388,6 +391,12 @@ export const room = (
 // usage/order.rs `FRESH`: budget.rs `UNREACHABLE_MOST`
 export const FRESH = 900;
 
+// budget.rs `floor_for`: one point of the tightest limit
+const floorFor = (limits: Limit[]) =>
+  limits.length === 0
+    ? 60
+    : Math.max(Math.floor(Math.min(...limits.map((l) => l.lengthSeconds)) / 100), 1);
+
 // usage/order.rs `five_hours`
 export const fiveHours = (limits: Limit[], now: number) =>
   limits
@@ -404,7 +413,7 @@ export function resetsFirst(
   readAt: number,
   weekly: number | null = share,
 ): Room | null {
-  const fresh = now - readAt <= FRESH;
+  const fresh = now - readAt <= floorFor(theirs) + FRESH;
   const first = comesBefore(weekOf(theirs, everyLimit, now), weekOf(mine, everyLimit, now));
   if (!fresh || !first || fiveHours(theirs, now) > fiveHours(mine, now)) return null;
   return below(theirs, everyLimit, mine, null, share, now, weekly);
@@ -458,6 +467,19 @@ function settling(s: State, from: Account): number | null {
   return putInUse + SETTLING_SECONDS;
 }
 
+// autoswitch.rs `Ledger::brought`: anyone who put the account in use since has the last word
+function brought(s: State, from: Account): boolean {
+  const putInUse = s.lastUsedAt[from.id];
+  return s.arrived?.id === from.id && putInUse !== undefined && putInUse <= s.arrived.at;
+}
+
+// autoswitch.rs `Ledger::arrived`: what was kept of its limits is of before Pitboard brought it back
+function arrived(s: State, to: Account) {
+  const theirs = `claude/${to.id}/`;
+  for (const key of Object.keys(s.ledger)) if (key.startsWith(theirs)) delete s.ledger[key];
+  s.arrived = { id: to.id, at: s.now };
+}
+
 // autoswitch.rs `Ledger::open_early`: an entry of an earlier week, or no longer kept, is not one
 function openEarly(s: State, id: string, week: Week): boolean {
   const entry = s.early[id];
@@ -477,7 +499,7 @@ function early(
   order: Order,
   weekly: number | null,
 ): Decision | null {
-  if (order !== "resets-soonest" || settling(s, from) !== null) return null;
+  if (order !== "resets-soonest" || !brought(s, from) || settling(s, from) !== null) return null;
   const best = preferred(
     "resets-soonest",
     goes(s, from).flatMap((a): [Account, Room][] => {
@@ -521,7 +543,8 @@ export function decide(
   const limit = reachedLimits.find((l) => !left(l));
   if (!limit)
     return { decided: "hold", limit: reachedLimits[0], why: { code: "already_switched" } };
-  const until = settling(s, from);
+  const landed = brought(s, from) && s.readAt > s.lastUsedAt[from.id];
+  const until = landed ? null : settling(s, from);
   if (until !== null) return { decided: "hold", limit, why: { code: "settling", until } };
   const best = preferred(
     order,
@@ -785,6 +808,7 @@ function lookToSwitch(s: State) {
       if (limit) s.ledger[limitKey("claude", from!.id, limit)] = limit.resetsAt ?? 0;
       else s.early[to.id] = { week: resetsAtOf(decision.first.to) ?? 0, at: s.now };
       switchTo(s, to, app ? "app" : "cli", "auto-switch");
+      arrived(s, to);
       s.lastSwitch.claude!.because = because;
       s.autoTold = [];
       if (!app) return;
@@ -959,6 +983,7 @@ function switchTo(s: State, to: Account, caller: Caller, verb = "use") {
   const from = current(s, to.tool);
   s.inUse[to.tool] = to.label;
   s.lastUsedAt[to.id] = s.now;
+  if (to.tool === "claude") s.arrived = null;
   if (to.tool === "desktop") to.readAt = s.now;
   s.lastSwitch[to.tool] = {
     from: from?.label ?? "",
@@ -1604,6 +1629,7 @@ export function decideOnce(
       s.ledger[limitKey("claude", from.id, d.limit)] = d.limit.resetsAt ?? 0;
     } else s.early[d.to.id] = { week: resetsAtOf(d.first.to) ?? 0, at: s.now };
     switchTo(s, d.to, "cli", "auto-switch");
+    arrived(s, d.to);
     s.lastSwitch.claude!.because = d.limit
       ? { used: shareOfLimit(d.limit) }
       : { to: resetsAtOf(d.first.to), from: resetsAtOf(d.first.from) };

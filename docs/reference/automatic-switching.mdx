@@ -36,16 +36,18 @@ The app's offer once an account runs out follows the same rules at 100%.
 
 Under **Resets Soonest**, Pitboard also switches while no limit of the account in use has reached the share. Anthropic resets each account's week at a fixed time of its own, and what the account leaves unused that week is lost then.
 
+Pitboard does this only from an account the automatic switch put in use. On an account you put in use yourself, by a switch, a sign-in or enrolling it, Pitboard waits until a limit reaches the share.
+
 Pitboard switches to the first account, by the order above, that:
 
 - Comes before the account in use: it has no weekly limit for all models and the account in use has or may have one, or both weeks have a known reset and its week resets more than a minute sooner.
 - Has used less than the share of every limit it has.
 - Has used no more of its five-hour limit than the account in use. An account without a five-hour limit counts as having used none.
-- Has a reading Anthropic gave in the last 15 minutes.
+- Has a reading Anthropic gave within 15 minutes of when Pitboard could next ask about it. Pitboard waits 3 minutes between asks about an account with a five-hour limit, and about the account in use. It waits 100 minutes between asks about a parked account with only a weekly limit.
 
 It never switches before the share between two accounts without a weekly limit for all models.
 
-Pitboard switches to an account before the share once, until that account reaches the share of a limit while in use or its week resets. After **Switch Back**, or a switch of your own, it does not switch to that account again before the share. Left at its five-hour limit, the account is switched back to once that limit resets, while its week still resets first.
+Pitboard switches to an account before the share once, until that account reaches the share of a limit while in use or its week resets. Left at its five-hour limit, the account is switched back to once that limit resets, while its week still resets first.
 
 It holds back without saying so for the 5 minutes after any switch, after a try that came to nothing, and while Claude Code signs in another way. `pitboard log` records each switch as `auto-switch`.
 
@@ -65,7 +67,9 @@ The app starts each text with a capital letter and ends it with a full stop.
 
 Where Anthropic has given no reading of an account that could qualify, `no_room` ends `, and there is no reading of personal from Anthropic yet`.
 
-`settling` counts from the switch, sign-in or enrolment that put the account in use.
+`settling` counts from the switch, sign-in or enrolment that put the account in use. An account the automatic switch put in use stops settling once Anthropic has answered about it since.
+
+`already_switched` holds only on an account you put back in use. An account the automatic switch put back is switched away from again at the share.
 
 In JSON, `no_room` is an event of its own. The other codes are the `reason` of a `skipped` event.
 
