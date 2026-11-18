@@ -32,6 +32,8 @@ jobs:
       crates: ${{ steps.check.outputs.crates }}
       latest: ${{ steps.check.outputs.latest }}
       signed: ${{ steps.check.outputs.signed }}
+      signature: ${{ steps.check.outputs.signature }}
+      policy: ${{ steps.check.outputs.policy }}
       linux: ${{ steps.linux.outputs.linux }}
       linux-suites: ${{ steps.linux.outputs.suites }}
       core: ${{ steps.core.outputs.core }}
@@ -44,13 +46,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SIGNER: ${{ vars.WINDOWS_SIGNER }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
+          POLICY: ${{ vars.WINDOWS_SIGNING_POLICY }}
         run: |
           manifest=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
             > "$RUNNER_TEMP/published"
           sh .github/scripts/release-kind.sh "$GITHUB_REF_NAME" "$manifest" \
-            "$RUNNER_TEMP/published" "$SIGNER" "$SUBJECT" > "$RUNNER_TEMP/kind"
+            "$RUNNER_TEMP/published" "$SIGNER" "$SUBJECT" "$POLICY" > "$RUNNER_TEMP/kind"
           version=$(sed -n 's/^version=//p' "$RUNNER_TEMP/kind")
           kind=$(sed -n 's/^kind=//p' "$RUNNER_TEMP/kind")
           # An rc has no section of its own.
@@ -394,6 +397,9 @@ jobs:
     timeout-minutes: 120
     # Takes deployments from v* tags only, and holds the signer's credentials.
     environment: windows-signing
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -408,6 +414,36 @@ jobs:
         with:
           pattern: unsigned-app-*
           path: ${{ runner.temp }}/unsigned-app
+      - name: What goes to the signer
+        if: needs.guard.outputs.policy != ''
+        shell: pwsh
+        run: |
+          $request = Join-Path $env:RUNNER_TEMP 'signing-request'
+          New-Item -ItemType Directory -Force -Path (Join-Path $request 'zips') | Out-Null
+          Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'unsigned\*.zip') -Destination (Join-Path $request 'zips')
+          Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'unsigned-app') -Destination (Join-Path $request 'app') -Recurse
+      - id: request
+        if: needs.guard.outputs.policy != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signing-request-windows
+          path: ${{ runner.temp }}/signing-request
+          if-no-files-found: error
+          overwrite: true
+      # Waits for the approval at SignPath, inside the job's two hours.
+      - if: needs.guard.outputs.policy != ''
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: pitboard
+          signing-policy-slug: ${{ needs.guard.outputs.policy }}
+          artifact-configuration-slug: windows-files
+          github-artifact-id: ${{ steps.request.outputs.artifact-id }}
+          parameters: |
+            version: "${{ needs.guard.outputs.base }}"
+          wait-for-completion-timeout-in-seconds: 6600
+          output-artifact-directory: ${{ runner.temp }}/signed-request
       - name: Sign
         shell: pwsh
         env:
@@ -422,14 +458,17 @@ jobs:
             Write-Output 'No signer is set, so this beta ships its Windows zips and app unsigned.'
             exit 0
           }
-          throw "no signing step for $env:SIGNER"
+          if ($env:SIGNER -ne 'signpath') { throw "no signing step for $env:SIGNER" }
+          $from = Join-Path $env:RUNNER_TEMP 'signed-request'
+          Copy-Item -Path (Join-Path $from 'zips\*.zip') -Destination $dist
+          Copy-Item -LiteralPath (Join-Path $from 'app') -Destination (Join-Path $env:RUNNER_TEMP 'signed-app') -Recurse
       - name: Every signature
         shell: pwsh
         env:
-          SIGNED: ${{ needs.guard.outputs.signed }}
+          SIGNATURE: ${{ needs.guard.outputs.signature }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
         run: |
-          $mode = if ($env:SIGNED -eq 'true') { 'signed' } else { 'unsigned' }
+          $mode = $env:SIGNATURE
           $zips = @(Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'dist\*.zip') | ForEach-Object FullName)
           if ($zips.Count -ne 2) { throw "windows-sign has $($zips.Count) zips to hand on, not 2" }
           ./.github/scripts/verify-windows-signatures.ps1 -Path $zips -Mode $mode -Subject $env:SUBJECT `
@@ -583,11 +622,11 @@ jobs:
       - name: Every program of Pitboard's in it, and its package, as the signer left them
         shell: pwsh
         env:
-          SIGNED: ${{ needs.guard.outputs.signed }}
+          SIGNATURE: ${{ needs.guard.outputs.signature }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
           IMAGE: ${{ steps.msi.outputs.folder }}
         run: |
-          $mode = if ($env:SIGNED -eq 'true') { 'signed' } else { 'unsigned' }
+          $mode = $env:SIGNATURE
           $ours = @(Get-ChildItem -LiteralPath $env:IMAGE -Recurse -File |
             Where-Object { $_.Name -like 'pitboard*' -and $_.Extension -in '.exe', '.dll', '.msix' } | ForEach-Object FullName)
           ./.github/scripts/verify-windows-signatures.ps1 -Path $ours -Mode $mode -Subject $env:SUBJECT
@@ -649,6 +688,9 @@ jobs:
     timeout-minutes: 120
     # Takes deployments from v* tags only, and holds the signer's credentials.
     environment: windows-signing
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -658,6 +700,33 @@ jobs:
           pattern: unsigned-msi-*
           path: ${{ runner.temp }}/unsigned-msi
           merge-multiple: true
+      - name: What goes to the signer
+        if: needs.guard.outputs.policy != ''
+        shell: pwsh
+        run: |
+          $request = Join-Path $env:RUNNER_TEMP 'signing-request'
+          New-Item -ItemType Directory -Force -Path $request | Out-Null
+          Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'unsigned-msi\*.msi') -Destination $request
+      - id: request
+        if: needs.guard.outputs.policy != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signing-request-msi
+          path: ${{ runner.temp }}/signing-request
+          if-no-files-found: error
+          overwrite: true
+      # Waits for the approval at SignPath, inside the job's two hours.
+      - if: needs.guard.outputs.policy != ''
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: pitboard
+          signing-policy-slug: ${{ needs.guard.outputs.policy }}
+          artifact-configuration-slug: windows-msi
+          github-artifact-id: ${{ steps.request.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 6600
+          output-artifact-directory: ${{ runner.temp }}/signed-request
       - name: Sign
         shell: pwsh
         env:
@@ -671,7 +740,8 @@ jobs:
             Write-Output 'No signer is set, so this beta ships its MSIs unsigned.'
             exit 0
           }
-          throw "no signing step for $env:SIGNER"
+          if ($env:SIGNER -ne 'signpath') { throw "no signing step for $env:SIGNER" }
+          Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'signed-request\*.msi') -Destination $signed
       - name: Both MSIs, and no other file
         shell: pwsh
         run: |
@@ -723,11 +793,11 @@ jobs:
       - name: Every signature
         shell: pwsh
         env:
-          SIGNED: ${{ needs.guard.outputs.signed }}
+          SIGNATURE: ${{ needs.guard.outputs.signature }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
           INSTALLER: ${{ matrix.installer }}
         run: |
-          $mode = if ($env:SIGNED -eq 'true') { 'signed' } else { 'unsigned' }
+          $mode = $env:SIGNATURE
           $msi = Join-Path $env:RUNNER_TEMP "signed-msi\Pitboard-$env:GITHUB_REF_NAME-windows-$env:INSTALLER.msi"
           ./.github/scripts/verify-windows-signatures.ps1 -Path $msi -Mode $mode -Subject $env:SUBJECT `
             -Built (Join-Path $env:RUNNER_TEMP 'unsigned-msi')
@@ -1420,7 +1490,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INSTALLER: ${{ matrix.installer }}
-          SIGNED: ${{ needs.guard.outputs.signed }}
+          SIGNATURE: ${{ needs.guard.outputs.signature }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
         run: |
           $name = "Pitboard-$env:GITHUB_REF_NAME-windows-$env:INSTALLER.msi"
@@ -1428,7 +1498,7 @@ jobs:
           gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern $name --dir $dir
           if ($LASTEXITCODE -ne 0) { throw "gh release download exited $LASTEXITCODE" }
           $msi = Join-Path $dir $name
-          $mode = if ($env:SIGNED -eq 'true') { 'signed' } else { 'unsigned' }
+          $mode = $env:SIGNATURE
           ./.github/scripts/verify-windows-signatures.ps1 -Path $msi -Mode $mode -Subject $env:SUBJECT
           $folder = & ./.github/scripts/extract-msi.ps1 -Msi $msi -Destination (Join-Path $env:RUNNER_TEMP 'image')
           $key = & ./.github/scripts/read-assembly.ps1 -Assembly (Join-Path $folder 'Pitboard.dll') -Metadata WindowsUpdatePublicKey
@@ -2096,10 +2166,10 @@ jobs:
       - name: Every signature
         shell: pwsh
         env:
-          SIGNED: ${{ needs.guard.outputs.signed }}
+          SIGNATURE: ${{ needs.guard.outputs.signature }}
           SUBJECT: ${{ vars.WINDOWS_SIGNER_SUBJECT }}
         run: |
-          $mode = if ($env:SIGNED -eq 'true') { 'signed' } else { 'unsigned' }
+          $mode = $env:SIGNATURE
           ./.github/scripts/verify-windows-signatures.ps1 -Path $env:ZIP, $env:MSI -Mode $mode -Subject $env:SUBJECT
       - name: The command line in it, as a fresh standard user
         shell: pwsh
