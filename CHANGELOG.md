@@ -7,6 +7,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Under Resets Soonest, Pitboard stays on an account you put in use yourself until a limit
+  reaches the share.
+
+### Fixed
+
+- Pitboard switches away from an account it put back in use itself once that account reaches
+  the share, where it stayed until the limit ran out.
+- Pitboard switches away from an account it just switched to as soon as Anthropic says that
+  account is at the share, where it waited 5 minutes.
+- Pitboard reads the account in use as often as an account with a five-hour limit, where an
+  account with only a weekly limit was read every 100 minutes.
+- Under Resets Soonest, Pitboard switches before the share to an account with only a weekly
+  limit, which it never did.
+
 ## [1.0.0-beta.14] - 2026-11-15
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

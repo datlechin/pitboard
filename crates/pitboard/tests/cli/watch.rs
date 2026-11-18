@@ -119,18 +119,33 @@ fn an_account_at_the_share_is_switched_from_once() {
 }
 
 /// Under `--order resets-soonest`, an account whose week resets first is switched to before any
-/// limit of the one in use reaches the share; under the default order nothing moves.
+/// limit of the one in use reaches the share, from an account Pitboard put in use and never from
+/// one a person did; under the default order nothing moves.
 #[test]
 fn under_resets_soonest_an_account_is_switched_to_before_any_limit_reaches_the_share() {
     let env = two_accounts("watch-resets-soonest");
+    let week_ends_later = |label: &str| {
+        let id = env.account_id(label);
+        env.edit_readings(|readings| {
+            let week = &mut readings[id.as_str()]["windows"][1]["resets_at"];
+            *week = json!(week.as_i64().expect("a reset") + 4 * 86_400);
+        });
+    };
     env.an_hour_on();
     env.measured(&[("alpha", 30.0, 20.0), ("beta", 10.0, 40.0)]);
-    let alpha = env.account_id("alpha");
-    env.edit_readings(|readings| {
-        let week = &mut readings[alpha.as_str()]["windows"][1]["resets_at"];
-        *week = json!(week.as_i64().expect("a reset") + 4 * 86_400);
-    });
+    week_ends_later("alpha");
+    let (out, err, code) = env.run(&["watch", "--once", "--json", "--order", "resets-soonest"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["event"], "idle", "{out}");
 
+    env.measured(&[("alpha", 96.0, 20.0), ("beta", 10.0, 40.0)]);
+    let (out, err, code) = env.run(&["watch", "--once", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["to"], "beta", "{out}");
+
+    env.an_hour_on();
+    env.measured(&[("alpha", 10.0, 40.0), ("beta", 30.0, 20.0)]);
+    week_ends_later("beta");
     let (out, err, code) = env.run(&["watch", "--once", "--json"]);
     assert_eq!(code, 0, "{err}");
     assert_eq!(envelope(&out)["data"]["event"], "idle", "{out}");
@@ -143,7 +158,7 @@ fn under_resets_soonest_an_account_is_switched_to_before_any_limit_reaches_the_s
         (
             &json!("switched"),
             &json!("resets_first"),
-            &json!("beta"),
+            &json!("alpha"),
             &Value::Null
         ),
         "{out}"
@@ -152,7 +167,7 @@ fn under_resets_soonest_an_account_is_switched_to_before_any_limit_reaches_the_s
         data["to_resets_at"].as_i64() < data["from_resets_at"].as_i64(),
         "{out}"
     );
-    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
 }
 
 /// The app with switching on and the watch service can decide at once from one reading, each
