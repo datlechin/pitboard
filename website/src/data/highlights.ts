@@ -1,6 +1,7 @@
 // One line per release, betas included, for the home page's Recent releases, 60 characters at
 // most. The build fails when the newest version in CHANGELOG.md, or one the table shows, has none.
 export const highlights: Record<string, string> = {
+  "1.0.0-beta.15": "Automatic switching no longer stops on a full account.",
   "1.0.0-beta.14": "Switching works again after Claude Code signs out.",
   "1.0.0-beta.13": "Pitboard runs on Windows 10 version 2004 and later.",
   "1.0.0-beta.12": "Max 20x shows as Ultra, and Max 5x as Max.",
