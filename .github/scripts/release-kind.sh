@@ -2,9 +2,9 @@
 # What a release tag makes, for release.yml's guard: key=value lines for $GITHUB_OUTPUT.
 set -eu
 
-if [ "$#" -ne 5 ]; then
+if [ "$#" -ne 6 ]; then
   echo "usage: release-kind.sh <tag> <manifest version> <published full tags file> <signer>" \
-    "<signer subject>" >&2
+    "<signer subject> <signing policy>" >&2
   exit 2
 fi
 tag=$1
@@ -14,6 +14,8 @@ published=$3
 # Windows has a signer.
 signer=$4
 subject=$5
+# The repository variable WINDOWS_SIGNING_POLICY: SignPath's policy for this tag.
+policy=$6
 
 refuse() {
   echo "$1" >&2
@@ -99,6 +101,27 @@ fi
 if [ "$signed" = true ] && [ -z "$subject" ]; then
   refuse "WINDOWS_SIGNER is $signer, and WINDOWS_SIGNER_SUBJECT names no subject to check"
 fi
+signature=unsigned
+signing_policy=
+if [ "$signed" = true ]; then
+  signature=signed
+  if [ "$signer" = signpath ]; then
+    signing_policy=$policy
+    case $policy in
+      release-signing) ;;
+      test-signing)
+        if [ "$kind" != rc ]; then
+          refuse "$tag would carry SignPath's test certificate, which only a release candidate does"
+        fi
+        signature=test
+        ;;
+      *)
+        refuse "WINDOWS_SIGNER is signpath, and WINDOWS_SIGNING_POLICY is neither release-signing \
+nor test-signing"
+        ;;
+    esac
+  fi
+fi
 
 echo "version=$version"
 echo "base=$base"
@@ -108,3 +131,5 @@ echo "windows=$windows"
 echo "crates=$crates"
 echo "latest=$latest"
 echo "signed=$signed"
+echo "signature=$signature"
+echo "policy=$signing_policy"
