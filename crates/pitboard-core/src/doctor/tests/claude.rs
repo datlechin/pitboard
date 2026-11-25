@@ -293,12 +293,12 @@ fn the_login_in_use_is_judged_by_when_its_refresh_token_expires_as_a_park_is() {
     let with_life = |at: i64| {
         words::refresh_life_and_keys(&fingerprint, &said::parked_life_column(at, now), &keys)
     };
-    let at = now + RENEW_WITHIN;
+    let at = now + SIGN_IN_WITHIN;
     assert_eq!(
         credential(&mut f, Some(at)),
         (Level::Ok, with_life(at), String::new())
     );
-    let at = now + RENEW_WITHIN - 1;
+    let at = now + SIGN_IN_WITHIN - 1;
     assert_eq!(
         credential(&mut f, Some(at)),
         (Level::Warn, with_life(at), words::EXPIRES_SOON.into())

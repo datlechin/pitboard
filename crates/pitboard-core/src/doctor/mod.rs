@@ -28,7 +28,7 @@ use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude_paths;
 use crate::provider::claude::{daemon, slot};
 use crate::state::State;
-pub use crate::state::renewal_due;
+pub use crate::state::{renewal_due, sign_in_due};
 use crate::{home, store, switch};
 use claude::FallbackLogin;
 use codex::CodexFacts;

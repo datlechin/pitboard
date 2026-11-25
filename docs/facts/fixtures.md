@@ -56,7 +56,7 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
     that is not there, which was the Swift fixture's one thing worth looking at. oneTool's
     one thing is the world's own instead: personal's parked login lapses in two days, where
     the Swift fixture's lasted eleven, and doctor warns of a parked login whose refresh token
-    lapses within three days. So oneTool says "One thing is worth looking at." as before, of
+    lapses within seven days. So oneTool says "One thing is worth looking at." as before, of
     personal's parked login rather than of daily renewal. stuck has doctor's "interrupted
     switch" worth looking at besides, so it says "2 things are worth looking at.".
   - A read lists the account in use first, and the read of what is known lists only

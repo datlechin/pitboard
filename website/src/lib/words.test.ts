@@ -25,6 +25,7 @@ import {
   paceOf,
   parkedLifeColumn,
   RENEW_WITHIN,
+  SIGN_IN_WITHIN,
   MARGIN,
   TOO_EARLY,
   resets,
@@ -82,7 +83,7 @@ function rustTest(source: string, name: string): string {
 
 // An integer as the Rust tests write one: `2 * 86_400 - 1`, `25 * DAY + 3 * HOUR`.
 const NOW = 1_789_935_000;
-const named = { DAY, HOUR, MINUTE, WEEK, RENEW_WITHIN, NOW };
+const named = { DAY, HOUR, MINUTE, WEEK, RENEW_WITHIN, SIGN_IN_WITHIN, NOW };
 function value(expression: string): number {
   const clean = expression.replace(/(\d)_(?=\d)/g, "$1").trim();
   assert.match(clean, /^[\w\s+\-*/()]+$/, expression);
@@ -190,6 +191,8 @@ test("a parked login's life in a column reads as words.rs's a_parked_logins_life
     assert.equal(parkedLifeColumn(NOW + left, NOW), words);
   assert.ok(core("state.rs").includes("pub(crate) const RENEW_WITHIN: i64 = 3 * 86_400;"));
   assert.equal(RENEW_WITHIN, 3 * DAY);
+  assert.ok(core("state.rs").includes("pub(crate) const SIGN_IN_WITHIN: i64 = 7 * 86_400;"));
+  assert.equal(SIGN_IN_WITHIN, 7 * DAY);
 });
 
 test("a Claude Desktop sign-in's life in a column is hedged, as words.rs's a_session_life_is_hedged_and_never_says_expired says", () => {

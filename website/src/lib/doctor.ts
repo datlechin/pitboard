@@ -4,7 +4,7 @@
 // render/doctor.rs `human` lays them out.
 import { typed, type State } from "./model.ts";
 import type { Platform } from "./platform.ts";
-import { moment, parkedLifeColumn, renewalDue, sessionLifeColumn } from "./words.ts";
+import { moment, parkedLifeColumn, sessionLifeColumn, signInDue } from "./words.ts";
 
 export type Level = "ok" | "warn" | "fail";
 
@@ -71,7 +71,7 @@ function park(s: State, a: State["accounts"][number]): Row {
   const life = parkedLifeColumn(at, s.now);
   if (at <= s.now)
     return row("warn", `its parked login ${life} ${moment(at, s.now)}`, signInAgain(typed(a)));
-  if (renewalDue(at, s.now)) return row("warn", `its parked login ${life}`, signInAgain(typed(a)));
+  if (signInDue(at, s.now)) return row("warn", `its parked login ${life}`, signInAgain(typed(a)));
   return row("ok", `parked, ${life}`);
 }
 
@@ -111,7 +111,7 @@ export function doctorRows(snapshot: Row[], s: State, platform: Platform): Row[]
       const life = at === undefined ? "" : `  ·  ${parkedLifeColumn(at, s.now)}`;
       const detail = `refresh ${claude.login ?? ""}${life}  ·  keys ["claudeAiOauth"]`;
       const advice =
-        at === undefined ? "" : at <= s.now ? EXPIRED : renewalDue(at, s.now) ? EXPIRES_SOON : "";
+        at === undefined ? "" : at <= s.now ? EXPIRED : signInDue(at, s.now) ? EXPIRES_SOON : "";
       put([{ ...r, detail, level: advice ? "warn" : "ok", advice }]);
     } else if (r.name === "accounts") {
       put([{ ...r, detail: enrolled(accounts.length) }]);

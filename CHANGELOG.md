@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Pitboard asks you to sign in to a Claude Code account again 7 days before its sign-in ends,
+  where it waited until 3 days before.
+
 ### Fixed
 
 - Pitboard refreshes a saved sign-in only once it can keep the answer, so a full disk no longer

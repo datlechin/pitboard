@@ -40,7 +40,7 @@ not measured, and the register cannot hold them, since every fact in it is read 
   open session after a switch. Pitboard moves the login alone.
 - Whether a renewal's answer names `refresh_token_expires_in`, and so moves the end of a parked
   login (`refresh_token_end`). Pitboard keeps the date a login has until an answer names one,
-  as Claude Code does, and asks for a sign-in within 3 days of it.
+  as Claude Code does, and asks for a sign-in within 7 days of it.
 - The 33 seconds on macOS on a build after 2.1.278: `credential_cache` was measured there with
   2.1.278 alone. On Linux 2.1.314 opens its login file again at the next request once it
   changed ([The Linux session machines](linux-session.md#claude-code-and-codex)). Pitboard gives
