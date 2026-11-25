@@ -385,6 +385,7 @@ pub(crate) fn sign_in_title(front: Front, standing: Standing) -> String {
     match standing {
         Standing::LoginExpired => titled(front, "Sign-In Expired", "Sign-in expired"),
         Standing::NothingParked => titled(front, "Not Signed In", "Not signed in"),
+        Standing::Expiring => titled(front, "Sign-In Ends Soon", "Sign-in ends soon"),
         _ => titled(front, "Sign-In No Longer Works", "Sign-in no longer works"),
     }
 }

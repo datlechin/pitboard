@@ -233,16 +233,22 @@ pub enum Intent {
     /// front had as `Front::surfaces` says until it sends this: a status item comes and goes
     /// as the system's host for one does. Neither shipping app sends it: each has its status
     /// item from launch to quit.
-    SurfacesChanged { surfaces: Surfaces },
+    SurfacesChanged {
+        surfaces: Surfaces,
+    },
     /// Read the accounts again. `asked` is somebody asking, from a Refresh button, rather
     /// than something producing it, and has each tool's service asked about every account
     /// whatever it was asked moments ago.
-    Refresh { asked: bool },
+    Refresh {
+        asked: bool,
+    },
     /// Switch to `account`, from the window, the menu or a notification. One switch at a
     /// time: asked for while another is under way, it does nothing, beyond bringing a question
     /// about quitting an app back to the front. Where an app keeps the tool's login in memory,
     /// as ChatGPT keeps Codex's, the switch waits on `Snapshot::quit_question`.
-    SwitchTo { account: AccountKey },
+    SwitchTo {
+        account: AccountKey,
+    },
     /// The person let Pitboard quit the app the quit question last asked names, whatever it
     /// asked for: a switch, a sign-in, recording an account. It is asked to quit the way a
     /// person quits it, what was asked for is done once it has, and the copy that was running
@@ -254,36 +260,54 @@ pub enum Intent {
     /// an alert can say it closed before its button acts: it is taken before or after
     /// `KeepAppOpen` closed that question, and does nothing once taken, or once another
     /// switch has been asked for in that question's place.
-    QuitAndSwitch { account: AccountKey },
+    QuitAndSwitch {
+        account: AccountKey,
+    },
     /// From the notification or notice of a switch by itself, which left `from` for `to`.
-    SwitchBack { from: AccountKey, to: AccountKey },
+    SwitchBack {
+        from: AccountKey,
+        to: AccountKey,
+    },
     /// The person kept the app open, or the question was closed some other way: the quit
     /// question goes, and nothing is switched.
     KeepAppOpen,
     /// The person agreed to put `account` in place of a login in use its service refuses for
     /// good, which the switch to it asked about. It names the question it answers, and is
     /// taken before or after `KeepLogin` closed that question, as `QuitAndSwitch` is.
-    ReplaceAndSwitch { account: AccountKey },
+    ReplaceAndSwitch {
+        account: AccountKey,
+    },
     /// The person kept the login in use, or the question was closed some other way: the
     /// question goes, and nothing is switched.
     KeepLogin,
     /// Somebody has read what `tool`'s last switch said, and put it away.
-    DismissSwitch { tool: Tool },
+    DismissSwitch {
+        tool: Tool,
+    },
     /// Somebody keeps one account of `tool` on purpose: "Not Now" to the nudge to add a
     /// second. Per tool, since that says nothing about another, and kept in the app's
     /// preferences in Pitboard's directory.
-    DeclineSecondAccount { tool: Tool },
+    DeclineSecondAccount {
+        tool: Tool,
+    },
     /// Give up on an interrupted switch nothing can finish, keeping every login it names.
     AbandonStuckSwitch,
     /// Somebody has read what giving up on an interrupted switch kept, and put it away.
     DismissAbandoned,
     /// A new account is added under a name from its email, which `Sheet::Name` offers to change.
-    SignIn { tool: Tool, again: Option<String> },
+    SignIn {
+        tool: Tool,
+        again: Option<String>,
+    },
+    // Each account due a sign-in, one after another: the next sheet is put up once the last signed in.
+    SignInToAll,
     /// Type back the code the browser showed, to the sign-in under way, once its tool asks
     /// for one: `RunningSignIn::wants_code`. Taken without the white space around it, and one
     /// with nothing else in it is not typed. A code is asked for once, and again once Claude
     /// Code has refused the one typed back, since it reads another in the same sign-in.
-    PasteCode { code: String },
+    PasteCode {
+        code: String,
+    },
     /// Stop the sign-in under way, at whichever of three moments it comes. Before the tool
     /// has started, the tool is stopped once it has, rather than watched. While the tool waits
     /// on the browser, it is stopped now, and nothing is enrolled. Once the tool has finished
@@ -295,14 +319,20 @@ pub enum Intent {
     /// sign-in under way keeps its own sheet: replacing it would leave the tool's sign-in
     /// running with nothing on screen to finish or stop it. A sheet that signs in, put up
     /// where none was, asks again which tools are installed.
-    PresentSheet { sheet: Sheet },
+    PresentSheet {
+        sheet: Sheet,
+    },
     /// The sheet over the main window has gone, however it went, and what went wrong in it
     /// goes with it. A sign-in it started goes on until it ends or is cancelled.
     CloseSheet,
     /// Show `place`, or the main window as it was left: `Snapshot::window_request` moves.
-    Show { place: Option<Place> },
+    Show {
+        place: Option<Place>,
+    },
     /// Anything that starts the app can hand it any text, so only what a notice asks for is read.
-    NotificationClicked { argument: String },
+    NotificationClicked {
+        argument: String,
+    },
     /// Somebody has read the failure the window said, and put it away.
     DismissFailure,
     /// The sheet's name or tool changed, so the failure about the last of them goes.
@@ -311,21 +341,30 @@ pub enum Intent {
     LookForTools,
     /// Add the login `tool` has signed in now, with no browser, as `SignIn` adds a new one;
     /// where the tool stores none, its sign-in is offered instead.
-    Enrol { tool: Tool },
+    Enrol {
+        tool: Tool,
+    },
     /// Give `account` the name `to`, inside its own tool: the Rename sheet's Save, by the same
     /// rules, and a name it has already saves nothing. What was said about the account is said
     /// about it under its new name.
-    Rename { account: AccountKey, to: String },
+    Rename {
+        account: AccountKey,
+        to: String,
+    },
     /// Drop `account`, and the login parked for it, once somebody has answered the question
     /// its row asks first. What goes wrong is said in the window.
-    Forget { account: AccountKey },
+    Forget {
+        account: AccountKey,
+    },
     /// Write `account`, the one in use, into its tool's config where that names another
     /// account, as `pitboard use` with it does: the button on the notice that says Claude
     /// Code's config names another account. A change like a rename and not a switch, so
     /// nothing said about a switch or the account in use goes. Refused, writing nothing, where
     /// another account is in use by then. What it warned of is said beside the read after it,
     /// and what stopped it in the window.
-    UpdateConfig { account: AccountKey },
+    UpdateConfig {
+        account: AccountKey,
+    },
     /// Put away the login left in the file behind Claude Code's store, as the sheet for it
     /// says, `Sheet::Stow`: once that sheet has looked, and only while the file still holds
     /// what it looked at. Not where the login is of an account nobody enrolled, which the sheet
@@ -342,7 +381,9 @@ pub enum Intent {
     /// every check `pitboard doctor` makes; for `Pane::Activity`, what Pitboard has changed;
     /// for `Pane::Accounts`, the accounts where the numbers shown are a minute old, as for
     /// `Glanced`. What was shown stays meanwhile.
-    PaneShown { pane: Pane },
+    PaneShown {
+        pane: Pane,
+    },
     /// Read the daily renewal schedule again, and the watch service where the settings offer
     /// it, as the settings do when they show them: a terminal can change either while the app
     /// runs.
@@ -353,45 +394,79 @@ pub enum Intent {
     /// it does nothing. Turning it on is refused, with why, where this copy of the app has no
     /// command line that a schedule would keep reaching, and nothing is asked of the
     /// scheduler; turning it off never is, since that is how such a schedule is taken away.
-    SetSchedule { on: bool },
+    SetSchedule {
+        on: bool,
+    },
     /// Have this machine's own service manager run the automatic switch and the warm-ups from
     /// each sign-in, at the share the settings have, or take that away: the switch
     /// `MachineShown::watch_service` offers, on a front with no status item to keep Pitboard
     /// running once its window is closed, and taken only there. One change at a time, refused
     /// as `SetSchedule` is.
-    SetWatchService { on: bool },
+    SetWatchService {
+        on: bool,
+    },
     /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
-    SetAtLimit { choice: AtLimit, at: u8 },
+    SetAtLimit {
+        choice: AtLimit,
+        at: u8,
+    },
     /// Changes only the action, preserving shares whose snapshot may not have arrived yet.
-    SetAtLimitChoice { choice: AtLimit },
+    SetAtLimitChoice {
+        choice: AtLimit,
+    },
     /// Changes only the short-window share, preserving the current action and weekly share.
-    SetAtLimitShare { at: u8 },
+    SetAtLimitShare {
+        at: u8,
+    },
     /// Whether weekly limits trigger the chosen action, and the share kept for them.
-    SetWeeklyLimit { on: bool, at: u8 },
+    SetWeeklyLimit {
+        on: bool,
+        at: u8,
+    },
     /// Changes only whether weekly limits trigger, retaining the current weekly share.
-    SetWeeklyLimitEnabled { on: bool },
+    SetWeeklyLimitEnabled {
+        on: bool,
+    },
     /// Changes only the weekly share, retaining whether its trigger is enabled.
-    SetWeeklyLimitShare { at: u8 },
+    SetWeeklyLimitShare {
+        at: u8,
+    },
     /// Which account goes first when Pitboard picks one, taken as `SetAtLimit` is.
-    SetOrder { order: SwitchOrder },
+    SetOrder {
+        order: SwitchOrder,
+    },
     /// Whether to show each limit’s pace, independent of automatic switching.
-    SetShowPace { on: bool },
+    SetShowPace {
+        on: bool,
+    },
     /// "Not Now" to a setup tip, kept with the app's preferences.
-    DeclineTip { tip: Tip },
+    DeclineTip {
+        tip: Tip,
+    },
     /// What the app's system says of opening the app at login. A setup step offers it for the
     /// app to do itself, which then says what its system says.
-    OpensAtLogin { on: bool },
+    OpensAtLogin {
+        on: bool,
+    },
     /// The settings, on what happens at a limit, from the tip that asks, which it ends.
     ShowLimits,
     /// Turned on, an account due is warmed up at once.
-    SetWarm { account: AccountKey, on: bool },
+    SetWarm {
+        account: AccountKey,
+        on: bool,
+    },
     /// Warm up accounts only from `from` to `to`, in minutes of the day, `to` up to 24 hours;
     /// a `from` later than `to` runs past midnight.
-    SetWarmRange { from: u16, to: u16 },
+    SetWarmRange {
+        from: u16,
+        to: u16,
+    },
     /// Warm up `account` now, whatever the span of the day: its own menu's **Warm Up Now**.
     /// One warm-up at a time: asked for while one is under way, it does nothing. What goes
     /// wrong is said in the window.
-    WarmNow { account: AccountKey },
+    WarmNow {
+        account: AccountKey,
+    },
     /// Look for the `pitboard` a terminal would run, as the settings do when they show it, and
     /// as an app does once it has linked its own onto the `PATH`.
     LookForCommandLine,
@@ -400,32 +475,52 @@ pub enum Intent {
     /// app makes it, since a store made and never recorded would never be deleted, and once
     /// it is, `AccountWindowsShown::open` lists the window with the page it starts at. A
     /// store is compared without regard to case.
-    WindowOpened { store: String },
+    WindowOpened {
+        store: String,
+    },
     /// The window whose store is `store` has closed.
-    WindowClosed { store: String },
+    WindowClosed {
+        store: String,
+    },
     /// The page of the window whose store is `store` is now `url`: kept as the page it opens
     /// at next time, where it is one of its site's own pages and not its sign-in.
-    PageShown { store: String, url: String },
+    PageShown {
+        store: String,
+        url: String,
+    },
     /// Everything the window whose store is `store` keeps was removed, as somebody asked:
     /// the page it was last on goes too.
-    WebsiteDataRemoved { store: String },
+    WebsiteDataRemoved {
+        store: String,
+    },
     /// The app deleted the store `store`, which `AccountWindowsShown::deleting` asked for,
     /// and everything in it.
-    StoreDeleted { store: String },
+    StoreDeleted {
+        store: String,
+    },
     /// The app could not delete the store `store`, which something still holds: it stays
     /// recorded, and is asked for again after the next read.
-    StoreHeld { store: String },
+    StoreHeld {
+        store: String,
+    },
     /// A Pitboard link the app was asked to open, as `text`, such as one the Share extension
     /// wrote. Nothing opens by itself: it waits in `AccountWindowsShown::picker` for somebody
     /// to choose an account, replacing one still waiting.
-    LinkArrived { text: String },
+    LinkArrived {
+        text: String,
+    },
     /// Somebody chose the account whose store is `store` for the link `arrival` names, and
     /// the app opens that account's window: the link is its first page, or loads in it where
     /// it is open. Only once `LinkPicker::armed` says Open answers, and only for the link
     /// still waiting.
-    OpenLink { arrival: u64, store: String },
+    OpenLink {
+        arrival: u64,
+        store: String,
+    },
     /// The picker on the link `arrival` names was closed without a choice.
-    DismissLink { arrival: u64 },
+    DismissLink {
+        arrival: u64,
+    },
     /// A page of the window whose store is `store` started a download, which the app calls
     /// `id`, named `name` after the address it came from where that names one.
     DownloadStarted {
@@ -435,15 +530,26 @@ pub enum Intent {
     },
     /// The download `id` is saving to `file`, the path the app chose with
     /// `download_destination`.
-    DownloadSaving { id: String, file: String },
+    DownloadSaving {
+        id: String,
+        file: String,
+    },
     /// The download `id` has ended.
-    DownloadEnded { id: String, end: DownloadEnd },
+    DownloadEnded {
+        id: String,
+        end: DownloadEnd,
+    },
     /// Somebody cleared the downloads of the window whose store is `store` that have ended.
-    ClearDownloads { store: String },
+    ClearDownloads {
+        store: String,
+    },
     /// Once `Snapshot::uninstall` was confirmed: nothing more is read or written until it ends.
     Uninstall,
     /// From a widget, a control or an intent, answered by `request` in `Snapshot::answers`.
-    Outside { request: u64, ask: OutsideAsk },
+    Outside {
+        request: u64,
+        ask: OutsideAsk,
+    },
 }
 
 /// Never more than a click in the app does.

@@ -90,11 +90,13 @@ pub(crate) enum World {
     /// `WarmUp`'s accounts with switching by itself on and work's five-hour limit 97% used, so
     /// the app switches Claude Code to personal as it starts.
     SwitchedByItself,
+    // `OneTool` with old's expired park beside personal's, which ends in two days: both are due a sign-in.
+    SignInsDue,
 }
 
 impl World {
     /// Every world, in the order the macOS app's `Fixture` listed them.
-    pub(crate) const ALL: [World; 16] = [
+    pub(crate) const ALL: [World; 17] = [
         World::TwoTools,
         World::OneTool,
         World::Empty,
@@ -111,6 +113,7 @@ impl World {
         World::LeftInFile,
         World::LoginReplaced,
         World::SwitchedByItself,
+        World::SignInsDue,
     ];
 
     /// Its name, as `PITBOARD_FIXTURE` gives it and the UI tests launch it.
@@ -132,6 +135,7 @@ impl World {
             World::LeftInFile => "leftInFile",
             World::LoginReplaced => "loginReplaced",
             World::SwitchedByItself => "switchedByItself",
+            World::SignInsDue => "signInsDue",
         }
     }
 
@@ -165,6 +169,8 @@ impl World {
             | World::LeftInFile
             | World::LoginReplaced
             | World::SwitchedByItself => &[ProviderId::Claude, ProviderId::Codex],
+            // No Codex to offer, so its tip is the one about a limit, as twoTools' is.
+            World::SignInsDue => &[ProviderId::Claude],
             World::ClaudeDesktop | World::ClaudeDesktopOpen => {
                 &[ProviderId::Claude, ProviderId::Desktop]
             }
@@ -921,19 +927,25 @@ fn refusing_program(path: &Path) -> Result<(), Unmade> {
 fn seed(world: World, machine: &Stage) -> Result<(), Unmade> {
     match world {
         // In the order it happened, which is the order the log keeps.
+        // personal's park lasts, so old alone is due a sign-in.
         World::TwoTools | World::ChatGptOpen => {
             expired(machine)?;
             codex_in_use(machine)?;
-            claude_accounts(machine)?;
+            claude_accounts(machine, 20 * DAY)?;
             codex_parked(machine)?;
             claude_switches(machine)
         }
         World::OneTool => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
+            claude_switches(machine)
+        }
+        World::SignInsDue => {
+            expired(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)
         }
         World::ClaudeDesktop | World::ClaudeDesktopOpen => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)?;
             if world.has_claude_desktop() {
                 claude_desktop(machine)?;
@@ -941,23 +953,23 @@ fn seed(world: World, machine: &Stage) -> Result<(), Unmade> {
             Ok(())
         }
         World::ReadFailure => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)?;
             unreadable_index(machine)
         }
         World::Stuck => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)?;
             interrupted(machine)
         }
         World::LeftInFile => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)?;
             left_in_a_file(machine);
             Ok(())
         }
         World::LoginReplaced => {
-            claude_accounts(machine)?;
+            claude_accounts(machine, 2 * DAY)?;
             claude_switches(machine)?;
             signed_in_outside(machine)
         }
@@ -1048,14 +1060,14 @@ fn uses(machine: &Stage, person: &Person) {
 /// and personal signed in privately and parked from the app two days ago. Personal's parked
 /// login lasts two days more, so it is due to be renewed, and doctor warns of it, as it does
 /// of every parked login that is due.
-fn claude_accounts(machine: &Stage) -> Result<(), Unmade> {
+fn claude_accounts(machine: &Stage, personal_lasts: i64) -> Result<(), Unmade> {
     let (work, personal) = (work(), personal());
     uses(machine, &work);
     uses(machine, &personal);
     let now = machine.now;
     let login = machine.login(&work, now + DAY, now + 30 * DAY);
     machine.enrolled(&work, "work", &login, "cli", 3 * DAY)?;
-    let login = machine.login(&personal, now + DAY, now + 2 * DAY);
+    let login = machine.login(&personal, now + DAY, now + personal_lasts);
     machine.parked(&personal, "personal", &login, "app", 2 * DAY)
 }
 

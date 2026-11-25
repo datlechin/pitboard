@@ -70,6 +70,12 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   with Claude Code itself over work's only login, recorded by a terminal's read ten minutes
   before. Every read, the one of what is known too, warns `login_replaced`, work's row reads
   `login_replaced`, and the app's first read posts it.
+- signInsDue, which the Swift fixture never had, is oneTool with twoTools' old beside it and
+  Claude Code alone installed, so its tip is the one about a limit:
+  old's parked login has expired and personal's ends in two days, so the window's notice,
+  the menu's Sign In to All 2 Accounts… and one notification offer both. twoTools'
+  personal lasts 20 days, so old alone is due there and its tip still shows on Windows,
+  which holds a tip back while a notice is up.
 - stuck shows the notice offering Give Up… as the app starts, as the Swift fixture did, now
   from the core's own read: a read says an interrupted switch is waiting wherever the next
   change would be refused over it, as a warning with the refusal's code,

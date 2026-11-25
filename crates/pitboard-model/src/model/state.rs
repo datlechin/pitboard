@@ -956,6 +956,22 @@ struct Replacing {
     asked: bool,
 }
 
+// Sign In to All under way: the account whose sheet is up, whether it signed in, and those left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SignInAll {
+    pub(crate) current: Key,
+    pub(crate) done: bool,
+    pub(crate) left: Vec<Key>,
+    pub(crate) of: usize,
+}
+
+impl SignInAll {
+    // Which of them the sheet up is, from 1.
+    pub(crate) fn at(&self) -> usize {
+        self.of - self.left.len()
+    }
+}
+
 /// A sign-in under way, as the Swift model's `SigningIn` held it.
 ///
 /// The Swift kept the sheet it was started from, to close only that one once it finished and
@@ -1119,6 +1135,7 @@ pub(crate) struct State {
     sign_in_holding: Option<u64>,
     /// How many sign-ins have been asked for, which numbers the next.
     sign_ins: u64,
+    pub(crate) sign_in_all: Option<SignInAll>,
     /// What a finished sign-in or a config update warned about, said beside the read after it
     /// once that read has landed, which would otherwise put it away: by a number of its own.
     said_after_read: Vec<(u64, Vec<Warning>)>,
@@ -1255,6 +1272,7 @@ impl State {
             sign_in_holding: None,
             sign_ins: 0,
             said_after_read: Vec::new(),
+            sign_in_all: None,
             sayings: 0,
             sheet: None,
             sheet_failure: None,
@@ -1313,6 +1331,7 @@ impl State {
             Msg::Tick | Msg::Stop => {}
         }
         self.go_off(now, &mut jobs);
+        self.sign_in_next(&mut jobs);
         self.follow_windows(now, &mut jobs);
         self.take_held(now, &mut jobs);
         if self.removing.is_some() {
@@ -1587,9 +1606,12 @@ impl State {
                 self.moves_given_up.clear();
             }
             Intent::SignIn { tool, again } => self.sign_in(tool.into(), again, jobs),
+            Intent::SignInToAll => self.sign_in_to_all(jobs),
             Intent::PasteCode { code } => self.paste(&code, jobs),
             // Its button holds back while an app is quit for it; one sent anyway parks nothing.
             Intent::CancelSignIn => {
+                // A close sends it first, also once the sign-in has just finished.
+                self.sign_in_all = None;
                 // Before its tool has started there is nothing to stop yet: it is stopped as
                 // it starts.
                 if let Some(signing) = self.signing_in.take() {
@@ -1618,6 +1640,8 @@ impl State {
                 self.sheet = None;
                 self.sheet_failure = None;
                 self.left = None;
+                // Closed before its account signed in, it stops there.
+                self.sign_in_all.take_if(|run| !run.done);
             }
             Intent::Show { place: None } if self.loading_kept => self.window_waits = true,
             Intent::Show { place } => self.show(place),
@@ -1632,6 +1656,7 @@ impl State {
                     };
                     self.present_sheet(sheet, jobs);
                 }
+                Clicked::SignInToAll => self.sign_in_to_all(jobs),
             },
             Intent::DismissFailure => self.presented = None,
             Intent::DismissSheetFailure => self.sheet_failure = None,
@@ -2358,6 +2383,14 @@ impl State {
     /// Puts `sheet` over the main window, opening it on the accounts the sheet is about, or
     /// over the macOS welcome while it is shown.
     fn present_sheet(&mut self, sheet: Sheet, jobs: &mut Vec<Job>) {
+        if self.signing_in.is_none() {
+            self.sign_in_all.take_if(|run| {
+                sheet
+                    != Sheet::SignInAgain {
+                        account: run.current.clone().into(),
+                    }
+            });
+        }
         // A sign-in under way keeps its sheet, and so does a change of an app's login from
         // the moment Pitboard asks whether the app runs: replacing it would leave the change
         // running with nothing on screen to finish or stop it.
@@ -2379,6 +2412,70 @@ impl State {
             self.sheet = Some(sheet);
         }
         self.show_over(Some(Place::Accounts));
+    }
+
+    fn due_sign_ins(&self) -> Vec<Key> {
+        self.status.as_ref().map_or_else(Vec::new, |status| {
+            crate::present::due_sign_ins(&status.accounts)
+                .into_iter()
+                .filter_map(|account| account.key.clone())
+                .collect()
+        })
+    }
+
+    fn sign_in_to_all(&mut self, jobs: &mut Vec<Job>) {
+        if self.signing_in.is_some() {
+            return;
+        }
+        let due = self.due_sign_ins();
+        let Some((first, left)) = due.split_first() else {
+            return;
+        };
+        let run = SignInAll {
+            current: first.clone(),
+            done: false,
+            left: left.to_vec(),
+            of: due.len(),
+        };
+        self.put_up_for(run, jobs);
+    }
+
+    // Kept only where its sheet went up: a save under way keeps the sheet it has.
+    fn put_up_for(&mut self, run: SignInAll, jobs: &mut Vec<Job>) {
+        let sheet = Sheet::SignInAgain {
+            account: run.current.clone().into(),
+        };
+        self.sign_in_all = Some(run);
+        self.present_sheet(sheet.clone(), jobs);
+        if self.sheet.as_ref() != Some(&sheet) {
+            self.sign_in_all = None;
+        }
+    }
+
+    // Once the read after the last sign-in has landed, the next account still due gets its sheet.
+    fn sign_in_next(&mut self, jobs: &mut Vec<Job>) {
+        let ready = self.sign_in_all.as_ref().is_some_and(|run| run.done)
+            && self.removing.is_none()
+            && self.reads == 0
+            && !self.holds_index()
+            && self.signing_in.is_none()
+            && self.sheet.is_none();
+        if !ready {
+            return;
+        }
+        let Some(mut run) = self.sign_in_all.take() else {
+            return;
+        };
+        let due = self.due_sign_ins();
+        let before = run.left.len();
+        run.left.retain(|key| due.contains(key));
+        run.of -= before - run.left.len();
+        if run.left.is_empty() {
+            return;
+        }
+        run.current = run.left.remove(0);
+        run.done = false;
+        self.put_up_for(run, jobs);
     }
 
     // A save that changes no app's login lets its sheet be replaced and answers in the window.
@@ -2616,13 +2713,17 @@ impl State {
 
     // Kept with what was told, so it is posted once for each account across launches, until
     // its login can be used again. One replaced outside Pitboard has a notice of its own.
+    // Two or more a browser signs in to, newly due, are told as one, which offers them all.
     fn tell_unusable(&mut self, read: &Status, jobs: &mut Vec<Job>) -> bool {
+        let due = crate::present::due_sign_ins(&read.accounts);
+        let grouped = due.len() > 1;
         let unusable: BTreeMap<String, &Account> = read
             .accounts
             .iter()
             .filter(|account| {
                 crate::present::needs_sign_in(account)
                     && account.standing != Standing::LoginReplaced
+                    || due.iter().any(|due| due.id == account.id)
             })
             .map(|account| (format!("{UNUSABLE}{}", account.id), account))
             .collect();
@@ -2630,13 +2731,24 @@ impl State {
         self.told
             .retain(|key, _| !key.starts_with(UNUSABLE) || unusable.contains_key(key));
         let mut kept = self.told.len() != before;
+        let mut newly_due = false;
         for (key, account) in unusable {
-            if self.told.insert(key, 0).is_none() {
-                kept = true;
+            if self.told.insert(key, 0).is_some() {
+                continue;
+            }
+            kept = true;
+            if grouped && due.iter().any(|due| due.id == account.id) {
+                newly_due = true;
+            } else {
                 jobs.push(Job::Post {
                     notice: crate::present::unusable_notice(self.front, account),
                 });
             }
+        }
+        if newly_due {
+            jobs.push(Job::Post {
+                notice: crate::present::sign_ins_due_notice(self.front, &due),
+            });
         }
         kept
     }
@@ -3589,6 +3701,13 @@ impl State {
                     after_change: true,
                     ..Asked::default()
                 };
+                if let Some(signing) = &signing
+                    && let Some(run) = self.sign_in_all.as_mut()
+                    && run.current.provider == signing.tool
+                    && signing.again.as_deref() == Some(run.current.label.as_str())
+                {
+                    run.done = true;
+                }
                 if let Some(signing) = signing {
                     // The sheet it was started from, if it is still up, gives way to the name.
                     self.sheet_failure = None;

@@ -130,6 +130,7 @@ fn each_fixture_starts_where_its_tests_expect() {
                 vec![work, "claude/personal"]
             }
             World::LoginReplaced => vec!["claude/personal, in use", "claude/work, login_replaced"],
+            World::SignInsDue => vec![work, "claude/old, parked_access_expired", "claude/personal"],
             World::OnlyOne => vec![work],
             World::Unnamed => vec!["dana@work.example, in use"],
             World::Empty | World::FirstLaunch | World::NoClaudeCode => Vec::new(),
@@ -199,6 +200,7 @@ fn each_fixture_starts_where_its_tests_expect() {
         let expected: &[&str] = match world {
             World::NoClaudeCode => &[],
             World::ClaudeDesktop | World::ClaudeDesktopOpen => &["claude", "desktop"],
+            World::SignInsDue => &["claude"],
             _ => &["claude", "codex"],
         };
         assert_eq!(installed, expected, "{}", world.name());
@@ -234,6 +236,7 @@ fn the_ui_tests_name_every_fixture_as_the_app_does() {
             "leftInFile",
             "loginReplaced",
             "switchedByItself",
+            "signInsDue",
         ]
     );
 }
@@ -2353,6 +2356,8 @@ fn an_exported_fixture_is_made_in_the_temporary_directory() {
             ("claude/personal".into(), false)
         ]
     );
+    // personal's sign-in ends soon, and what was told of it is kept before the folder goes.
+    eventually("told kept", || told.exists());
     model.shutdown();
 }
 
@@ -2534,8 +2539,14 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
     told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "claude/personal")
     });
-    eventually("posted the run-out", || !posted.posted().is_empty());
-    let posted = posted.posted();
+    let run_out = || {
+        (posted.posted().into_iter())
+            .filter(|notice| notice.id.starts_with("claude/personal/"))
+            .collect::<Vec<_>>()
+    };
+    eventually("posted the run-out", || !run_out().is_empty());
+    // personal's sign-in ends in two days, which is told on its own.
+    let posted = run_out();
     // When the limit resets is the read's.
     let resets_at = posted[0]
         .id

@@ -3009,9 +3009,19 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
         link: None,
         enabled: true,
     };
+    let all = MenuEntry {
+        title: words::sign_in_to_all(Front::MacMenuBar, 2),
+        subtitle: None,
+        help: None,
+        severity: None,
+        intent: Some(Intent::SignInToAll),
+        link: None,
+        enabled: true,
+    };
     assert_eq!(
         shown.menu_notices.sign_ins,
         [
+            all,
             entry("old", Standing::LoginExpired),
             entry("gone", Standing::NothingParked)
         ]
