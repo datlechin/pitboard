@@ -119,6 +119,7 @@ impl Pitboard {
         let state = state::load(&self.ctx)?;
         let report = status::report(&self.ctx, permit, &state, answers);
         let mut warnings: Vec<Warning> = stuck.map(Warning::SwitchStuck).into_iter().collect();
+        let mut held: Option<(Vec<String>, switch::Unwritable)> = None;
         for (key, outcome) in renewed {
             audit::record(&self.ctx, permit, "renew", &key.typed(), outcome.code());
             match outcome {
@@ -127,9 +128,14 @@ impl Pitboard {
                     label: state.typed(&key),
                 }),
                 Renewal::Failed(e) => warnings.push(Warning::RenewalFailed(e)),
+                Renewal::Held(why) => held
+                    .get_or_insert_with(|| (Vec::new(), why))
+                    .0
+                    .push(state.typed(&key)),
                 Renewal::Renewed | Renewal::Deferred => {}
             }
         }
+        warnings.extend(held.map(|(labels, why)| Warning::RenewalsHeld { labels, why }));
         warnings.extend(
             ProviderId::ALL
                 .iter()

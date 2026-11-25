@@ -1014,6 +1014,21 @@ impl Error {
         }
     }
 
+    // A write refused because the disk is full, where the system said so.
+    pub fn disk_full(&self) -> bool {
+        let mut cause: Option<&(dyn std::error::Error + 'static)> = Some(self);
+        while let Some(at) = cause {
+            if at
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::StorageFull)
+            {
+                return true;
+            }
+            cause = at.source();
+        }
+        false
+    }
+
     /// A stable identifier a program can branch on. Adding one is safe; renaming one is not.
     pub fn code(&self) -> &'static str {
         use Error::*;

@@ -713,6 +713,24 @@ fn in_app_any_warning(front: Front, warning: &CoreWarning) -> Option<String> {
             bare(label),
             sign_in_to_keep(&bare(label))
         ),
+        CoreWarning::RenewalsHeld { labels, why } => {
+            let whose = listed(labels.iter().map(|label| bare(label)));
+            let (saved, still) = match labels.len() {
+                1 => (format!("{whose}’s saved sign-in"), "it still works"),
+                _ => (format!("the saved sign-ins of {whose}"), "they still work"),
+            };
+            match why.disk_full {
+                true => format!(
+                    "Your disk is full, so Pitboard didn’t refresh {saved}. Nothing was sent, so \
+                     {still}. Free some space and Pitboard tries again."
+                ),
+                false => format!(
+                    "Pitboard couldn’t save, so it didn’t refresh {saved} ({}). Nothing was sent, \
+                     so {still}. Pitboard tries again at its next refresh.",
+                    why.detail
+                ),
+            }
+        }
         CoreWarning::LockCompromised { tool } => format!(
             "{} took back its lock during this change and may have written a sign-in at the same \
              time. Check that the right account is in use.",
@@ -1694,6 +1712,34 @@ mod tests {
                 "Pitboard saved work’s sign-in again, and Claude is signed out.",
                 "The switch to work had finished after all.",
             ]
+        );
+    }
+
+    #[test]
+    fn a_refresh_held_back_says_why_and_that_the_sign_ins_still_work() {
+        let held = |labels: &[&str], disk_full| CoreWarning::RenewalsHeld {
+            labels: labels.iter().map(|label| label.to_string()).collect(),
+            why: pitboard_core::switch::Unwritable {
+                code: "state_write_failed",
+                detail: "permission denied".into(),
+                disk_full,
+            },
+        };
+        assert_eq!(
+            in_app_warning(Front::MacMenuBar, &held(&["work", "home"], true)).as_deref(),
+            Some(
+                "Your disk is full, so Pitboard didn’t refresh the saved sign-ins of work and \
+                 home. Nothing was sent, so they still work. Free some space and Pitboard tries \
+                 again."
+            )
+        );
+        assert_eq!(
+            in_app_warning(Front::MacMenuBar, &held(&["work"], false)).as_deref(),
+            Some(
+                "Pitboard couldn’t save, so it didn’t refresh work’s saved sign-in (permission \
+                 denied). Nothing was sent, so it still works. Pitboard tries again at its next \
+                 refresh."
+            )
         );
     }
 

@@ -23,12 +23,13 @@ A parked login whose refresh token has expired is never due. Its account needs a
 
 `pitboard status` without `--offline` renews too, by the access token rule alone.
 
-`renew` asks Anthropic or OpenAI to renew each due parked login, with every request sent at once.
+`renew` asks Anthropic or OpenAI to renew each due parked login, with every request sent at once. Before it sends one, it checks that it can keep the answer: Pitboard's directory and the store of parked logins must take a write.
 
 `renew` never renews a login a tool is using. A parked login that copies one is dropped instead, since renewing it would spend the refresh token the tool holds. That account needs no sign-in.
 
 | Service answer | What happens | Logged outcome |
 | --- | --- | --- |
+| None: Pitboard could not write, such as on a full disk | Nothing is sent and nothing changes. The next run tries again. | `renewal_held_disk_full` when the disk is full, otherwise `renewal_held` |
 | Renewed | The renewed login replaces the parked one. | `renewed` |
 | Refused | The parked login is dropped. Its account needs a sign-in again. | `parked_login_refused` |
 | Unreachable, or asked for less traffic | Nothing changes. The next run tries again. | `renewal_deferred` |

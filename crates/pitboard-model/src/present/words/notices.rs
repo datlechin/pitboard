@@ -102,6 +102,8 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "auth_overridden" => "An environment variable overrides the sign-in",
         "fallback_login" => "A leftover sign-in file",
         "parked_login_refused" => "A saved sign-in no longer works",
+        "renewal_held_disk_full" => "Your disk is full",
+        "renewal_held" => "Saved sign-ins weren’t refreshed",
         "lock_compromised" => "A sign-in may have been written twice",
         "parks_pending_removal" => "Old saved sign-ins are still there",
         "written_on_the_command_line" => "A sign-in was passed on the command line",
@@ -463,6 +465,8 @@ mod tests {
             ),
             ("fallback_login", "A leftover sign-in file"),
             ("parked_login_refused", "A saved sign-in no longer works"),
+            ("renewal_held_disk_full", "Your disk is full"),
+            ("renewal_held", "Saved sign-ins weren’t refreshed"),
             ("lock_compromised", "A sign-in may have been written twice"),
             (
                 "parks_pending_removal",

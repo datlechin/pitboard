@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pitboard refreshes a saved sign-in only once it can keep the answer, so a full disk no longer
+  loses it, and says when the disk is full.
+
 ## [1.0.0-beta.15] - 2026-11-18
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding
