@@ -56,7 +56,7 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
     that is not there, which was the Swift fixture's one thing worth looking at. oneTool's
     one thing is the world's own instead: personal's parked login lapses in two days, where
     the Swift fixture's lasted eleven, and doctor warns of a parked login whose refresh token
-    lapses within three days. So oneTool says "One thing is worth looking at." as before, of
+    lapses within seven days. So oneTool says "One thing is worth looking at." as before, of
     personal's parked login rather than of daily renewal. stuck has doctor's "interrupted
     switch" worth looking at besides, so it says "2 things are worth looking at.".
   - A read lists the account in use first, and the read of what is known lists only
@@ -70,6 +70,12 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   with Claude Code itself over work's only login, recorded by a terminal's read ten minutes
   before. Every read, the one of what is known too, warns `login_replaced`, work's row reads
   `login_replaced`, and the app's first read posts it.
+- signInsDue, which the Swift fixture never had, is oneTool with twoTools' old beside it and
+  Claude Code alone installed, so its tip is the one about a limit:
+  old's parked login has expired and personal's ends in two days, so the window's notice,
+  the menu's Sign In to All 2 Accounts… and one notification offer both. twoTools'
+  personal lasts 20 days, so old alone is due there and its tip still shows on Windows,
+  which holds a tip back while a notice is up.
 - stuck shows the notice offering Give Up… as the app starts, as the Swift fixture did, now
   from the core's own read: a read says an interrupted switch is waiting wherever the next
   change would be refused over it, as a warning with the refusal's code,

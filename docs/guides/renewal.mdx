@@ -17,7 +17,7 @@ Pitboard never renews a Claude Desktop parked login. [What Pitboard does not do 
 
 Pitboard renews parked logins only when it runs: `pitboard` in a terminal, `pitboard watch` or its service, the app while it is open, or daily renewal. After 30 days with none of them, every Claude Code parked login has expired. [`renew`](/reference/maintenance-commands#renew) says when each one is due.
 
-A renewal moves the end of a Claude Code login only when Anthropic's answer gives a new one. Within 3 days of the end, `pitboard` and the app say to sign in to the account again, as Claude Code does for its own login (read in 2.1.309). The app's row then reads **Sign-in expires in 2 days**.
+No renewal moves the end of a Claude Code login later, as Claude Code keeps it for its own (read in 2.1.325). Within 7 days of the end, `pitboard` and the app say to sign in to the account again. The app's row then reads **Sign-in expires in 6 days**.
 
 An expired parked login needs a browser sign-in: see [Sign in to an account again](/guides/sign-in-again).
 

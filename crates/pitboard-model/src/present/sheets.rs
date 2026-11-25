@@ -220,12 +220,29 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         }
         Sheet::SignInAgain { account } => {
             let (message, confirm, _) = form_words(seen, sheet, tool);
+            // An app shows the tool's own words where it has them.
+            let step = (seen.state.sign_in_all.as_ref())
+                .filter(|run| {
+                    run.of > 1 && crate::AccountKey::from(run.current.clone()) == *account
+                })
+                .map(|run| {
+                    let next = run.left.first().map(|next| next.label.as_str());
+                    words::sign_in_step(run.at(), run.of, next)
+                });
+            let stepped = |said: String| match &step {
+                Some(step) => format!("{said} {step}"),
+                None => said,
+            };
             SheetText {
                 title: words::sign_in_to_again(seen.front, &account.label, false),
-                message,
+                message: stepped(message),
                 tools: (seen.tools.iter().copied())
                     .filter(|&own| own == tool)
                     .map(|own| sheet_tool(seen, sheet, own))
+                    .map(|own| SheetTool {
+                        message: stepped(own.message),
+                        ..own
+                    })
                     .collect(),
                 tool: tool.into(),
                 account: Some(account.label.clone()),

@@ -265,6 +265,27 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             vec![switch_action(seen, &advice.switch_to, &advice.instead)],
         ));
     }
+    let due = super::due_sign_ins(seen.accounts());
+    if due.len() > 1 {
+        let labels: Vec<String> = due
+            .iter()
+            .filter_map(|account| account.label.clone())
+            .collect();
+        said.push(notice(
+            SIGN_INS_DUE.into(),
+            Severity::Warning,
+            words::sign_ins_due(labels.len()),
+            vec![words::sign_ins_due_lines(&labels)],
+            vec![NoticeAction {
+                title: words::sign_in_to_all(seen.front, labels.len()),
+                intent: Intent::SignInToAll,
+                dismisses: false,
+                switches: false,
+                enabled: !state.sign_in_under_way(),
+                confirm: None,
+            }],
+        ));
+    }
     // Once its countdown is over a bare one says no more than In Use, unless it offers Switch Back.
     said.extend(
         (state.last_switches.iter())
@@ -541,12 +562,15 @@ pub(crate) enum Clicked {
     Switch(Key),
     SwitchBack { from: Key, to: Key },
     SignInAgain(Key),
+    SignInToAll,
 }
 
 const SWITCH: &str = "switch/";
 // then both accounts as a JSON pair, since a label from 0.1 can hold a slash
 const SWITCH_BACK: &str = "switch-back/";
 const SIGN_IN_AGAIN: &str = "sign-in-again/";
+const SIGN_IN_TO_ALL: &str = "sign-in-to-all";
+pub(crate) const SIGN_INS_DUE: &str = "sign-ins-due";
 const LIMITS: &str = "limits";
 pub(crate) const UNUSABLE: &str = "unusable/";
 
@@ -561,6 +585,7 @@ impl Clicked {
                 serde_json::json!([from.qualified(), to.qualified()])
             ),
             Clicked::SignInAgain(account) => format!("{SIGN_IN_AGAIN}{}", account.qualified()),
+            Clicked::SignInToAll => SIGN_IN_TO_ALL.into(),
         }
     }
 
@@ -588,6 +613,8 @@ impl Clicked {
             Clicked::SignInAgain(account)
         } else if argument == LIMITS {
             Clicked::Limits
+        } else if argument == SIGN_IN_TO_ALL {
+            Clicked::SignInToAll
         } else {
             Clicked::Accounts
         }
@@ -811,6 +838,25 @@ pub(crate) fn unusable_notice(front: Front, account: &Account) -> Notice {
     }
 }
 
+// One for every account due a sign-in: a click puts up each one's sheet in turn.
+pub(crate) fn sign_ins_due_notice(front: Front, due: &[&Account]) -> Notice {
+    let labels: Vec<String> = due
+        .iter()
+        .filter_map(|account| account.label.clone())
+        .collect();
+    posted(
+        SIGN_INS_DUE.into(),
+        words::titled(
+            front,
+            &format!("{} Accounts Need a Sign-In", labels.len()),
+            &words::sign_ins_due(labels.len()),
+        ),
+        None,
+        words::sign_ins_due_lines(&labels),
+        &Clicked::SignInToAll,
+    )
+}
+
 /// A switch Pitboard tried by itself and could not make, in the core's words.
 pub(crate) fn auto_refused_notice(front: Front, code: &str, message: &str) -> Notice {
     posted(
@@ -871,9 +917,11 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             })
         })
         .collect();
+    // Sign In to All is an item of its own.
     let others: Vec<&&PanelNotice> = pressing
         .iter()
         .filter(|notice| !notice.actions.iter().any(|action| action.switches))
+        .filter(|notice| notice.id != SIGN_INS_DUE)
         .collect();
     // Counted, with the first heading under it: title case would change a name a heading holds.
     let others = others.first().map(|first| {
@@ -890,28 +938,42 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             enabled: true,
         }
     });
-    let sign_ins = (seen.accounts().iter())
-        .filter(|account| super::needs_sign_in(account))
-        .filter_map(|account| {
-            let label = account.label.clone()?;
-            let standing = words::sign_in_standing(account.standing);
-            Some(MenuEntry {
-                title: words::sign_in_to_again(seen.front, &label, true),
-                subtitle: Some(words::of_tool(
-                    seen.tool_if_shown(account.provider),
-                    standing,
-                )),
-                help: None,
-                severity: None,
-                intent: Some(Intent::PresentSheet {
-                    sheet: Sheet::SignInAgain {
-                        account: Key::new(account.provider, label).into(),
-                    },
+    let due = super::due_sign_ins(seen.accounts()).len();
+    let all = (due > 1).then(|| MenuEntry {
+        title: words::sign_in_to_all(seen.front, due),
+        subtitle: None,
+        help: None,
+        severity: None,
+        intent: Some(Intent::SignInToAll),
+        link: None,
+        enabled: !seen.state.sign_in_under_way(),
+    });
+    let sign_ins = all
+        .into_iter()
+        .chain(
+            (seen.accounts().iter())
+                .filter(|account| super::needs_sign_in(account))
+                .filter_map(|account| {
+                    let label = account.label.clone()?;
+                    let standing = words::sign_in_standing(account.standing);
+                    Some(MenuEntry {
+                        title: words::sign_in_to_again(seen.front, &label, true),
+                        subtitle: Some(words::of_tool(
+                            seen.tool_if_shown(account.provider),
+                            standing,
+                        )),
+                        help: None,
+                        severity: None,
+                        intent: Some(Intent::PresentSheet {
+                            sheet: Sheet::SignInAgain {
+                                account: Key::new(account.provider, label).into(),
+                            },
+                        }),
+                        link: None,
+                        enabled: !seen.state.sign_in_under_way(),
+                    })
                 }),
-                link: None,
-                enabled: !seen.state.sign_in_under_way(),
-            })
-        })
+        )
         .collect();
     MenuNotices {
         sign_ins,

@@ -1232,3 +1232,56 @@ fn the_settings_offer_the_order_under_the_share() {
     chose(&mut model, &mut machine, AtLimit::Nothing);
     assert!(!model.on_a_mac().machine.at_limit.share_enabled);
 }
+
+#[test]
+fn accounts_newly_due_a_sign_in_are_told_in_one_notification_that_offers_them_all() {
+    let due = |label: &str, standing: Standing| {
+        let mut account = account(Some(label)).build();
+        account.standing = standing;
+        account
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        due("soon", Standing::Expiring),
+        due("gone", Standing::LoginExpired),
+    ])));
+    model.refresh(&mut machine);
+
+    let posted: Vec<(&str, &str)> = (machine.posted.iter())
+        .map(|notice| (notice.id.as_str(), notice.clicked.as_str()))
+        .collect();
+    assert_eq!(posted, [("sign-ins-due", "sign-in-to-all")]);
+    assert_eq!(machine.posted[0].title, "2 Accounts Need a Sign-In");
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "told once");
+
+    model.send(Intent::NotificationClicked {
+        argument: "sign-in-to-all".into(),
+    });
+    assert_eq!(
+        model.state.sheet,
+        Some(Sheet::SignInAgain {
+            account: AccountKey::new(Tool::Claude, "gone")
+        })
+    );
+}
+
+#[test]
+fn one_account_whose_sign_in_ends_soon_is_told_on_its_own() {
+    let mut soon = account(Some("soon")).build();
+    soon.standing = Standing::Expiring;
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        soon,
+    ])));
+    model.refresh(&mut machine);
+
+    assert_eq!(machine.posted.len(), 1);
+    assert_eq!(machine.posted[0].title, "Sign-In Ends Soon");
+    assert_eq!(
+        machine.posted[0].button.as_ref().map(|button| button.kind),
+        Some(NoticeButtonKind::SignInAgain)
+    );
+}

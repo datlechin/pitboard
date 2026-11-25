@@ -145,11 +145,18 @@ export const renewalDue = (refreshExpiresAt: number, now: number) => {
   return left >= 1 && left < RENEW_WITHIN;
 };
 
+// state.rs `SIGN_IN_WITHIN` and `sign_in_due`
+export const SIGN_IN_WITHIN = 7 * DAY;
+export const signInDue = (refreshExpiresAt: number, now: number) => {
+  const left = refreshExpiresAt - now;
+  return left >= 1 && left < SIGN_IN_WITHIN;
+};
+
 // words.rs `parked_life_column` and `session_life_column`
 export function parkedLifeColumn(refreshExpiresAt: number, now: number): string {
   const left = refreshExpiresAt - now;
   if (left <= 0) return "expired";
-  if (renewalDue(refreshExpiresAt, now)) return `expires in ${span(left)}`;
+  if (signInDue(refreshExpiresAt, now)) return `expires in ${span(left)}`;
   return `good for ${span(left)}`;
 }
 
@@ -536,7 +543,7 @@ export function rowLines(a: Account, w: World, warm: string | null): string[] {
   const parked = !isInUse(a, w);
   const ended =
     parked && a.refreshExpiresAt !== undefined
-      ? a.refreshExpiresAt <= w.now || renewalDue(a.refreshExpiresAt, w.now)
+      ? a.refreshExpiresAt <= w.now || signInDue(a.refreshExpiresAt, w.now)
         ? signInExpires(a.refreshExpiresAt - w.now, false)
         : null
       : parked && a.sessionExpiresAt !== undefined && a.sessionExpiresAt <= w.now
@@ -552,7 +559,7 @@ export function rowNote(a: Account, w: World): string | null {
   if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
   if (isInUse(a, w)) return null;
   if (a.refreshExpiresAt !== undefined)
-    return renewalDue(a.refreshExpiresAt, w.now)
+    return signInDue(a.refreshExpiresAt, w.now)
       ? signInExpires(a.refreshExpiresAt - w.now, false)
       : null;
   return a.sessionExpiresAt !== undefined && a.sessionExpiresAt <= w.now

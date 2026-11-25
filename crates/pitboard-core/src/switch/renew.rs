@@ -1,6 +1,11 @@
 //! Keeping parked logins alive, so their usage can be asked and they do not lapse. A parked
 //! login is held by Pitboard alone, so renewing it puts no second holder on its refresh
 //! chain. The login signed in is Claude Code's, and is never renewed here.
+//!
+//! Anthropic spends the refresh token it is sent as it answers, so what keeps the answer is
+//! asked first: its name is written down, the vault takes the login as it is under that name,
+//! and `state.json` takes a save. The answer then goes over that item. Where the save after it
+//! fails, the next run takes the fresh item back before anything is due.
 
 use super::{journal, purge, try_exclusive};
 use crate::context::Context;
@@ -33,6 +38,8 @@ pub enum Renewal {
     Refused,
     /// Anthropic could not be reached or asked to slow down; tried again next time.
     Deferred,
+    // Nothing was sent: the answer could not have been kept. The park stays as it was.
+    Held(Unwritable),
     Failed(Error),
 }
 
@@ -42,7 +49,27 @@ impl Renewal {
             Renewal::Renewed => "renewed",
             Renewal::Refused => "parked_login_refused",
             Renewal::Deferred => "renewal_deferred",
+            Renewal::Held(held) if held.disk_full => "renewal_held_disk_full",
+            Renewal::Held(_) => "renewal_held",
             Renewal::Failed(e) => e.code(),
+        }
+    }
+}
+
+// What refused a write before a renewal was sent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unwritable {
+    pub code: &'static str,
+    pub detail: String,
+    pub disk_full: bool,
+}
+
+impl Unwritable {
+    fn of(refused: &Error) -> Unwritable {
+        Unwritable {
+            code: refused.code(),
+            detail: refused.to_string(),
+            disk_full: refused.disk_full(),
         }
     }
 }
@@ -124,6 +151,8 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
             })
             .collect()
     };
+    // A fresh copy an earlier run could not record goes back first, so no spent token is sent.
+    let swept = crate::pending::sweep(ctx, permit, &mut state);
     let mut to_renew = covered(&state);
     // A park that copies the login in use holds the refresh token its tool is about to
     // present, and renewing it would spend that token under the tool. It is dropped instead,
@@ -133,48 +162,109 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
         let _ = super::drop_live_twins(ctx, permit, &mut state);
         to_renew = covered(&state);
     }
+    let mut outcomes = Vec::new();
+    if let Err(refused) = swept {
+        let why = Unwritable::of(&refused);
+        outcomes.extend(
+            to_renew
+                .into_iter()
+                .map(|(key, _, _)| (key, Renewal::Held(why.clone()))),
+        );
+        crate::schedule::ran(ctx, permit, Job::Renew, StoreAnswer::renewing(&outcomes));
+        return outcomes;
+    }
+    let mut ready = Vec::new();
+    for (key, tool, held) in to_renew {
+        match prepare(ctx, permit, &state, tool, &key, &held) {
+            Ok(Prepared::Ready(document, copy)) => ready.push((key, tool, held, document, copy)),
+            Ok(Prepared::Held(why)) => outcomes.push((key, Renewal::Held(why))),
+            Err(e) => outcomes.push((key, Renewal::Failed(e))),
+        }
+    }
+    crate::fault::point("renew.prepared");
+    let saved = match ready.is_empty() {
+        true => Ok(()),
+        false => state::save(ctx, permit, &state),
+    };
+    if let Err(refused) = saved {
+        let why = Unwritable::of(&refused);
+        for (key, _, _, _, copy) in ready {
+            let _ = crate::store::vault_delete(ctx, permit, &copy);
+            outcomes.push((key, Renewal::Held(why.clone())));
+        }
+        crate::schedule::ran(ctx, permit, Job::Renew, StoreAnswer::renewing(&outcomes));
+        return outcomes;
+    }
     // Each renewal is a round trip that can take as long as the request timeout, so they
     // are asked together. What comes back is then written one at a time: the state file is
     // one file, and the order of writes to it is not something to leave to chance.
-    let asked: Vec<(Key, &'static dyn Provider, Park, Result<Asked>)> =
-        std::thread::scope(|scope| {
-            let handles: Vec<_> = to_renew
-                .into_iter()
-                .map(|(key, tool, held)| {
-                    let ctx = &*ctx;
-                    let handle = scope.spawn({
-                        let key = key.clone();
-                        let held = held.clone();
-                        move || ask(ctx, permit, tool, &key, &held)
-                    });
-                    (key, tool, held, handle)
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|(key, tool, held, handle)| {
-                    let answer = handle.join().unwrap_or_else(|_| {
-                        Err(Error::RenewalFailed {
-                            label: key.typed(),
-                            cause: None,
-                            detail: "the renewal thread stopped".into(),
-                        })
-                    });
-                    (key, tool, held, answer)
-                })
-                .collect()
-        });
-    let outcomes: Vec<(Key, Renewal)> = asked
-        .into_iter()
-        .map(|(key, tool, held, answer)| {
-            let outcome = apply(ctx, permit, &mut state, tool, &key, &held, answer)
-                .unwrap_or_else(Renewal::Failed);
-            (key, outcome)
-        })
-        .collect();
-    purge(ctx, permit, &mut state);
+    let asked: Vec<_> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ready
+            .into_iter()
+            .map(|(key, tool, held, document, copy)| {
+                let ctx = &*ctx;
+                let handle = scope.spawn({
+                    let key = key.clone();
+                    move || ask(ctx, permit, tool, &key, document)
+                });
+                (key, tool, held, copy, handle)
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(key, tool, held, copy, handle)| {
+                let answer = handle.join().unwrap_or_else(|_| {
+                    Err(Error::RenewalFailed {
+                        label: key.typed(),
+                        cause: None,
+                        detail: "the renewal thread stopped".into(),
+                    })
+                });
+                (key, tool, held, copy, answer)
+            })
+            .collect()
+    });
+    for (key, tool, held, copy, answer) in asked {
+        let outcome = apply(ctx, permit, &mut state, tool, &key, &held, &copy, answer)
+            .unwrap_or_else(Renewal::Failed);
+        outcomes.push((key, outcome));
+    }
+    // Nothing is deleted that the file on disk still names.
+    if !state.discarded.is_empty() && state::save(ctx, permit, &state).is_ok() {
+        purge(ctx, permit, &mut state);
+    }
     crate::schedule::ran(ctx, permit, Job::Renew, StoreAnswer::renewing(&outcomes));
     outcomes
+}
+
+enum Prepared {
+    // The login, and the vault item its answer goes into, which holds it as it is for now.
+    Ready(Value, String),
+    Held(Unwritable),
+}
+
+fn prepare(
+    ctx: &Context,
+    permit: Permit,
+    state: &State,
+    tool: &'static dyn Provider,
+    key: &Key,
+    held: &Park,
+) -> Result<Prepared> {
+    let document = park::load(ctx, tool, key, held)?;
+    // On macOS with PITBOARD_NO_ARGV, every Codex park is past what the vault takes.
+    park::price(ctx, key.provider, &key.typed(), &held.service, &document)?;
+    let id = state.get(key).map(|a| a.id.clone()).unwrap_or_default();
+    let copy = match park::reserve(ctx, permit, &id) {
+        Ok(copy) => copy,
+        Err(refused) => return Ok(Prepared::Held(Unwritable::of(&refused))),
+    };
+    // A renewed login is this one with new tokens of the same length.
+    if let Err(refused) = park::store_at(ctx, permit, tool, &copy, &document) {
+        let _ = crate::store::vault_delete(ctx, permit, &copy);
+        return Ok(Prepared::Held(Unwritable::of(&refused)));
+    }
+    Ok(Prepared::Ready(document, copy))
 }
 
 /// What one round trip produced, before anything is written down.
@@ -193,14 +283,8 @@ fn ask(
     permit: Permit,
     tool: &'static dyn Provider,
     key: &Key,
-    held: &Park,
+    document: Value,
 ) -> Result<Asked> {
-    let document = park::load(ctx, tool, key, held)?;
-    // The service spends the old refresh token as it answers, so an answer that could not
-    // be written back would lose the login. Where it could not be, the service is not
-    // asked: a renewed login is this one with new tokens of the same length, so this one's
-    // size answers for it. On macOS with PITBOARD_NO_ARGV, that is every Codex park.
-    park::price(ctx, key.provider, &key.typed(), &held.service, &document)?;
     let credential = crate::provider::Credential::new(key.provider, document);
     match tool.renew(ctx, permit, &credential) {
         Ok(fresh) => Ok(Asked {
@@ -244,26 +328,44 @@ pub(super) fn renew_one(
     key: &Key,
     held: &Park,
 ) -> Result<Option<Park>> {
-    match apply(
-        ctx,
-        permit,
-        state,
-        tool,
-        key,
-        held,
-        ask(ctx, permit, tool, key, held),
-    )? {
+    let (document, copy) = match prepare(ctx, permit, state, tool, key, held)? {
+        Prepared::Ready(document, copy) => (document, copy),
+        Prepared::Held(why) => return Err(held_error(key, why)),
+    };
+    if let Err(refused) = state::save(ctx, permit, state) {
+        let _ = crate::store::vault_delete(ctx, permit, &copy);
+        return Err(refused);
+    }
+    let asked = ask(ctx, permit, tool, key, document);
+    match apply(ctx, permit, state, tool, key, held, &copy, asked)? {
         Renewal::Renewed => Ok(state.get(key).and_then(|a| a.parked.clone())),
         Renewal::Refused => Err(Error::ParkedLoginRefused {
             tool: key.provider,
             label: state.typed(key),
         }),
         Renewal::Deferred => Ok(None),
+        Renewal::Held(why) => Err(held_error(key, why)),
         Renewal::Failed(e) => Err(e),
     }
 }
 
+// The copy holds the login as it was, which the park holds too, and no file names it.
+fn drop_copy(ctx: &Context, permit: Permit, state: &mut State, copy: &str) {
+    if crate::store::vault_delete(ctx, permit, copy).is_err() {
+        state.discard(copy, ParkKind::Vault);
+    }
+}
+
+fn held_error(key: &Key, why: Unwritable) -> Error {
+    Error::RenewalFailed {
+        label: key.typed(),
+        cause: None,
+        detail: why.detail,
+    }
+}
+
 /// The part that writes: one at a time, in the order the accounts are listed.
+#[allow(clippy::too_many_arguments)]
 fn apply(
     ctx: &Context,
     permit: Permit,
@@ -271,17 +373,26 @@ fn apply(
     tool: &'static dyn Provider,
     key: &Key,
     held: &Park,
+    copy: &str,
     asked: Result<Asked>,
 ) -> Result<Renewal> {
-    let asked = asked?;
+    let asked = match asked {
+        Ok(asked) => asked,
+        Err(e) => {
+            drop_copy(ctx, permit, state, copy);
+            return Err(e);
+        }
+    };
     if asked.refused {
         // Refused, not spent: nothing was taken from it. One `repair` gave back is left for
         // the Pitboard that wrote it, which will be refused the same way.
         state.release(&held.service);
+        drop_copy(ctx, permit, state, copy);
         state::save(ctx, permit, state)?;
         return Ok(Renewal::Refused);
     }
     let Some(next) = asked.renewed else {
+        drop_copy(ctx, permit, state, copy);
         return Ok(Renewal::Deferred);
     };
     // A copy `repair` gave back is left for the Pitboard that wrote it only while it is
@@ -294,14 +405,9 @@ fn apply(
         state.used_here(&held.service);
         let _ = state::save(ctx, permit, state);
     }
-
-    // The old refresh token may already be spent, so the answer is written at once, and a
-    // second time under another name if the first write fails.
-    let id = state.get(key).map(|a| a.id.clone()).unwrap_or_default();
-    let store = || {
-        park::reserve(ctx, permit, &id)
-            .and_then(|service| park::store_at(ctx, permit, tool, &service, &next))
-    };
+    crate::fault::point("renew.answered");
+    // The vault took the login under this name a moment ago, so once more if it refuses now.
+    let store = || park::store_at(ctx, permit, tool, copy, &next);
     let parked = match store().or_else(|_| store()) {
         Ok(parked) => parked,
         Err(e) => {
@@ -309,6 +415,7 @@ fn apply(
             // is dead whatever happens next. Dropping it now means status stops offering a
             // login that cannot work and says to sign in again instead.
             state.discard(&held.service, ParkKind::Vault);
+            drop_copy(ctx, permit, state, copy);
             let _ = state::save(ctx, permit, state);
             return Err(Error::RenewalFailed {
                 label: state.typed(key),
@@ -322,11 +429,8 @@ fn apply(
     // The renewal spent the copy it replaces, whoever wrote it, so that one is discarded
     // rather than merely replaced.
     state.discard(&held.service, ParkKind::Vault);
-    state.park(key, parked.clone());
-    // A save that fails leaves the fresh copy where it is. Its name is on Pitboard's own
-    // list of names it wrote, so the next command gives it back to the account in place of
-    // the spent one. Deleting it here, as this once did, threw away the only login the
-    // account had left: the service had already spent the one the record still names.
+    state.park(key, parked);
+    // A save that fails leaves the fresh copy on Pitboard's list, and the next run takes it back.
     state::save(ctx, permit, state)?;
     Ok(Renewal::Renewed)
 }
@@ -778,20 +882,23 @@ mod tests {
         let _ = crate::schedule::for_its_run(&ctx, Job::Renew);
     }
 
-    /// The failure this module's comments describe and no test could reach: Anthropic has
-    /// already spent the old refresh token, and the fresh one cannot be written down. The
-    /// copy Pitboard holds is dead either way, so it is dropped rather than left to be
-    /// offered as a login that cannot work.
+    // The vault refuses the answer after Anthropic spent the old token: the park is dropped.
     #[test]
     fn a_renewal_whose_answer_cannot_be_stored_drops_the_spent_park() {
         let m = machine("write-lost");
         let before = with_park(&m, "work", "old", NOW - 1);
         m.api.renews("old", fresh("new"));
-        m.mem
-            .vault()
-            .fault_all(Fault::FailWrite("the keychain refused".into()));
+        let mem = Arc::clone(&m.mem);
 
-        let outcomes = renew_parked(&m.ctx, Permit::for_a_test());
+        let outcomes = crate::fault::meanwhile(
+            "renew.answered",
+            move || {
+                mem.vault()
+                    .fault_all(Fault::FailWrite("the keychain refused".into()))
+            },
+            || renew_parked(&m.ctx, Permit::for_a_test()),
+        );
+        m.mem.vault().heal_all();
 
         assert_eq!(outcome(&outcomes, "work"), "renewal_failed");
         let state = state::load(&m.ctx).expect("state");
@@ -811,5 +918,151 @@ mod tests {
             state.discarded.is_empty(),
             "and nothing is left listed for a later run to retry"
         );
+    }
+
+    fn work() -> Key {
+        Key::new(crate::provider::ProviderId::Claude, "work")
+    }
+
+    fn parked(m: &Scratch) -> Option<Park> {
+        state::load(&m.ctx)
+            .expect("state")
+            .get(&work())
+            .expect("account")
+            .parked
+            .clone()
+    }
+
+    // What a full disk does to a file Pitboard writes: here a folder stands in its way.
+    struct InTheWay {
+        file: std::path::PathBuf,
+        kept: std::path::PathBuf,
+    }
+
+    impl InTheWay {
+        fn of(file: std::path::PathBuf) -> InTheWay {
+            let kept = file.with_extension("kept");
+            if file.exists() {
+                std::fs::rename(&file, &kept).expect("moved aside");
+            }
+            std::fs::create_dir_all(file.join("in the way")).expect("a folder in its place");
+            InTheWay { file, kept }
+        }
+
+        fn cleared(self) {
+            std::fs::remove_dir_all(&self.file).expect("taken out of the way");
+            if self.kept.exists() {
+                std::fs::rename(&self.kept, &self.file).expect("put back");
+            }
+        }
+    }
+
+    fn home_file(m: &Scratch, name: &str) -> std::path::PathBuf {
+        crate::home::dir(&m.ctx).join(name)
+    }
+
+    // On 2026-11-24 a full disk lost three parks: Anthropic was asked and nothing could be kept.
+    #[test]
+    fn a_home_that_cannot_be_written_holds_the_renewal_before_anything_is_sent() {
+        let m = machine("home-full");
+        let before = with_park(&m, "work", "old", NOW - 1);
+        m.api.renews("old", fresh("new"));
+        let blocked = InTheWay::of(home_file(&m, "pending"));
+
+        let outcomes = renew_parked(&m.ctx, Permit::for_a_test());
+
+        blocked.cleared();
+        assert_eq!(outcome(&outcomes, "work"), "renewal_held");
+        assert_eq!(m.api.calls(), 0, "nothing was sent, so nothing was spent");
+        assert_eq!(parked(&m), Some(before.clone()));
+        assert_eq!(m.mem.vault().services(), vec![before.service]);
+    }
+
+    #[test]
+    fn an_account_list_that_cannot_be_saved_holds_the_renewal_before_anything_is_sent() {
+        let m = machine("state-full");
+        let before = with_park(&m, "work", "old", NOW - 1);
+        m.api.renews("old", fresh("new"));
+        let file = home_file(&m, "state.json");
+        let blocked = std::rc::Rc::new(std::cell::RefCell::new(None));
+
+        let outcomes = crate::fault::meanwhile(
+            "renew.prepared",
+            {
+                let (file, blocked) = (file.clone(), std::rc::Rc::clone(&blocked));
+                move || *blocked.borrow_mut() = Some(InTheWay::of(file))
+            },
+            || renew_parked(&m.ctx, Permit::for_a_test()),
+        );
+
+        blocked.take().expect("blocked").cleared();
+        assert_eq!(outcome(&outcomes, "work"), "renewal_held");
+        assert_eq!(m.api.calls(), 0, "nothing was sent, so nothing was spent");
+        assert_eq!(parked(&m), Some(before.clone()));
+        assert_eq!(
+            m.mem.vault().services(),
+            vec![before.service],
+            "the copy written to prove the vault is gone"
+        );
+    }
+
+    #[test]
+    fn a_vault_that_refuses_a_write_holds_the_renewal_before_anything_is_sent() {
+        let m = machine("vault-full");
+        let before = with_park(&m, "work", "old", NOW - 1);
+        m.api.renews("old", fresh("new"));
+        m.mem
+            .vault()
+            .fault_all(Fault::FailWrite("the keychain refused".into()));
+
+        let outcomes = renew_parked(&m.ctx, Permit::for_a_test());
+
+        assert_eq!(outcome(&outcomes, "work"), "renewal_held");
+        assert_eq!(m.api.calls(), 0, "nothing was sent, so nothing was spent");
+        assert_eq!(parked(&m), Some(before.clone()));
+        assert_eq!(m.mem.vault().services(), vec![before.service]);
+    }
+
+    // The answer is in the vault and `state.json` could not record it: the next run takes it back.
+    #[test]
+    fn a_renewal_whose_record_could_not_be_saved_is_finished_by_the_next_run() {
+        let m = machine("save-lost");
+        let before = with_park(&m, "work", "old", NOW - 1);
+        m.api.renews("old", fresh("new"));
+        let file = home_file(&m, "state.json");
+        let blocked = std::rc::Rc::new(std::cell::RefCell::new(None));
+
+        let first = crate::fault::meanwhile(
+            "renew.park_stored",
+            {
+                let (file, blocked) = (file.clone(), std::rc::Rc::clone(&blocked));
+                move || *blocked.borrow_mut() = Some(InTheWay::of(file))
+            },
+            || renew_parked(&m.ctx, Permit::for_a_test()),
+        );
+        blocked.take().expect("blocked").cleared();
+
+        assert_eq!(outcome(&first, "work"), "state_write_failed");
+        assert_eq!(
+            parked(&m),
+            Some(before.clone()),
+            "the file could not change"
+        );
+        assert!(
+            m.mem.vault().services().contains(&before.service),
+            "nothing the file names is deleted while the file cannot say otherwise"
+        );
+
+        let second = renew_parked(&m.ctx, Permit::for_a_test());
+
+        assert_eq!(outcome(&second, "work"), "not attempted");
+        assert_eq!(
+            m.api.asked(),
+            vec![Question::Renew("old".into())],
+            "the spent refresh token is never sent again"
+        );
+        let now = parked(&m).expect("a park");
+        assert_eq!(now.login, crate::store::fingerprint("new"));
+        assert_eq!(m.mem.vault().services(), vec![now.service]);
     }
 }

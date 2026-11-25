@@ -214,6 +214,14 @@ impl Park {
 
 pub(crate) const RENEW_WITHIN: i64 = 3 * 86_400;
 
+// A week, so the logins of several accounts can be signed in to again in one go.
+pub(crate) const SIGN_IN_WITHIN: i64 = 7 * 86_400;
+
+// Whether the refresh token ending at `refresh_expires_at` is due a sign-in: no renewal moves its end.
+pub fn sign_in_due(refresh_expires_at: i64, now: i64) -> bool {
+    (1..SIGN_IN_WITHIN).contains(&(refresh_expires_at - now))
+}
+
 /// Whether a login whose refresh token expires at `refresh_expires_at` is due to be renewed:
 /// within three days, and not yet expired.
 pub fn renewal_due(refresh_expires_at: i64, now: i64) -> bool {
@@ -2637,6 +2645,15 @@ mod tests {
             unknown.restorable_at(i64::MAX),
             "no expiry recorded is not expired"
         );
+    }
+
+    #[test]
+    fn a_login_needs_a_sign_in_from_a_week_before_it_ends() {
+        const NOW: i64 = 1_789_935_600;
+        assert!(!sign_in_due(NOW + SIGN_IN_WITHIN, NOW));
+        assert!(sign_in_due(NOW + SIGN_IN_WITHIN - 1, NOW));
+        assert!(sign_in_due(NOW + 1, NOW));
+        assert!(!sign_in_due(NOW, NOW));
     }
 
     #[test]

@@ -23,12 +23,13 @@ A parked login whose refresh token has expired is never due. Its account needs a
 
 `pitboard status` without `--offline` renews too, by the access token rule alone.
 
-`renew` asks Anthropic or OpenAI to renew each due parked login, with every request sent at once.
+`renew` asks Anthropic or OpenAI to renew each due parked login, with every request sent at once. Before it sends one, it checks that it can keep the answer: Pitboard's directory and the store of parked logins must take a write.
 
 `renew` never renews a login a tool is using. A parked login that copies one is dropped instead, since renewing it would spend the refresh token the tool holds. That account needs no sign-in.
 
 | Service answer | What happens | Logged outcome |
 | --- | --- | --- |
+| None: Pitboard could not write, such as on a full disk | Nothing is sent and nothing changes. The next run tries again. | `renewal_held_disk_full` when the disk is full, otherwise `renewal_held` |
 | Renewed | The renewed login replaces the parked one. | `renewed` |
 | Refused | The parked login is dropped. Its account needs a sign-in again. | `parked_login_refused` |
 | Unreachable, or asked for less traffic | Nothing changes. The next run tries again. | `renewal_deferred` |
@@ -365,7 +366,7 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
   | `credential_size` | `login size` | For a login in the macOS keychain: warns when it is too large for `security` to read from standard input, and fails then if `PITBOARD_NO_ARGV` is set. See [Large logins on macOS](/security#large-logins-on-macos). For a login in Credential Manager: how many pieces it takes, and fails when it is too large for any. |
   | `no_argv` | `PITBOARD_NO_ARGV` | Windows only, while `PITBOARD_NO_ARGV` is set. Always warns: it changes nothing there. |
   | `credential_store` | `credential store` | Where Claude Code keeps its login. On macOS, a file instead of the keychain warns. On Windows, Credential Manager in a profile that roams warns, and a Claude Code login in Credential Manager that nothing turns on fails. |
-  | `credential` | `credential` | The login's shape and how long its refresh token has left, as a parked login's. Warns under 3 days and once it has expired. Fails when the keychain is locked and cannot ask for its password, when Credential Manager cannot be reached, or when its pieces cannot be joined. |
+  | `credential` | `credential` | The login's shape and how long its refresh token has left, as a parked login's. Warns under 7 days and once it has expired. Fails when the keychain is locked and cannot ask for its password, when Credential Manager cannot be reached, or when its pieces cannot be joined. |
   | `fallback_login` | `fallback login` | macOS and Windows, when a login file sits behind the keychain or Credential Manager. Always warns. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
   | `home` | `Pitboard home` | Only you can read Pitboard's directory. Warns otherwise. |
   | `private_on_disk` | `logins on disk` | No file that holds a login can be read by other users: Claude Code's login file and, on Linux and Windows, the parked logins. Fails otherwise, with the `chmod` or `icacls` commands that fix it. |

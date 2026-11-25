@@ -3,7 +3,7 @@ use crate::context::Context;
 use crate::error::Error;
 use crate::host::Keyring;
 use crate::provider::{LoginKind, ProviderId};
-use crate::state::{Park, State, renewal_due};
+use crate::state::{Park, State, sign_in_due};
 use crate::words as said;
 use crate::{park, store};
 
@@ -309,7 +309,7 @@ fn park_judged(
     if !park.restorable_at(now) {
         let when = moment(at, now);
         warn(code, name, words::park_life_since(&life, &when), renew)
-    } else if renewal_due(at, now) {
+    } else if sign_in_due(at, now) {
         warn(code, name, words::park_life(&life), renew)
     } else {
         ok(code, name, words::parked_with(&life))

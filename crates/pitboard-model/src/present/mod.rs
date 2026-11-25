@@ -74,11 +74,11 @@ pub use windows::{
     downloads_quit_question,
 };
 
-pub(crate) use accounts::{in_order, needs_sign_in};
+pub(crate) use accounts::{due_sign_ins, in_order, needs_sign_in};
 pub(crate) use notices::{
     Clicked, UNUSABLE, at_limit_notice, auto_not_watching_notice, auto_refused_notice,
-    auto_skipped_notice, auto_switched_notice, first_notice, notice_buttons, standing_notice,
-    unusable_notice, warm_failed_notice,
+    auto_skipped_notice, auto_switched_notice, first_notice, notice_buttons, sign_ins_due_notice,
+    standing_notice, unusable_notice, warm_failed_notice,
 };
 
 use crate::account_windows::{AlertText, WindowAccount};

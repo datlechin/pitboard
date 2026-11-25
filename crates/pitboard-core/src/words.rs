@@ -12,7 +12,7 @@
 use crate::doctor::Level;
 use crate::host::{Keyring, Os, SecretStore, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
-use crate::state::renewal_due;
+use crate::state::sign_in_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
 use crate::usage::{Order, Window, whole};
@@ -646,13 +646,13 @@ pub fn runs_out(limit: &str, in_seconds: i64) -> String {
 
 /// How long a parked login stays usable, in the column form `pitboard status` puts after
 /// "ready" and doctor's parked login check after words of its own: "good for 20d 0h";
-/// "expires in 2d 4h" once it is due to be renewed, as [`renewal_due`] decides; and
+/// "expires in 2d 4h" once a sign-in is due, as [`sign_in_due`] decides; and
 /// "expired" once it has, where doctor adds when and `pitboard status` says "login expired"
 /// in place of "ready".
 pub fn parked_life_column(refresh_expires_at: i64, now: i64) -> String {
     match refresh_expires_at - now {
         left if left <= 0 => "expired".into(),
-        left if renewal_due(refresh_expires_at, now) => format!("expires in {}", span(left)),
+        left if sign_in_due(refresh_expires_at, now) => format!("expires in {}", span(left)),
         left => format!("good for {}", span(left)),
     }
 }
@@ -2183,12 +2183,12 @@ mod tests {
     /// to the minute, and from the moment it is due to be renewed, that it expires.
     #[test]
     fn a_parked_logins_life_in_a_column_says_when_it_expires() {
-        use crate::state::RENEW_WITHIN;
+        use crate::state::SIGN_IN_WITHIN;
         const NOW: i64 = 1_789_935_000;
         let life = |left: i64| parked_life_column(NOW + left, NOW);
         assert_eq!(life(20 * 86_400), "good for 20d 0h");
-        assert_eq!(life(RENEW_WITHIN), "good for 3d 0h");
-        assert_eq!(life(RENEW_WITHIN - 1), "expires in 2d 23h");
+        assert_eq!(life(SIGN_IN_WITHIN), "good for 7d 0h");
+        assert_eq!(life(SIGN_IN_WITHIN - 1), "expires in 6d 23h");
         assert_eq!(life(3_900), "expires in 1h 05m");
         assert_eq!(life(30), "expires in <1m");
         assert_eq!(life(0), "expired");

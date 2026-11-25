@@ -5,7 +5,7 @@ use crate::host::{Os, SecretStore};
 use crate::in_use::Stored;
 use crate::provider::claude::live as claude_live;
 use crate::provider::{LoginKind, ProviderId};
-use crate::state::{State, renewal_due};
+use crate::state::{State, sign_in_due};
 use crate::store;
 use crate::words as said;
 use serde_json::Value;
@@ -401,7 +401,7 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
             let detail = words::refresh_life_and_keys(&fingerprint, &life, &keys);
             if at <= facts.now {
                 warn("credential", "credential", detail, words::EXPIRED)
-            } else if renewal_due(at, facts.now) {
+            } else if sign_in_due(at, facts.now) {
                 warn("credential", "credential", detail, words::EXPIRES_SOON)
             } else {
                 ok("credential", "credential", detail)

@@ -27,7 +27,7 @@ use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::claude::daemon;
 use crate::schedule::Location;
-use crate::state::{Key, Park, RENEW_WITHIN, State};
+use crate::state::{Key, Park, SIGN_IN_WITHIN, State};
 use crate::time;
 use crate::words as said;
 use crate::{store, switch};

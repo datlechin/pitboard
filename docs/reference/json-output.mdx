@@ -118,7 +118,7 @@ In the order of `pitboard --help`:
 | `warm range` | `range`, with `from` and `to`. |
 | `warm now` | `label`, `outcome`, `started` or `running`, and `until`, when its five-hour period resets, or `null` where Anthropic has not said yet. |
 | `statusline` | `line`, the status line without colour, as [`statusline`](/reference/integration-commands#statusline) describes. |
-| `renew` | `accounts`, one object per parked login that was due, with `label`, `provider` and `outcome`; and `renewed`, a count. `outcome` is `renewed`, `parked_login_refused`, `renewal_deferred` or an error code, as [`renew`](/reference/maintenance-commands#renew) explains. |
+| `renew` | `accounts`, one object per parked login that was due, with `label`, `provider` and `outcome`; and `renewed`, a count. `outcome` is `renewed`, `parked_login_refused`, `renewal_deferred`, `renewal_held`, `renewal_held_disk_full` or an error code, as [`renew`](/reference/maintenance-commands#renew) explains. |
 | `schedule install` | `installed` (`true`) and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
 | `schedule status` | `installed`. When `true`, also `every_seconds` (`86400`) and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `schedule uninstall` | `installed` (`false`) and `removed`, `false` when nothing was scheduled. |

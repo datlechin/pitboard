@@ -660,6 +660,35 @@ pub(crate) fn needs_sign_in(account: &Account) -> bool {
     account.label.is_some() && account.standing.needs_sign_in()
 }
 
+// What Sign In to All goes through: the accounts a browser signs in to, the most pressing first.
+pub(crate) fn due_sign_ins(accounts: &[Account]) -> Vec<&Account> {
+    let mut due: Vec<&Account> = accounts
+        .iter()
+        .filter(|account| account.key.is_some())
+        .filter(|account| !crate::model::state::in_its_app(account.provider))
+        .filter(|account| {
+            matches!(
+                account.standing,
+                status::Standing::NothingParked
+                    | status::Standing::LoginRefused
+                    | status::Standing::LoginExpired
+                    | status::Standing::Expiring
+            )
+        })
+        .collect();
+    due.sort_by_key(|account| {
+        let ends = account
+            .parked
+            .as_ref()
+            .and_then(|parked| parked.refresh_expires_at);
+        (
+            account.standing == status::Standing::Expiring,
+            ends.unwrap_or(i64::MAX),
+        )
+    });
+    due
+}
+
 // The line under an account in the menu: its limits, or what stands in their way.
 pub(crate) fn summary(seen: &Seen, account: &Account) -> String {
     in_place_of_limits(seen, account).unwrap_or_else(|| {

@@ -7,6 +7,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Where two or more accounts need a sign-in, the app tells you once and Sign In to All signs in
+  to each in turn.
+
+### Changed
+
+- Pitboard asks you to sign in to a Claude Code account again 7 days before its sign-in ends,
+  where it waited until 3 days before, and the app sends a notification for it.
+
+### Fixed
+
+- Pitboard refreshes a saved sign-in only once it can keep the answer, so a full disk no longer
+  loses it, and says when the disk is full.
+
 ## [1.0.0-beta.15] - 2026-11-18
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding

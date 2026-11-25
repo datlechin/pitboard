@@ -818,7 +818,7 @@ public sealed class ModelTests
         [
             "twoTools", "oneTool", "empty", "firstLaunch", "noClaudeCode", "unnamed", "onlyOne",
             "readFailure", "stuck", "chatGPTOpen", "claudeDesktop", "claudeDesktopOpen",
-            "warmUp", "leftInFile", "loginReplaced", "switchedByItself",
+            "warmUp", "leftInFile", "loginReplaced", "switchedByItself", "signInsDue",
         ];
         CollectionAssert.AreEqual(ordered, names);
         var unknown = Assert.ThrowsExactly<FixtureException.Unknown>(
@@ -1001,12 +1001,15 @@ public sealed class ModelTests
 
         model.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")));
         var switched = waiting.Until(snapshot => Uses(snapshot, "claude/personal"), Patience);
-        var posted = posting.Posted.Until(1, Patience);
+        const string ranOutOf = "claude/personal/session/-";
+        posting.Posted.First(notice => notice.Id.StartsWith(ranOutOf, StringComparison.Ordinal), Patience);
         model.Shutdown();
+        // personal's sign-in ends in two days, which is told on its own.
+        var posted = posting.Posted.All.Where(notice => notice.Id.StartsWith(ranOutOf, StringComparison.Ordinal)).ToArray();
 
         Assert.IsNotNull(switched, "the switch was never read back");
         // When the limit resets is the read's.
-        var resetsAt = posted[0].Id["claude/personal/session/-".Length..];
+        var resetsAt = posted[0].Id[ranOutOf.Length..];
         Assert.IsTrue(long.TryParse(resetsAt, CultureInfo.InvariantCulture, out _), resetsAt);
         Notice[] ranOut =
         [

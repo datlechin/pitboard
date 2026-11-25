@@ -153,6 +153,22 @@ public sealed partial class ScreenshotTests
         KeepWindow(window, "windows-notice-switched");
     }
 
+    // A notice in the window holds the tip back.
+    [TestMethod]
+    public void SigningInToEveryAccountDue()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "signInsDue");
+        var window = InFront(launched.OpenWindow());
+        launched.Element("notice.sign-ins-due");
+        KeepWindow(window, "windows-notice-sign-ins-due");
+
+        launched.Invoke("notice.action.signInToAll");
+        launched.Element("sheet");
+        KeepWindow(window, "windows-sheet-sign-in-to-all");
+        launched.Answer("sheet", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet")), "the dialog stayed up");
+    }
+
     // The fixture's ChatGPT is a stand-in: nothing is quit.
     [TestMethod]
     public void AskingToQuitChatGpt()

@@ -239,6 +239,29 @@ final class ScreenshotTests: FixtureTestCase {
         keep(window, as: "macos-notice-switched-codex")
     }
 
+    @MainActor
+    func testSigningInToEveryAccountDue() {
+        let app = launch(.signInsDue)
+        app.openWindow()
+        let window = app.accountsWindow
+        app.putTheTipsAway()
+        let notice = app.control("notice.sign-ins-due")
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        keep(window, as: "macos-notice-sign-ins-due")
+
+        app.openMenu()
+        let menu = app.statusItems.firstMatch.menus.firstMatch
+        XCTAssertTrue(app.menuItem("Sign In to All 2 Accounts…").waitForExistence(timeout: 5))
+        keep(menu, as: "macos-menu-sign-ins-due")
+        app.typeKey(.escape, modifierFlags: [])
+
+        notice.buttons["notice.action.signInToAll"].click()
+        XCTAssertTrue(app.control("sheet.signInAgain").waitForExistence(timeout: 5))
+        keep(window, as: "macos-sheet-sign-in-to-all")
+        app.sheets.firstMatch.buttons["sheet.cancel"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
     /// The fixture's Claude is a stand-in, which signs in by itself 7 seconds after it opens:
     /// the sheet is put aside before that.
     @MainActor

@@ -284,7 +284,7 @@ impl Row {
         }
         // A session cookie's date, which nothing renews, only once it has passed.
         let expiring = match (park.refresh_expires_at, park.session_expires_at) {
-            (Some(at), _) => crate::state::renewal_due(at, now),
+            (Some(at), _) => crate::state::sign_in_due(at, now),
             (None, Some(at)) => at <= now,
             (None, None) => false,
         };
@@ -1735,7 +1735,7 @@ mod tests {
             session_expires_at: Some(at),
             ..parked(NOW + 20 * 86_400)
         };
-        let due = crate::state::RENEW_WITHIN - 1;
+        let due = crate::state::SIGN_IN_WITHIN - 1;
         for (row, standing) in [
             (row(None, false, None), Standing::Unplaced),
             (row(Some("work"), true, None), Standing::InUse),
@@ -1750,6 +1750,11 @@ mod tests {
             (parked_as(parked(NOW)), Standing::LoginExpired),
             (parked_as(parked(NOW + 20 * 86_400)), Standing::Ready),
             (parked_as(parked(NOW + due)), Standing::Expiring),
+            (parked_as(parked(NOW + 6 * 86_400)), Standing::Expiring),
+            (
+                parked_as(parked(NOW + crate::state::SIGN_IN_WITHIN)),
+                Standing::Ready,
+            ),
             (parked_as(session(NOW + 1)), Standing::Ready),
             (parked_as(session(NOW)), Standing::Expiring),
         ] {

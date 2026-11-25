@@ -2241,7 +2241,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     2026-11-15. 2.1.309's renewal took the answer's date whenever it had one",
         verified_against: "2.1.325",
         depends: "provider::claude::document::renewed, which keeps the date as Claude Code does, \
-                  and status::Row::standing's Expiring, from state::RENEW_WITHIN's 3 days, \
+                  and status::Row::standing's Expiring, from state::SIGN_IN_WITHIN's 7 days, \
                   which `pitboard status`, doctor's parked login check and both apps answer \
                   with a sign-in",
         probe: &[

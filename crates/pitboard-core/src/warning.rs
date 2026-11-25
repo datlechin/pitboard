@@ -22,6 +22,11 @@ pub enum Warning {
         label: String,
     },
     RenewalFailed(Error),
+    // Parked logins left unrenewed, with nothing sent, because the answer could not have been kept.
+    RenewalsHeld {
+        labels: Vec<String>,
+        why: switch::Unwritable,
+    },
     /// The tool's write or refresh lock stopped being Pitboard's during the change.
     LockCompromised {
         tool: ProviderId,
@@ -181,6 +186,8 @@ impl Warning {
             }
             Warning::ParksPendingRemoval(_) => "parks_pending_removal",
             Warning::ParkedLoginRefused { .. } => "parked_login_refused",
+            Warning::RenewalsHeld { why, .. } if why.disk_full => "renewal_held_disk_full",
+            Warning::RenewalsHeld { .. } => "renewal_held",
             Warning::AuthOverridden { .. } => "auth_overridden",
             Warning::FallbackLogin { .. } => "fallback_login",
             Warning::WrittenOnTheCommandLine { .. } => "written_on_the_command_line",
@@ -236,6 +243,7 @@ impl Warning {
             | Warning::ConfigNotUpdated(_)
             | Warning::ParksPendingRemoval(_)
             | Warning::RenewalFailed(_)
+            | Warning::RenewalsHeld { .. }
             | Warning::SessionsStillRunning { .. }
             | Warning::SessionsKeepTheOldLogin { .. }
             | Warning::SwitchStuck(_)
@@ -272,6 +280,23 @@ impl fmt::Display for Warning {
                  {label} --sign-in` to sign in to it again.",
                 tool.service()
             ),
+            Warning::RenewalsHeld { labels, why } => {
+                let named = labels
+                    .iter()
+                    .map(|label| format!("`{label}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let because = match why.disk_full {
+                    true => "the disk is full".to_string(),
+                    false => why.detail.clone(),
+                };
+                write!(
+                    f,
+                    "Pitboard did not renew the parked login of {named}: {because}. Nothing was \
+                     sent, so each keeps the login it has, and Pitboard tries again on its next \
+                     read."
+                )
+            }
             Warning::WrittenOnTheCommandLine { tool, bytes, limit } => {
                 write!(
                     f,

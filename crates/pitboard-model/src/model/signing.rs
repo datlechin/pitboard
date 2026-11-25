@@ -2489,3 +2489,183 @@ fn the_page_says_pitboard_opened_claude_only_where_it_did() {
         );
     }
 }
+
+// An account due a sign-in, its parked login ending at `ends` where it has one.
+fn due(
+    label: &str,
+    standing: pitboard_core::status::Standing,
+    ends: Option<i64>,
+) -> crate::Account {
+    let mut account = claude(label, false, 0.0);
+    account.standing = standing;
+    account.parked = Some(crate::Parked {
+        refresh_expires_at: ends,
+        session_expires_at: None,
+    });
+    account
+}
+
+fn again(label: &str) -> Sheet {
+    Sheet::SignInAgain {
+        account: AccountKey::new(Tool::Claude, label),
+    }
+}
+
+fn due_now(signed_in: &[&str]) -> Vec<crate::Account> {
+    use pitboard_core::status::Standing;
+    let mut accounts = vec![claude("work", true, 0.0)];
+    for (label, standing, ends) in [
+        ("soon", Standing::Expiring, Some(6 * 86_400)),
+        ("gone", Standing::NothingParked, None),
+    ] {
+        accounts.push(match signed_in.contains(&label) {
+            true => claude(label, false, 0.0),
+            false => due(label, standing, ends),
+        });
+    }
+    accounts
+}
+
+// What an app shows: the tool's own words, which say the same as the sheet's.
+fn sheet_message(model: &Hand) -> String {
+    let text = model.shown().sheet_text.expect("a sheet's words");
+    assert_eq!(text.tools[0].message, text.message);
+    text.message
+}
+
+#[test]
+fn sign_in_to_all_puts_up_each_accounts_sheet_once_the_last_signed_in() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(due_now(&[]))));
+    model.refresh(&mut machine);
+
+    model.send(Intent::SignInToAll);
+    model.run(&mut machine);
+    assert_eq!(
+        model.state.sheet,
+        Some(again("gone")),
+        "the one that no longer works first"
+    );
+    assert!(
+        sheet_message(&model).ends_with("Account 1 of 2, then soon."),
+        "{}",
+        sheet_message(&model)
+    );
+
+    machine.enrolling = enrolled_as("gone", EnrolledAs::Renewed, Vec::new());
+    machine.answer = Ok(status(due_now(&["gone"])));
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("gone"), &[]);
+    assert_eq!(model.state.sheet, Some(again("soon")));
+    assert!(sheet_message(&model).ends_with("Account 2 of 2, the last."));
+
+    machine.enrolling = enrolled_as("soon", EnrolledAs::Renewed, Vec::new());
+    machine.answer = Ok(status(due_now(&["gone", "soon"])));
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("soon"), &[]);
+    assert_eq!(model.state.sheet, None);
+    assert_eq!(model.state.sign_in_all, None);
+}
+
+#[test]
+fn sign_in_to_all_stops_where_a_sheet_is_closed_before_its_account_signed_in() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(due_now(&[]))));
+    model.refresh(&mut machine);
+    model.send(Intent::SignInToAll);
+    model.run(&mut machine);
+
+    model.send(Intent::CloseSheet);
+    model.refresh(&mut machine);
+
+    assert_eq!(model.state.sheet, None);
+    assert_eq!(model.state.sign_in_all, None);
+}
+
+#[test]
+fn accounts_due_together_are_offered_as_one_in_the_window_and_the_menu() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(due_now(&[]))));
+    model.refresh(&mut machine);
+
+    let shown = model.shown();
+    let notice = shown
+        .notices
+        .iter()
+        .find(|notice| notice.id == "sign-ins-due")
+        .expect("one notice for both");
+    assert_eq!(notice.title, "2 accounts need a sign-in");
+    assert_eq!(
+        notice.lines,
+        ["Sign in to gone and soon again, one after the other."]
+    );
+    assert_eq!(notice.actions[0].intent, Intent::SignInToAll);
+    assert_eq!(notice.actions[0].title, "Sign In to All 2 Accounts…");
+    let first = &shown.menu_notices.sign_ins[0];
+    assert_eq!(
+        (first.title.as_str(), &first.intent),
+        ("Sign In to All 2 Accounts…", &Some(Intent::SignInToAll))
+    );
+
+    machine.answer = Ok(status(due_now(&["gone"])));
+    model.refresh(&mut machine);
+    let shown = model.shown();
+    assert!(
+        shown
+            .notices
+            .iter()
+            .all(|notice| notice.id != "sign-ins-due")
+    );
+    assert!(
+        (shown.menu_notices.sign_ins.iter()).all(|entry| entry.intent != Some(Intent::SignInToAll))
+    );
+}
+
+#[test]
+fn sign_in_to_all_counts_only_the_accounts_still_due() {
+    use pitboard_core::status::Standing;
+    let three = |signed_in: &[&str]| {
+        let mut accounts = due_now(signed_in);
+        if !signed_in.contains(&"late") {
+            accounts.push(due("late", Standing::Expiring, Some(5 * 86_400)));
+        }
+        accounts
+    };
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(three(&[]))));
+    model.refresh(&mut machine);
+    model.send(Intent::SignInToAll);
+    model.run(&mut machine);
+    assert!(sheet_message(&model).ends_with("Account 1 of 3, then late."));
+
+    machine.enrolling = enrolled_as("gone", EnrolledAs::Renewed, Vec::new());
+    // late was signed in to elsewhere meanwhile.
+    machine.answer = Ok(status(three(&["gone", "late"])));
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("gone"), &[]);
+
+    assert_eq!(model.state.sheet, Some(again("soon")));
+    assert!(
+        sheet_message(&model).ends_with("Account 2 of 2, the last."),
+        "{}",
+        sheet_message(&model)
+    );
+}
+
+#[test]
+fn a_cancel_stops_sign_in_to_all_even_once_its_sign_in_has_finished() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(due_now(&[]))));
+    model.refresh(&mut machine);
+    model.send(Intent::SignInToAll);
+    model.run(&mut machine);
+    machine.enrolling = enrolled_as("gone", EnrolledAs::Renewed, Vec::new());
+    machine.answer = Ok(status(due_now(&["gone"])));
+    let id = starts(&mut model, &mut machine, Tool::Claude, Some("gone"));
+    model.give(Answer::SignInQuiet { id });
+
+    // The close a person pressed as it finished reaches the model after it.
+    model.send(Intent::CancelSignIn);
+    model.send(Intent::CloseSheet);
+    model.run(&mut machine);
+
+    assert_eq!(model.state.sheet, None);
+    assert_eq!(model.state.sign_in_all, None);
+}

@@ -6,6 +6,7 @@ use super::{store_in_front, titled};
 use crate::Front;
 use crate::model::state::Recording;
 use pitboard_core::label::Unusable;
+use pitboard_core::words::listed;
 
 // What the sheet says under the steps while Pitboard waits for `app` to quit signed in, as the
 // wait last said.
@@ -81,6 +82,30 @@ pub(crate) fn sign_in_to_again(front: Front, label: &str, asks: bool) -> String 
         &format!("Sign In to {label} Again{more}"),
         &format!("Sign in to {label} again{more}"),
     )
+}
+
+pub(crate) fn sign_in_to_all(front: Front, count: usize) -> String {
+    titled(
+        front,
+        &format!("Sign In to All {count} Accounts…"),
+        &format!("Sign in to all {count} accounts…"),
+    )
+}
+
+pub(crate) fn sign_ins_due(count: usize) -> String {
+    format!("{count} accounts need a sign-in")
+}
+
+pub(crate) fn sign_ins_due_lines(labels: &[String]) -> String {
+    format!("Sign in to {} again, one after the other.", listed(labels))
+}
+
+// Where Sign In to All has got to, said under the sheet's own words.
+pub(crate) fn sign_in_step(at: usize, of: usize, next: Option<&str>) -> String {
+    match next {
+        Some(next) => format!("Account {at} of {of}, then {next}."),
+        None => format!("Account {at} of {of}, the last."),
+    }
 }
 
 pub(crate) fn add_as(label: &str) -> String {
