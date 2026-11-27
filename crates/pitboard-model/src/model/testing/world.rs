@@ -471,6 +471,13 @@ impl World {
         Writing(held)
     }
 
+    pub(crate) fn codex_program(&mut self, script: &stand_in::Script) -> PathBuf {
+        let program = self.root.path().join("bin").join(program_name("codex"));
+        stand_in::install(&program, script).expect("a scratch Codex command");
+        self.ctx = self.ctx.clone().with_codex_program(program);
+        self.root.path().join(".codex")
+    }
+
     /// Codex signed in as `who` and enrolled as `label`, as `codex login` and then
     /// `pitboard enroll codex/<label>` in a terminal leave it.
     pub(crate) fn codex_enrolled(&self, label: &str, who: &str) {

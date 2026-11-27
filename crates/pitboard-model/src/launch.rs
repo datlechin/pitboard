@@ -274,6 +274,47 @@ pub(crate) enum Switch {
 pub(crate) struct Switched {
     pub(crate) outcome: Switch,
     pub(crate) warnings: Vec<Warning>,
+    pub(crate) daemon_warning: Option<Box<DaemonWarning>>,
+}
+
+// The switch warning with and without the daemon, leaving other holders' advice in place.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DaemonWarning {
+    pub(crate) before: Warning,
+    pub(crate) after: Option<Warning>,
+}
+
+impl DaemonWarning {
+    fn from_switch(front: Front, found: &[service::Warning]) -> Option<Self> {
+        if front != Front::MacMenuBar {
+            return None;
+        }
+        found.iter().find_map(|warning| {
+            let service::Warning::SessionsStillRunning { from, holding } = warning else {
+                return None;
+            };
+            let remaining: Vec<_> = holding
+                .iter()
+                .filter(|held| held.holder.kind != "app_server_daemon")
+                .cloned()
+                .collect();
+            if remaining.len() == holding.len() {
+                return None;
+            }
+            let before = warnings(front, std::slice::from_ref(warning)).remove(0);
+            let after = (!remaining.is_empty()).then(|| {
+                warnings(
+                    front,
+                    &[service::Warning::SessionsStillRunning {
+                        from: from.clone(),
+                        holding: remaining,
+                    }],
+                )
+                .remove(0)
+            });
+            Some(Self { before, after })
+        })
+    }
 }
 
 /// What switching Claude Code by itself came to, as the model takes it. Times are epoch
@@ -480,6 +521,11 @@ fn account(row: status::Row, now: i64) -> Account {
 }
 
 fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
+    let daemon_warning = changing
+        .as_ref()
+        .ok()
+        .and_then(|done| DaemonWarning::from_switch(front, &done.warnings))
+        .map(Box::new);
     changed(front, changing, |outcome, warnings| Switched {
         outcome: match outcome {
             switch::Outcome::Switched {
@@ -508,6 +554,7 @@ fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switche
             },
         },
         warnings,
+        daemon_warning,
     })
 }
 
@@ -1398,6 +1445,21 @@ impl AppCore {
             .into_iter()
             .map(Holding::from)
             .collect()
+    }
+
+    pub(crate) fn restart_codex_daemon(&self) -> Result<(), PitboardError> {
+        self.readable()?
+            .core
+            .restart_codex_daemon()
+            .map_err(|error| PitboardError::Failed {
+                code: "codex_daemon_restart_failed".into(),
+                message: format!(
+                    "{}. Run `codex app-server daemon restart` in a terminal.",
+                    sentence(&error.to_string()).trim_end_matches('.')
+                ),
+                warnings: Vec::new(),
+                account: None,
+            })
     }
 
     /// Every check `pitboard doctor` makes, each moment one names on the person's clock as

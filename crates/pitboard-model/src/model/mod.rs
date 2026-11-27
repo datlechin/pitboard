@@ -374,6 +374,10 @@ pub enum Intent {
     Stow,
     /// Somebody has read what putting away the login left in a file did, and put it away.
     DismissStowed,
+    /// Restart the Codex daemon after the person confirms the switch notice's offer.
+    RestartCodexDaemon {
+        account: AccountKey,
+    },
     /// `pane` of the main window is shown, or its own button asks for what it shows to be
     /// read again, as Check Again and the activity's Refresh do: what it shows is read every
     /// time, as the Swift panes read it on every visit, since an app runs for days and a check
@@ -682,6 +686,7 @@ pub(crate) struct LastSwitch {
     // a sign-in that replaced the account's login in use, since no switch did
     pub said: Option<SignedIn>,
     pub warnings: Vec<Warning>,
+    pub daemon_warning: Option<Box<crate::launch::DaemonWarning>>,
     // for a tool whose app holds the login from when it is next opened
     pub opens: Option<Opens>,
     // where switching by itself made it
@@ -736,6 +741,7 @@ pub(crate) enum Doing {
     Remove { account: Key },
     Rename { account: Key },
     UpdateConfig,
+    RestartCodexDaemon,
     TellWhose,
     CleanUp,
     ChangeWarm,

@@ -2188,6 +2188,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
             adoption: crate::Adoption::AtRenewal { file: path.into() },
         },
         warnings: vec![left.clone()],
+        daemon_warning: None,
     });
     switch(&mut model, &mut machine, Tool::Claude, "work");
 

@@ -9,6 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- On macOS, **Restart Codex** in the switch notice restarts Codex's background app server
+  after you confirm.
 - Where two or more accounts need a sign-in, the app tells you once and Sign In to All signs in
   to each in turn.
 

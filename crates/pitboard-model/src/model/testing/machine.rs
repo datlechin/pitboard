@@ -574,6 +574,10 @@ impl Stub {
                         .map_err(|refused| refused.error()),
                 }
             }
+            Job::RestartCodexDaemon(account) => Answer::CodexDaemonRestarted {
+                account,
+                done: Ok(()),
+            },
             Job::UpdateConfig { account } => {
                 self.configs_updated.push(account.qualified());
                 Answer::ConfigUpdated(

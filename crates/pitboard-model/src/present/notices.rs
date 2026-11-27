@@ -532,8 +532,23 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         enabled: !seen.state.switch_under_way(),
         confirm: None,
     });
+    let restart_daemon = last.daemon_warning.as_ref().map(|_| NoticeAction {
+        title: "Restart Codex".into(),
+        intent: Intent::RestartCodexDaemon { account: last.to.clone().into() },
+        enabled: !seen.state.switch_under_way() && !seen.state.restarting_codex_daemon,
+        confirm: Some(Question {
+            title: "Restart Codex’s Background Server?".into(),
+            message: "Codex will read the sign-in you switched to. Restarting can interrupt running Codex sessions.".into(),
+            confirm: "Restart Codex".into(),
+            destructive: false,
+            confirm_is_default: false,
+        }),
+        dismisses: false,
+        switches: false,
+    });
     let actions = back
         .into_iter()
+        .chain(restart_daemon)
         .chain([dismiss(Intent::DismissSwitch {
             tool: last.provider.into(),
         })])
@@ -1348,6 +1363,7 @@ mod tests {
             restart: None,
             said: None,
             warnings: Vec::new(),
+            daemon_warning: None,
             opens: Some(Opens::Switched { app: "Claude" }),
             back: None,
         }];

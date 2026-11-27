@@ -582,6 +582,53 @@ impl Pitboard {
         }
     }
 
+    /// Restarts the managed Codex daemon running in this Codex home.
+    pub fn restart_codex_daemon(&self) -> std::io::Result<()> {
+        use crate::provider::{ProviderId, codex::paths, command};
+        use std::io::Error;
+        use std::process::Stdio;
+
+        let permit = self.permit().map_err(Error::other)?;
+        let codex_home = paths::home(&self.ctx);
+        let daemon = |verb| -> std::io::Result<_> {
+            let mut run = command(&self.ctx, permit, ProviderId::Codex)?;
+            run.args(["app-server", "daemon", verb])
+                .env("CODEX_HOME", &codex_home)
+                .stdin(Stdio::null())
+                .stderr(Stdio::null());
+            Ok(run)
+        };
+
+        let version = daemon("version")?.output()?;
+        if !version.status.success() {
+            return Err(Error::other(format!(
+                "Codex daemon status exited with {}",
+                version.status
+            )));
+        }
+        let version: serde_json::Value = serde_json::from_slice(&version.stdout)?;
+        match version["status"].as_str() {
+            Some("running") => {}
+            _ => {
+                return Err(Error::other(
+                    "Codex did not report whether its daemon is running",
+                ));
+            }
+        }
+
+        // The running server keeps its login in memory (codex_app_server_daemon).
+        // Use Codex's lifecycle command so it can drain work and restore loaded threads.
+        // https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/app-server-daemon/README.md#lifecycle-semantics
+        let status = daemon("restart")?.stdout(Stdio::null()).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(Error::other(format!(
+                "Codex daemon restart exited with {status}"
+            )))
+        }
+    }
+
     /// Whether `which`'s app may be opened again, from the index alone.
     pub fn whole(&self, which: ProviderId) -> bool {
         match crate::provider::of(which) {

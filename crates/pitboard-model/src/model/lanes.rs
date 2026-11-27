@@ -94,6 +94,7 @@ impl Job {
             | Job::LookLeft => Lane::Reads,
             Job::Switch { .. }
             | Job::Replace { .. }
+            | Job::RestartCodexDaemon(_)
             | Job::AutoSwitch { .. }
             | Job::Abandon
             | Job::Enrol { .. }
@@ -874,6 +875,10 @@ impl Worker {
                 account,
             },
             Job::UpdateConfig { account } => Answer::ConfigUpdated(core.update_config(&account)),
+            Job::RestartCodexDaemon(account) => Answer::CodexDaemonRestarted {
+                account,
+                done: core.restart_codex_daemon(),
+            },
             Job::LookLeft => Answer::LookedLeft(core.left_login()),
             Job::Stow { seen, from } => Answer::Stowed {
                 done: core.stow(&seen),

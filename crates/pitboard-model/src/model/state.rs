@@ -158,10 +158,15 @@ pub(crate) enum Job {
     /// Read every account: first when the usage readings and the account index were last
     /// written, as they stand before the read, then the read itself. `fresh` asks each tool's
     /// service about every account whatever it was asked moments ago.
-    Read { ticket: Ticket, fresh: bool },
+    Read {
+        ticket: Ticket,
+        fresh: bool,
+    },
     /// Read what is already known, asking nobody: the last numbers measured, and whose login
     /// each tool has stored, as its service last said.
-    ReadOffline { why: Why },
+    ReadOffline {
+        why: Why,
+    },
     /// When the account index and the usage readings were last written.
     Look,
     /// Watch Pitboard's directory, on a thread of its own, until the model stops: each write
@@ -173,34 +178,55 @@ pub(crate) enum Job {
     AskInstalled,
     /// Whether a running app holds the login of `account`'s tool, which the core answers from
     /// the process list and the app from what is running.
-    Holding { account: Key, then: After },
+    Holding {
+        account: Key,
+        then: After,
+    },
     /// Ask the app the question names to quit, and wait until it has, for as long as the
     /// cadence gives it.
-    Quit { question: QuitQuestion, then: After },
+    Quit {
+        question: QuitQuestion,
+        then: After,
+    },
     Switch {
         account: Key,
         reopen: Option<String>,
     },
     /// Put `account` in place of a login in use its service refuses for good, as the person
     /// agreed to.
-    Replace { account: Key },
+    Replace {
+        account: Key,
+    },
+    RestartCodexDaemon(Key),
     /// Ask the core's look whether to switch Claude Code by itself under `policy`, from its
     /// files alone: what stands, or that only a decision under its lock can say. It claims
     /// nothing.
-    AutoLook { policy: Policy },
+    AutoLook {
+        policy: Policy,
+    },
     /// Switch Claude Code by itself where `policy` says to: asked once the look says only a
     /// decision under the core's lock can say, which decides whether, and to which, from whose
     /// login Claude Code has stored.
-    AutoSwitch { policy: Policy },
+    AutoSwitch {
+        policy: Policy,
+    },
     /// Warm up the first account turned on that is due, as the core decides, on a lane of its
     /// own: the core looks at its files first, and a warm-up runs Claude Code for seconds.
     WarmUp,
     /// Warm up `account` now, whatever the span of the day.
-    WarmNow { account: Key },
+    WarmNow {
+        account: Key,
+    },
     /// Warm up `account` from now on, or stop.
-    SetWarm { account: Key, on: bool },
+    SetWarm {
+        account: Key,
+        on: bool,
+    },
     /// Warm up accounts from `from` to `to`, minutes of the day.
-    SetWarmRange { from: u16, to: u16 },
+    SetWarmRange {
+        from: u16,
+        to: u16,
+    },
     /// Open the app at `location` again.
     Open {
         location: String,
@@ -218,13 +244,21 @@ pub(crate) enum Job {
         again: Option<String>,
     },
     /// Type `code` back to the tool of the sign-in `id`.
-    PasteCode { id: u64, code: String },
+    PasteCode {
+        id: u64,
+        code: String,
+    },
     /// Stop the tool of the sign-in `id`, and say whether it did. Once the tool has stopped
     /// saying anything this stops nothing, since what it signed in to may be being enrolled.
-    StopSignIn { id: u64 },
+    StopSignIn {
+        id: u64,
+    },
     /// The tool of the sign-in `id` has stopped saying anything: enrol what it signed in to,
     /// or let it go.
-    SignInOver { id: u64, enrol: bool },
+    SignInOver {
+        id: u64,
+        enrol: bool,
+    },
     /// Enrol the login signed in now to `tool`, with no browser: as the account `again` names,
     /// or under a name the core picks. `from` is the sheet that was up when it was asked for,
     /// where what goes wrong is said.
@@ -242,44 +276,68 @@ pub(crate) enum Job {
         from: Option<Sheet>,
     },
     /// Drop `account`, and the login parked for it.
-    Forget { account: Key },
+    Forget {
+        account: Key,
+    },
     /// Write `account` into its tool's config, while it is in use.
-    UpdateConfig { account: Key },
+    UpdateConfig {
+        account: Key,
+    },
     /// Look at the file behind Claude Code's store: what it holds, and whose the login in it
     /// is, which may ask Anthropic with that login's own access token, and whose the login
     /// stored is, as a read asks it. It changes nothing.
     LookLeft,
     /// Put away the file behind Claude Code's store, while it holds what `seen` was taken of.
     /// `from` is the sheet that was up when it was asked for, where what goes wrong is said.
-    Stow { seen: String, from: Option<Sheet> },
+    Stow {
+        seen: String,
+        from: Option<Sheet>,
+    },
     /// Read what the model keeps of its own in Pitboard's directory: the record of what was
     /// told, and the app's preferences.
     LoadKept,
     /// Keep the record of what was told, the whole of it.
-    KeepTold { told: Told },
+    KeepTold {
+        told: Told,
+    },
     /// Keep the app's preferences, the whole of them.
-    KeepPreferences { preferences: Preferences },
+    KeepPreferences {
+        preferences: Preferences,
+    },
     /// Keep this directory's account window records, the whole of them, as the `write`th
     /// write asked for.
-    KeepWindows { entry: Entry, write: u64 },
+    KeepWindows {
+        entry: Entry,
+        write: u64,
+    },
     /// Ask the account windows' records which of `stores` another Pitboard directory that is
     /// still there recorded too.
-    CheckShared { stores: Vec<String> },
+    CheckShared {
+        stores: Vec<String>,
+    },
     /// Post a notification through the app's own system.
-    Post { notice: Notice },
+    Post {
+        notice: Notice,
+    },
     /// Point a renewal schedule an app up to 0.3.0 wrote, which runs that app and renews
     /// nothing, at the command line inside this one: once a launch.
     RepairSchedule,
     /// Read the renewal schedule. `after_change` is the read after a change to it, which
     /// ends that change once it lands.
-    ReadSchedule { after_change: bool },
+    ReadSchedule {
+        after_change: bool,
+    },
     /// Hand renewing parked logins to this machine's scheduler, or take it back. Turning it
     /// on is not asked of the scheduler where this copy of the app has no command line a
     /// schedule would keep reaching.
-    SetSchedule { on: bool },
+    SetSchedule {
+        on: bool,
+    },
     /// Read the watch service. `after_change` is the read after a change to it, which ends
     /// that change once it lands.
-    ReadWatchService { after_change: bool },
+    ReadWatchService {
+        after_change: bool,
+    },
     /// Have this machine's service manager run `pitboard watch`, doing at a limit what
     /// `switching` says, or take it away, refused as `SetSchedule` is.
     SetWatchService {
@@ -289,14 +347,19 @@ pub(crate) enum Job {
     /// Make every check `pitboard doctor` makes.
     Check,
     /// Read the newest `limit` changes Pitboard made.
-    ReadLog { limit: u32 },
+    ReadLog {
+        limit: u32,
+    },
     /// Look for the `pitboard` a terminal would run.
     FindCommandLine,
     /// Remove Pitboard from this machine, with the app's own hold on its directory, once the
     /// watch on the directory has let go of it.
     Uninstall,
     /// Keep the glance in the file the app named for it.
-    KeepGlance { text: String, reload: bool },
+    KeepGlance {
+        text: String,
+        reload: bool,
+    },
 }
 
 impl Job {
@@ -523,6 +586,10 @@ pub(crate) enum Answer {
     /// What writing the account in use into its tool's config came to, with what its tool
     /// warned of.
     ConfigUpdated(Result<Vec<Warning>, PitboardError>),
+    CodexDaemonRestarted {
+        account: Key,
+        done: Result<(), PitboardError>,
+    },
     /// What is left in the file behind Claude Code's store, and what putting it away would
     /// do with it: `None` where nothing is.
     LookedLeft(Result<Option<Left>, PitboardError>),
@@ -641,6 +708,7 @@ impl Answer {
             | Answer::Renamed { .. }
             | Answer::Forgot { .. }
             | Answer::ConfigUpdated(_)
+            | Answer::CodexDaemonRestarted { .. }
             | Answer::Stowed { .. }
             | Answer::Repaired { .. }
             | Answer::ScheduleSet { .. }
@@ -1114,6 +1182,7 @@ pub(crate) struct State {
     replacing: Option<Replacing>,
     /// What each tool's last switch said that is still true, one per tool at most.
     pub(crate) last_switches: Vec<LastSwitch>,
+    pub(crate) restarting_codex_daemon: bool,
     /// What giving up on an interrupted switch kept, until somebody has read it.
     pub(crate) abandoned: Option<Abandoned>,
     /// What the sheet for putting away the login left in a file has found of it, while that
@@ -1259,6 +1328,7 @@ impl State {
             quitting: None,
             replacing: None,
             last_switches: Vec::new(),
+            restarting_codex_daemon: false,
             abandoned: None,
             left: None,
             stowed: None,
@@ -1710,6 +1780,20 @@ impl State {
                 },
                 jobs,
             ),
+            Intent::RestartCodexDaemon { account } => {
+                let account = Key::from(account);
+                if self.front == Front::MacMenuBar
+                    && !self.restarting_codex_daemon
+                    && !self.switch_under_way()
+                    && self
+                        .last_switches
+                        .iter()
+                        .any(|last| last.to == account && last.daemon_warning.is_some())
+                {
+                    self.restarting_codex_daemon = true;
+                    jobs.push(Job::RestartCodexDaemon(account));
+                }
+            }
             Intent::UpdateConfig { account } => {
                 let account = account.into();
                 self.change(Job::UpdateConfig { account }, jobs);
@@ -2982,6 +3066,7 @@ impl State {
                         adoption: adoption.clone(),
                     },
                     warnings: warnings.clone(),
+                    daemon_warning: None,
                 };
                 self.auto_standing = Some(AutoStanding::Came(AutoSwitched::Switched {
                     from,
@@ -3411,6 +3496,9 @@ impl State {
                 self.forgot(&account, done.map_err(Some), now, jobs);
             }
             Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
+            Answer::CodexDaemonRestarted { account, done } => {
+                self.codex_daemon_restarted(&account, done.map_err(Some));
+            }
             Answer::LookedLeft(found) => self.looked_left(found.map_err(Some)),
             Answer::Stowed { from, done } => {
                 self.stowed(from.as_ref(), done.map_err(Some), now, jobs);
@@ -3573,6 +3661,9 @@ impl State {
                 }
                 Job::Forget { account } => self.forgot(&account, Err(None), now, jobs),
                 Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
+                Job::RestartCodexDaemon(account) => {
+                    self.codex_daemon_restarted(&account, Err(None))
+                }
                 Job::LookLeft => self.looked_left(Err(None)),
                 Job::Stow { from, .. } => self.stowed(from.as_ref(), Err(None), now, jobs),
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
@@ -3786,6 +3877,7 @@ impl State {
                 restart: None,
                 said: None,
                 warnings: Vec::new(),
+                daemon_warning: None,
                 opens: None,
                 back: None,
             });
@@ -4429,6 +4521,7 @@ impl State {
                         restart: None,
                         said: None,
                         warnings: Vec::new(),
+                        daemon_warning: None,
                         opens: None,
                         back: None,
                     });
@@ -4463,9 +4556,41 @@ impl State {
             restart,
             said: None,
             warnings: done.warnings,
+            daemon_warning: done.daemon_warning,
             opens,
             back: None,
         });
+    }
+
+    fn codex_daemon_restarted(&mut self, account: &Key, done: Result<(), Option<PitboardError>>) {
+        self.restarting_codex_daemon = false;
+        match done {
+            Ok(()) => {
+                if let Some(last) = self
+                    .last_switches
+                    .iter_mut()
+                    .find(|last| last.to == *account)
+                    && let Some(daemon) = last.daemon_warning.take()
+                {
+                    last.warnings.retain_mut(|warning| {
+                        if *warning != daemon.before {
+                            return true;
+                        }
+                        if let Some(after) = &daemon.after {
+                            *warning = after.clone();
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                    last.restart = None;
+                }
+            }
+            Err(error) => self.present(match error {
+                Some(error) => Refused::of(Doing::RestartCodexDaemon, error),
+                None => Refused::lost(Doing::RestartCodexDaemon),
+            }),
+        }
     }
 
     /// In place of what the same tool's last switch said, or after the others.

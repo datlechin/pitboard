@@ -421,6 +421,7 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
             restart: None,
             said: None,
             warnings: vec![overridden],
+            daemon_warning: None,
             opens: None,
             back: None,
         }
@@ -1631,6 +1632,7 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
             adoption: crate::Adoption::NextOpen { app: "Claude" },
         },
         warnings: Vec::new(),
+        daemon_warning: None,
     });
     switch(&mut model, &mut machine, Tool::Desktop, "work");
     let shown = model.shown();
