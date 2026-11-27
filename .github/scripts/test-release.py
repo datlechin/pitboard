@@ -45,7 +45,18 @@ TARBALL_TARGETS = (
     "x86_64-unknown-linux-musl",
     "aarch64-unknown-linux-musl",
 )
-KEYS = ["version", "base", "kind", "prerelease", "windows", "crates", "latest", "signed"]
+KEYS = [
+    "version",
+    "base",
+    "kind",
+    "prerelease",
+    "windows",
+    "crates",
+    "latest",
+    "signed",
+    "signature",
+    "policy",
+]
 NOT_A_TAG = "is not a release tag: vX.Y.Z, vX.Y.Z-rcN or vX.Y.Z-beta.N"
 NO_SIGNER = (
     "Pitboard for Windows has no signer yet, and a release candidate or final release is never "
@@ -285,13 +296,29 @@ class ReleaseKind(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.work)
 
-    def kind(self, tag, manifest, published=(), signer="signpath", subject=SIGNPATH):
+    def kind(
+        self,
+        tag,
+        manifest,
+        published=(),
+        signer="signpath",
+        subject=SIGNPATH,
+        policy="release-signing",
+    ):
         listed = self.work / "published"
         listed.write_text("".join(f"{line}\n" for line in published))
-        return run(RELEASE_KIND, tag, manifest, listed, signer, subject)
+        return run(RELEASE_KIND, tag, manifest, listed, signer, subject, policy)
 
-    def outputs(self, tag, manifest, published=(), signer="signpath", subject=SIGNPATH):
-        done = self.kind(tag, manifest, published, signer, subject)
+    def outputs(
+        self,
+        tag,
+        manifest,
+        published=(),
+        signer="signpath",
+        subject=SIGNPATH,
+        policy="release-signing",
+    ):
+        done = self.kind(tag, manifest, published, signer, subject, policy)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stderr, "")
         pairs = [line.split("=", 1) for line in done.stdout.splitlines()]
@@ -299,9 +326,16 @@ class ReleaseKind(unittest.TestCase):
         return dict(pairs)
 
     def assertRefused(
-        self, tag, manifest, message, published=(), signer="signpath", subject=SIGNPATH
+        self,
+        tag,
+        manifest,
+        message,
+        published=(),
+        signer="signpath",
+        subject=SIGNPATH,
+        policy="release-signing",
     ):
-        done = self.kind(tag, manifest, published, signer, subject)
+        done = self.kind(tag, manifest, published, signer, subject, policy)
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertEqual(done.stdout, "")
         self.assertIn(message, done.stderr)
@@ -330,6 +364,8 @@ class ReleaseKind(unittest.TestCase):
                         "crates": crates,
                         "latest": latest,
                         "signed": windows,
+                        "signature": "signed" if windows == "true" else "unsigned",
+                        "policy": "release-signing" if windows == "true" else "",
                     },
                 )
 
@@ -345,6 +381,38 @@ class ReleaseKind(unittest.TestCase):
         ):
             with self.subTest(tag=tag, signer=signer):
                 self.assertEqual(self.outputs(tag, manifest, signer=signer)["signed"], signed)
+
+    def test_only_a_release_candidate_carries_the_test_certificate(self):
+        done = self.outputs("v1.0.0-rc1", "1.0.0", policy="test-signing")
+        self.assertEqual((done["signature"], done["policy"]), ("test", "test-signing"))
+        for tag, manifest in (("v1.0.0-beta.16", "1.0.0-beta.16"), ("v1.0.0", "1.0.0")):
+            with self.subTest(tag=tag):
+                self.assertRefused(
+                    tag,
+                    manifest,
+                    "would carry SignPath's test certificate, which only a release candidate does",
+                    policy="test-signing",
+                )
+
+    def test_signpath_needs_a_policy_it_knows(self):
+        for policy in ("", "release", "Test-Signing"):
+            with self.subTest(policy=policy):
+                self.assertRefused(
+                    "v1.0.0-rc1",
+                    "1.0.0",
+                    "WINDOWS_SIGNING_POLICY is neither release-signing nor test-signing",
+                    policy=policy,
+                )
+
+    def test_another_signer_and_an_unsigned_release_name_no_policy(self):
+        for tag, manifest, signer, signature in (
+            ("v1.0.0-rc1", "1.0.0", "sslcom", "signed"),
+            ("v1.0.0-beta.1", "1.0.0-beta.1", "", "unsigned"),
+            ("v0.15.0", "0.15.0", "signpath", "unsigned"),
+        ):
+            with self.subTest(tag=tag, signer=signer):
+                done = self.outputs(tag, manifest, signer=signer, policy="test-signing")
+                self.assertEqual((done["signature"], done["policy"]), (signature, ""))
 
     def test_a_windows_release_candidate_or_final_release_needs_a_signer(self):
         for tag, manifest in (("v1.0.0-rc1", "1.0.0"), ("v1.0.0", "1.0.0"), ("v2.3.4", "2.3.4")):
@@ -440,14 +508,42 @@ class ReleaseKind(unittest.TestCase):
             ["v1.0.0", "nightly"],
         )
 
-    def test_it_takes_five_arguments(self):
+    def test_it_takes_six_arguments(self):
         listed = self.work / "published"
         listed.write_text("")
-        for args in (("v1.0.0", "1.0.0", listed, ""), ("v1.0.0", "1.0.0", listed, "", "", "x")):
+        for args in (
+            ("v1.0.0", "1.0.0", listed, "", ""),
+            ("v1.0.0", "1.0.0", listed, "", "", "", "x"),
+        ):
             with self.subTest(count=len(args)):
                 done = run(RELEASE_KIND, *args)
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage:", done.stderr)
+
+
+class SigningRequests(unittest.TestCase):
+    NAMESPACE = "{http://signpath.io/artifact-configuration/v1}"
+
+    def test_each_configuration_the_release_names_is_a_zip_as_github_hands_it_over(self):
+        release = (WORKFLOWS / "release.yml").read_text()
+        named = re.findall(r"artifact-configuration-slug: (\S+)", release)
+        self.assertEqual(sorted(named), ["windows-files", "windows-msi"])
+        for slug in named:
+            with self.subTest(slug=slug):
+                path = REPO / ".signpath" / "artifact-configurations" / f"{slug}.xml"
+                root = ElementTree.parse(path).getroot()
+                self.assertEqual(root.tag, f"{self.NAMESPACE}artifact-configuration")
+                files = [child for child in root if not child.tag.endswith("parameters")]
+                self.assertEqual([child.tag for child in files], [f"{self.NAMESPACE}zip-file"])
+
+    def test_every_program_signed_is_held_to_pitboards_name_and_this_version(self):
+        path = REPO / ".signpath" / "artifact-configurations" / "windows-files.xml"
+        root = ElementTree.parse(path).getroot()
+        sets = list(root.iter(f"{self.NAMESPACE}pe-file-set"))
+        self.assertEqual(len(sets), 2)
+        for files in sets:
+            self.assertEqual(files.get("product-name"), "Pitboard")
+            self.assertEqual(files.get("product-version"), "${version}")
 
 
 class Binstall(unittest.TestCase):

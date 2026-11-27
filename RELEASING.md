@@ -250,12 +250,25 @@ mistake in a published file. A deleted release's tag name cannot be used again.
 
 ## Windows signing
 
-Two repository variables, not secrets, name the signer:
+These repository variables, not secrets, name the signer:
 
 | Variable | Value |
 | --- | --- |
 | `WINDOWS_SIGNER` | `signpath` or `sslcom`, unset until Pitboard for Windows has a signer |
 | `WINDOWS_SIGNER_SUBJECT` | The subject the signer signs as, as `Get-AuthenticodeSignature` prints it |
+| `WINDOWS_SIGNING_POLICY` | SignPath's policy: `release-signing`, or `test-signing` for a release candidate that tries the setup |
+| `SIGNPATH_ORGANIZATION_ID` | The organization's id, shown on a signing policy's CI Integration tab |
+
+While `WINDOWS_SIGNING_POLICY` is `test-signing`, the guard refuses every beta and full release:
+only a release candidate carries SignPath's test certificate, and its signatures are checked as
+a test certificate's, with no trusted root and no timestamp. SignPath Foundation orders the
+production certificate after it reviews a setup that signs with the test certificate. Then set
+`WINDOWS_SIGNER_SUBJECT` to `CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US`
+and `WINDOWS_SIGNING_POLICY` to `release-signing`.
+
+`.signpath/artifact-configurations/` holds what each request signs. Add each file to the
+SignPath project as an artifact configuration whose slug is the file's name, and add it again
+whenever the file changes.
 
 From major version 1, the guard refuses an rc or a full release while `WINDOWS_SIGNER` is
 unset, and any release that sets it without `WINDOWS_SIGNER_SUBJECT`. A beta with no signer
@@ -278,9 +291,9 @@ Corporation, and the Windows Community Toolkit's by the .NET Foundation. WinSpar
 unsigned, as NuGet's WinSparkle 0.9.4 holds it, and the script refuses it signed until it names
 the signer. An MSI is checked on its own machine,
 `windows-msi`, since `msiexec /a` extracts one only where it could install it, and must hold
-the files and tables it was built with. No signer has a signing step yet, so a set
-`WINDOWS_SIGNER` fails the job.
-Once one has, a signed release waits for two approvals at the signer, then one at `release`.
+the files and tables it was built with. Only SignPath has a signing step, so another
+`WINDOWS_SIGNER` fails the job. A signed release waits for two approvals at the signer, then one
+at `release`.
 
 A release with no signer builds no sparse package, so its MSI carries no share target: only a
 signature the machine trusts registers one, and Pitboard never asks anyone to trust a test
@@ -292,6 +305,7 @@ Keep the signer's account apart from the update key and the Developer ID certifi
 
 | Secret | How to make it |
 | --- | --- |
+| `SIGNPATH_API_TOKEN` | In the `windows-signing` environment: the API token of SignPath's CI user, a submitter on the signing policy |
 | `CERTIFICATES_P12` | Export the Developer ID Application certificate from Keychain Access as .p12, then `base64` it |
 | `CERTIFICATES_PASSWORD` | The password given to that export |
 | `APPLE_API_KEY_P8` | An App Store Connect team key with the Developer role, `base64` |

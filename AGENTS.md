@@ -79,6 +79,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never put a beta in Scoop or winget.
 - Never publish a Windows release candidate or final release unsigned, and never unset
   `WINDOWS_SIGNER` once a signer is set.
+- Never let a beta or a final release carry SignPath's test certificate. Only a release
+  candidate does, while `WINDOWS_SIGNING_POLICY` is `test-signing`.
 - Never add a cache, such as the Actions cache, `rust-cache` or sccache, to a job that leads
   to a signing request, or to a Linux package or repository index signed with the Linux
   repository's key. SignPath refuses a build that may take files from an earlier one, and that

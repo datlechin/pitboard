@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <zip-file-set>
+      <include path="zips/pitboard-v*-pc-windows-msvc.zip" min-matches="2" max-matches="2" />
+      <for-each>
+        <pe-file-set product-name="Pitboard" product-version="${version}">
+          <include path="pitboard-v*/pitboard.exe" />
+          <include path="pitboard-v*/pitboardw.exe" />
+          <for-each>
+            <authenticode-sign />
+          </for-each>
+        </pe-file-set>
+      </for-each>
+    </zip-file-set>
+    <directory-set>
+      <include path="app/unsigned-app-*" min-matches="2" max-matches="2" />
+      <for-each>
+        <pe-file-set product-name="Pitboard" product-version="${version}">
+          <include path="pitboard*.exe" max-matches="unbounded" />
+          <include path="pitboard*.dll" max-matches="unbounded" />
+          <for-each>
+            <authenticode-sign />
+          </for-each>
+        </pe-file-set>
+        <msix-file path="PitboardShare.msix">
+          <authenticode-sign />
+        </msix-file>
+      </for-each>
+    </directory-set>
+  </zip-file>
+</artifact-configuration>
