@@ -793,21 +793,31 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     model.shutdown();
 }
 
+/// The real core's Codex switch, through the lanes, with Codex's background app server and a
+/// `codex` session running. The switch notice offers to start the server again, asking first,
+/// and runs nothing until asked. A restart that fails says Codex's reason and keeps the offer;
+/// one that works leaves the notice saying only what the person starts again, the session.
+/// Each runs `codex app-server daemon restart` in the Codex home Pitboard switched.
 #[test]
-fn a_switch_offers_to_restart_the_codex_daemon() {
+fn a_codex_switch_offers_to_restart_the_app_server() {
     use pitboard_core::testing::stand_in::{Script, Step};
 
-    let mut world = two_codex_accounts("codex-daemon-restart");
-    let scratch = tempfile::tempdir().expect("somewhere to record the command");
-    let calls = scratch.path().join("calls.jsonl");
-    let step = Step::Records {
-        at: calls.clone(),
-        variables: vec!["CODEX_HOME".into()],
+    let mut world = two_codex_accounts("codex-restart");
+    let calls = world.dir("calls.jsonl");
+    let restart = |then: Vec<Step>| Script::Plays {
+        args: Some(vec!["app-server".into(), "daemon".into(), "restart".into()]),
+        steps: [Step::Records {
+            at: calls.clone(),
+            variables: vec!["CODEX_HOME".into()],
+        }]
+        .into_iter()
+        .chain(then)
+        .collect(),
     };
-    let codex_home = world.codex_program(&Script::Plays {
-        args: Some(vec!["app-server".into(), "daemon".into(), "version".into()]),
-        steps: vec![step.clone(), Step::Says(r#"{"status":"running"}"#.into())],
-    });
+    let codex_home = world.codex_program(&restart(vec![
+        Step::Warns("Error: timed out waiting for daemon operation lock\n".into()),
+        Step::Exits(1),
+    ]));
     world.host.runs_at(
         "codex",
         &[
@@ -825,74 +835,75 @@ fn a_switch_offers_to_restart_the_codex_daemon() {
 
     let snapshots = told.until("the switch", codex_shows("work"));
     let last = snapshots.last().expect("a snapshot");
-    let action = notice(last, "switch/codex")
+    let offered = notice(last, "switch/codex")
         .expect("the switch's notice")
         .actions
         .iter()
-        .find(|action| action.title == "Restart Codex")
-        .expect("a restart is offered");
-    assert!(action.enabled);
-    let question = action.confirm.as_ref().expect("a restart asks first");
+        .find(|action| matches!(action.intent, Intent::Restart { .. }))
+        .expect("a restart is offered")
+        .clone();
+    assert_eq!(offered.title, "Restart App Server…");
+    assert!(offered.enabled);
+    let question = offered.confirm.as_ref().expect("it asks first");
+    assert_eq!(question.title, "Restart Codex's background app server?");
     assert!(!question.confirm_is_default);
-    assert!(!calls.exists(), "a switch alone runs no daemon command");
-    let restart = action.intent.clone();
-    model.send(restart.clone());
+    assert!(!calls.exists(), "a switch alone runs nothing");
 
-    let snapshots = told.until("the restart fails", |shown| {
-        shown
-            .last()
-            .is_some_and(|last| last.failure_alert.is_some())
+    model.send(offered.intent.clone());
+    let snapshots = told.until("the restart fails", |told| {
+        told.last().is_some_and(|last| last.failure_alert.is_some())
     });
     let last = snapshots.last().expect("a snapshot");
-    assert_eq!(signed_in(last, Tool::Codex).as_deref(), Some("work"));
+    let alert = last.failure_alert.as_ref().expect("a failure");
     assert!(
-        last.failure_alert
-            .as_ref()
-            .expect("a failure")
+        alert
             .message
-            .contains("codex app-server daemon restart")
+            .contains("timed out waiting for daemon operation lock"),
+        "{alert:?}"
     );
+    assert!(
+        alert.message.contains("codex app-server daemon restart"),
+        "{alert:?}"
+    );
+    assert_eq!(signed_in(last, Tool::Codex).as_deref(), Some("work"));
     assert!(
         notice(last, "switch/codex")
-            .expect("the switch notice")
+            .expect("the switch's notice")
             .actions
             .iter()
-            .any(|action| action.intent == restart && action.enabled)
+            .any(|action| action.intent == offered.intent && action.enabled),
+        "offered again"
     );
 
-    world.codex_program(&Script::Plays {
-        args: None,
-        steps: vec![step, Step::Says(r#"{"status":"running"}"#.into())],
-    });
+    world.codex_program(&restart(Vec::new()));
     model.send(Intent::DismissFailure);
-    model.send(restart.clone());
-    let snapshots = told.until("the restart finishes", |shown| {
-        shown
-            .last()
+    model.send(offered.intent.clone());
+    let snapshots = told.until("the restart", |told| {
+        told.last()
             .and_then(|last| notice(last, "switch/codex"))
-            .is_some_and(|notice| !notice.actions.iter().any(|action| action.intent == restart))
+            .is_some_and(|said| {
+                !said
+                    .actions
+                    .iter()
+                    .any(|action| matches!(action.intent, Intent::Restart { .. }))
+            })
     });
     let last = snapshots.last().expect("a snapshot");
-    let said = &notice(last, "switch/codex")
-        .expect("the switch notice")
+    assert_eq!(last.failure_alert, None);
+    let said = notice(last, "switch/codex")
+        .expect("the switch's notice")
         .lines
         .join(" ");
-    assert!(said.contains("codex session"), "{said}");
-    assert!(!said.contains("daemon restart"), "{said}");
-    assert_eq!(last.failure_alert, None);
-    assert_eq!(signed_in(last, Tool::Codex).as_deref(), Some("work"));
+    assert!(said.contains("1 codex session"), "{said}");
+    assert!(!said.contains("app server"), "{said}");
 
-    let records = std::fs::read_to_string(calls).expect("what Codex was asked");
-    let records: Vec<serde_json::Value> = records
+    let records: Vec<serde_json::Value> = std::fs::read_to_string(&calls)
+        .expect("what Codex was asked")
         .lines()
-        .map(|line| serde_json::from_str(line).expect("a command record"))
+        .map(|line| serde_json::from_str(line).expect("a record"))
         .collect();
-    assert_eq!(records.len(), 3);
-    for (record, verb) in records.iter().zip(["version", "version", "restart"]) {
-        assert_eq!(
-            record["args"],
-            serde_json::json!(["app-server", "daemon", verb])
-        );
+    assert_eq!(records.len(), 2, "{records:?}");
+    for record in &records {
         assert_eq!(
             record["variables"]["CODEX_HOME"],
             codex_home.to_str().expect("a path")

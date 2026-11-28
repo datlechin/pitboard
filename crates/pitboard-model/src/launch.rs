@@ -274,47 +274,49 @@ pub(crate) enum Switch {
 pub(crate) struct Switched {
     pub(crate) outcome: Switch,
     pub(crate) warnings: Vec<Warning>,
-    pub(crate) daemon_warning: Option<Box<DaemonWarning>>,
+    /// What of what still runs on the login the switch left Pitboard can start again.
+    pub(crate) restartable: Option<Restartable>,
 }
 
-// The switch warning with and without the daemon, leaving other holders' advice in place.
+/// What still runs a tool on the login a switch left that Pitboard can start again for the
+/// person: a kind whose remedy is a command of the tool's own (`holder::Remedy::Run`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DaemonWarning {
-    pub(crate) before: Warning,
-    pub(crate) after: Option<Warning>,
+pub(crate) struct Restartable {
+    /// The login the switch left, as the core's warning names it, which a restart says what
+    /// still runs on.
+    pub(crate) from: String,
+    /// What starts again, as a sentence names it: "Codex's background app server".
+    pub(crate) what: String,
 }
 
-impl DaemonWarning {
-    fn from_switch(front: Front, found: &[service::Warning]) -> Option<Self> {
-        if front != Front::MacMenuBar {
-            return None;
-        }
+impl Restartable {
+    fn of(found: &[service::Warning]) -> Option<Restartable> {
         found.iter().find_map(|warning| {
             let service::Warning::SessionsStillRunning { from, holding } = warning else {
                 return None;
             };
-            let remaining: Vec<_> = holding
-                .iter()
-                .filter(|held| held.holder.kind != "app_server_daemon")
-                .cloned()
-                .collect();
-            if remaining.len() == holding.len() {
-                return None;
-            }
-            let before = warnings(front, std::slice::from_ref(warning)).remove(0);
-            let after = (!remaining.is_empty()).then(|| {
-                warnings(
-                    front,
-                    &[service::Warning::SessionsStillRunning {
-                        from: from.clone(),
-                        holding: remaining,
-                    }],
+            let held = holding.iter().find(|held| {
+                matches!(
+                    held.holder.remedy,
+                    pitboard_core::holder::Remedy::Run { .. }
                 )
-                .remove(0)
-            });
-            Some(Self { before, after })
+            })?;
+            Some(Restartable {
+                from: from.clone(),
+                what: held.phrase(),
+            })
         })
     }
+}
+
+/// What starting again what still held the login a switch left came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Restarted {
+    /// What still runs on that login, as the switch's own warning says it: `None` where
+    /// nothing does.
+    pub(crate) left: Option<Warning>,
+    /// What the change warned of besides.
+    pub(crate) warnings: Vec<Warning>,
 }
 
 /// What switching Claude Code by itself came to, as the model takes it. Times are epoch
@@ -521,13 +523,10 @@ fn account(row: status::Row, now: i64) -> Account {
 }
 
 fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
-    let daemon_warning = changing
-        .as_ref()
-        .ok()
-        .and_then(|done| DaemonWarning::from_switch(front, &done.warnings))
-        .map(Box::new);
-    changed(front, changing, |outcome, warnings| Switched {
-        outcome: match outcome {
+    let done = changing.said(front)?;
+    let restartable = Restartable::of(&done.warnings);
+    Ok(Switched {
+        outcome: match done.value {
             switch::Outcome::Switched {
                 provider,
                 from,
@@ -553,8 +552,8 @@ fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switche
                 account: Key::parse(&label),
             },
         },
-        warnings,
-        daemon_warning,
+        warnings: warnings(front, &done.warnings),
+        restartable,
     })
 }
 
@@ -1076,6 +1075,23 @@ impl AppCore {
         )
     }
 
+    /// Starts again what runs `tool` on the login a switch left, as `restartable` names it,
+    /// as `Pitboard::restart` does: under the core's lock, settled first.
+    pub(crate) fn restart(
+        &self,
+        tool: ProviderId,
+        restartable: &Restartable,
+    ) -> Result<Restarted, PitboardError> {
+        changed(
+            self.front,
+            self.core().core.restart(tool, &restartable.from),
+            |left, warnings| Restarted {
+                left: self::warnings(self.front, left.as_slice()).pop(),
+                warnings,
+            },
+        )
+    }
+
     /// What is left in the file behind Claude Code's store, and what putting it away would do
     /// with it, as `pitboard stow` asks first: `None` where nothing is. Takes no lock and writes
     /// nothing, and may ask Anthropic whose the login in it is, and whose the login stored is.
@@ -1445,21 +1461,6 @@ impl AppCore {
             .into_iter()
             .map(Holding::from)
             .collect()
-    }
-
-    pub(crate) fn restart_codex_daemon(&self) -> Result<(), PitboardError> {
-        self.readable()?
-            .core
-            .restart_codex_daemon()
-            .map_err(|error| PitboardError::Failed {
-                code: "codex_daemon_restart_failed".into(),
-                message: format!(
-                    "{}. Run `codex app-server daemon restart` in a terminal.",
-                    sentence(&error.to_string()).trim_end_matches('.')
-                ),
-                warnings: Vec::new(),
-                account: None,
-            })
     }
 
     /// Every check `pitboard doctor` makes, each moment one names on the person's clock as

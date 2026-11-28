@@ -532,23 +532,30 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         enabled: !seen.state.switch_under_way(),
         confirm: None,
     });
-    let restart_daemon = last.daemon_warning.as_ref().map(|_| NoticeAction {
-        title: "Restart Codex".into(),
-        intent: Intent::RestartCodexDaemon { account: last.to.clone().into() },
-        enabled: !seen.state.switch_under_way() && !seen.state.restarting_codex_daemon,
-        confirm: Some(Question {
-            title: "Restart Codex’s Background Server?".into(),
-            message: "Codex will read the sign-in you switched to. Restarting can interrupt running Codex sessions.".into(),
-            confirm: "Restart Codex".into(),
-            destructive: false,
-            confirm_is_default: false,
-        }),
-        dismisses: false,
-        switches: false,
-    });
+    let restart = last
+        .restartable
+        .as_ref()
+        .filter(|_| seen.front.restarts_what_holds_a_login())
+        .map(|restartable| NoticeAction {
+            title: words::restart_holder(seen.front, true),
+            intent: Intent::Restart {
+                account: last.to.clone().into(),
+            },
+            dismisses: false,
+            switches: false,
+            enabled: !seen.state.switch_under_way() && !seen.state.restarting,
+            confirm: Some(Question {
+                confirm_is_default: false,
+                ..Question::asking(
+                    words::restart_question(&restartable.what),
+                    words::restart_consequence(&restartable.what),
+                    words::restart_holder(seen.front, false),
+                )
+            }),
+        });
     let actions = back
         .into_iter()
-        .chain(restart_daemon)
+        .chain(restart)
         .chain([dismiss(Intent::DismissSwitch {
             tool: last.provider.into(),
         })])
@@ -1363,7 +1370,7 @@ mod tests {
             restart: None,
             said: None,
             warnings: Vec::new(),
-            daemon_warning: None,
+            restartable: None,
             opens: Some(Opens::Switched { app: "Claude" }),
             back: None,
         }];

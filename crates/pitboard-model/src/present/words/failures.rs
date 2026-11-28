@@ -26,7 +26,7 @@ pub(crate) fn could_not(doing: &Doing) -> String {
             account: Key { label, .. },
         } => format!("Couldn’t rename {label}"),
         Doing::UpdateConfig => "Couldn’t update Claude Code’s config".into(),
-        Doing::RestartCodexDaemon => "Couldn’t restart Codex’s background server".into(),
+        Doing::Restart { what } => format!("Couldn’t restart {what}"),
         Doing::TellWhose => "Couldn’t tell whose sign-in it is".into(),
         Doing::CleanUp => "Couldn’t clean up the sign-in file".into(),
         Doing::ChangeWarm => "Couldn’t change which accounts are warmed up".into(),

@@ -18,7 +18,7 @@ If Pitboard refuses to enrol a Codex account, its message says why, and [Fix Cod
 
 ## Restart what runs Codex
 
-Running Codex processes keep their sign-in after a switch. Restart the ones you use.
+Nothing that runs Codex follows a switch, so restart each:
 
 | What runs Codex | What to do |
 | --- | --- |
@@ -26,7 +26,7 @@ Running Codex processes keep their sign-in after a switch. Restart the ones you 
 | The ChatGPT app on macOS | Quit it with Command-Q, not by closing its windows, and open it again. |
 | The ChatGPT app on Windows | Quit it from its icon in the notification area, and open it again. |
 | The ChatGPT app on Linux | Quit it and open it again. |
-| Codex's background app server on macOS | In **Accounts**, click **Restart Codex** in the switch notice and confirm. From a terminal, run `codex app-server daemon restart`. |
+| Codex's background app server on macOS | Click **Restart App Server…** in the app's switch notice, or run `codex app-server daemon restart`. |
 | Codex's background app server on Linux | Run `codex app-server daemon restart`. |
 | Codex's background app server on Windows | Run `codex app-server daemon restart` from a terminal that is not elevated. |
 | Codex in an editor | Run **Developer: Reload Window** in each window that uses Codex. |
@@ -35,9 +35,11 @@ Read in the ChatGPT app 26.928.31416 for macOS and Codex 0.159.3. The app server
 
 After a Codex switch, Pitboard lists which of these still run. If it cannot read the process list, it warns with `sessions_unknown`.
 
-Restarting the background app server can interrupt running Codex sessions. Wait for work to finish before you confirm. [Codex daemon lifecycle documentation](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/app-server-daemon/README.md#lifecycle-semantics)
-
 In the app, a Codex switch while the ChatGPT app is open asks first, then quits it, switches and opens it again. [Quitting Claude or the ChatGPT app](/reference/mac-app#quitting-claude-or-the-chatgpt-app) says how long it waits. The command line never quits an app.
+
+In the macOS app, **Restart App Server…** asks first, then runs `codex app-server daemon restart` in the Codex home Pitboard switched. Codex gives running work up to `shutdownGraceSeconds` in `app-server-daemon/settings.json` to finish, 60 seconds by default, then stops the server, so work it is running may be cut short. If the restart fails, the app says why and offers it again. Read in Codex 0.172.0.
+
+The restarted server takes the app's environment, not your shell's. If Codex needs variables your shell exports, such as a proxy, run `codex app-server daemon restart` in a terminal instead.
 
 <Warning>
   Do not sign out in anything that ran Codex before the switch, such as `/logout` in a `codex` session or **Log Out** in the ChatGPT app. Each holds the parked login, and signing out revokes it at OpenAI: see [Why Codex logins are moved, not copied](/concepts/switching#why-codex-logins-are-moved-not-copied).

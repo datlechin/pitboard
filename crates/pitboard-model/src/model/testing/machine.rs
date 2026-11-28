@@ -110,6 +110,8 @@ pub(crate) struct Stub {
     pub forgetting: Result<(), Refusal>,
     /// What writing the account in use into its tool's config gives: what its tool warned of.
     pub updating_config: Result<Vec<Warning>, Refusal>,
+    /// What starting again what holds a switch's old login comes to.
+    pub restarting: Result<crate::Restarted, Refusal>,
     /// What looking at the file behind Claude Code's store gives.
     pub leftover: Result<Option<Left>, Refusal>,
     /// What putting that file away gives.
@@ -124,6 +126,9 @@ pub(crate) struct Stub {
     pub forgot: Vec<String>,
     /// Every account written into its tool's config, as the model named it.
     pub configs_updated: Vec<String>,
+    /// Every restart of what held a switch's old login, by the account switched to and the
+    /// login it left, as the model named them.
+    pub restarts: Vec<(String, String)>,
     /// What was told about before the model started, as kept in Pitboard's directory.
     pub told_before: Told,
     /// Every record of what was told the model kept, in order.
@@ -252,6 +257,10 @@ impl Stub {
             renaming: Ok(()),
             forgetting: Ok(()),
             updating_config: Ok(Vec::new()),
+            restarting: Ok(crate::Restarted {
+                left: None,
+                warnings: Vec::new(),
+            }),
             leftover: Ok(None),
             stowing: Err(refusal(
                 "left_login_changed",
@@ -263,6 +272,7 @@ impl Stub {
             renamed: Vec::new(),
             forgot: Vec::new(),
             configs_updated: Vec::new(),
+            restarts: Vec::new(),
             told_before: Told::new(),
             kept: Vec::new(),
             posted: Vec::new(),
@@ -574,10 +584,18 @@ impl Stub {
                         .map_err(|refused| refused.error()),
                 }
             }
-            Job::RestartCodexDaemon(account) => Answer::CodexDaemonRestarted {
+            Job::Restart {
                 account,
-                done: Ok(()),
-            },
+                restartable,
+            } => {
+                self.restarts
+                    .push((account.qualified(), restartable.from.clone()));
+                Answer::Restarted {
+                    account,
+                    restartable,
+                    done: self.restarting.clone().map_err(|refused| refused.error()),
+                }
+            }
             Job::UpdateConfig { account } => {
                 self.configs_updated.push(account.qualified());
                 Answer::ConfigUpdated(

@@ -697,6 +697,22 @@ pub enum Error {
         detail: String,
     },
 
+    /// The tool's own command that starts again what runs it on the login a switch left
+    /// failed, so that may be stopped now. The login in use stays as the switch left it.
+    #[error(
+        "`{command}` failed ({detail}), so {holder} may not be running. Run `{command}` \
+         in a terminal to start it again."
+    )]
+    RestartFailed {
+        tool: ProviderId,
+        /// As a terminal here runs it: `codex app-server daemon restart`.
+        command: String,
+        /// What it starts again, as a sentence names it: "Codex's background app server".
+        holder: String,
+        /// The reason the command gave, or how it ended where it gave none.
+        detail: String,
+    },
+
     #[error(
         "the record of an interrupted switch at {path} is damaged ({source}), so Pitboard \
          cannot tell what that switch did. Nothing was changed. Check that `pitboard status` \
@@ -1097,6 +1113,7 @@ impl Error {
             SwitchCorrupted { .. } => "switch_corrupted",
             SignInNotInstalled { .. } => "sign_in_not_installed",
             SignInNotKept { .. } => "sign_in_not_kept",
+            RestartFailed { .. } => "restart_failed",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
             SessionExpired { .. } => "session_expired",

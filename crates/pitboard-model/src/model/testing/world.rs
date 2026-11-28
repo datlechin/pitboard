@@ -471,9 +471,12 @@ impl World {
         Writing(held)
     }
 
+    /// A `codex` that plays `script`, in place of the one a terminal would run, from the next
+    /// core made on. Again, it takes the place of the one before. Gives the Codex home a
+    /// command it runs is pointed at.
     pub(crate) fn codex_program(&mut self, script: &stand_in::Script) -> PathBuf {
         let program = self.root.path().join("bin").join(program_name("codex"));
-        stand_in::install(&program, script).expect("a scratch Codex command");
+        stand_in::install(&program, script).expect("a scratch codex");
         self.ctx = self.ctx.clone().with_codex_program(program);
         self.root.path().join(".codex")
     }
