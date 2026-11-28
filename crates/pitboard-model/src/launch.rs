@@ -274,6 +274,49 @@ pub(crate) enum Switch {
 pub(crate) struct Switched {
     pub(crate) outcome: Switch,
     pub(crate) warnings: Vec<Warning>,
+    /// What of what still runs on the login the switch left Pitboard can start again.
+    pub(crate) restartable: Option<Restartable>,
+}
+
+/// What still runs a tool on the login a switch left that Pitboard can start again for the
+/// person: a kind whose remedy is a command of the tool's own (`holder::Remedy::Run`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Restartable {
+    /// The login the switch left, as the core's warning names it, which a restart says what
+    /// still runs on.
+    pub(crate) from: String,
+    /// What starts again, as a sentence names it: "Codex's background app server".
+    pub(crate) what: String,
+}
+
+impl Restartable {
+    fn of(found: &[service::Warning]) -> Option<Restartable> {
+        found.iter().find_map(|warning| {
+            let service::Warning::SessionsStillRunning { from, holding } = warning else {
+                return None;
+            };
+            let held = holding.iter().find(|held| {
+                matches!(
+                    held.holder.remedy,
+                    pitboard_core::holder::Remedy::Run { .. }
+                )
+            })?;
+            Some(Restartable {
+                from: from.clone(),
+                what: held.phrase(),
+            })
+        })
+    }
+}
+
+/// What starting again what still held the login a switch left came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Restarted {
+    /// What still runs on that login, as the switch's own warning says it: `None` where
+    /// nothing does.
+    pub(crate) left: Option<Warning>,
+    /// What the change warned of besides.
+    pub(crate) warnings: Vec<Warning>,
 }
 
 /// What switching Claude Code by itself came to, as the model takes it. Times are epoch
@@ -480,8 +523,10 @@ fn account(row: status::Row, now: i64) -> Account {
 }
 
 fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
-    changed(front, changing, |outcome, warnings| Switched {
-        outcome: match outcome {
+    let done = changing.said(front)?;
+    let restartable = Restartable::of(&done.warnings);
+    Ok(Switched {
+        outcome: match done.value {
             switch::Outcome::Switched {
                 provider,
                 from,
@@ -507,7 +552,8 @@ fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switche
                 account: Key::parse(&label),
             },
         },
-        warnings,
+        warnings: warnings(front, &done.warnings),
+        restartable,
     })
 }
 
@@ -1026,6 +1072,23 @@ impl AppCore {
             self.front,
             self.core().core.update_config(&account.qualified()),
             |_, warnings| warnings,
+        )
+    }
+
+    /// Starts again what runs `tool` on the login a switch left, as `restartable` names it,
+    /// as `Pitboard::restart` does: under the core's lock, settled first.
+    pub(crate) fn restart(
+        &self,
+        tool: ProviderId,
+        restartable: &Restartable,
+    ) -> Result<Restarted, PitboardError> {
+        changed(
+            self.front,
+            self.core().core.restart(tool, &restartable.from),
+            |left, warnings| Restarted {
+                left: self::warnings(self.front, left.as_slice()).pop(),
+                warnings,
+            },
         )
     }
 

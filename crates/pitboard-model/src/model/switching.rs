@@ -421,6 +421,7 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
             restart: None,
             said: None,
             warnings: vec![overridden],
+            restartable: None,
             opens: None,
             back: None,
         }
@@ -1099,6 +1100,168 @@ fn an_answer_to_quit_is_taken_once_and_only_for_the_question_asked() {
     );
 }
 
+// Codex's background app server and a `codex` session, each on `main`'s login.
+
+const APP_SERVER: &str = "Codex's background app server";
+
+/// A Codex machine on `front` about to switch from `main` to `spare` with Codex's background
+/// app server and a `codex` session running, which the switch warns of.
+fn app_server_running(front: Front) -> (Hand, Stub) {
+    let mut machine = Stub::reading(Ok(status(vec![
+        codex_account("spare", true),
+        codex_account("main", false),
+    ])));
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/main",
+        "codex/spare",
+        vec![still_running()],
+    )
+    .map(|done| crate::Switched {
+        restartable: Some(crate::Restartable {
+            from: "codex/main".into(),
+            what: APP_SERVER.into(),
+        }),
+        ..done
+    });
+    (Hand::on(front), machine)
+}
+
+fn restart_spare() -> Intent {
+    Intent::Restart {
+        account: AccountKey::new(Tool::Codex, "spare"),
+    }
+}
+
+// The switch notice's offer to start the app server again, where it makes one.
+fn restart_offer(model: &Hand) -> Option<crate::present::NoticeAction> {
+    model
+        .shown()
+        .notices
+        .into_iter()
+        .find(|notice| notice.id == "switch/codex")
+        .expect("the switch's notice")
+        .actions
+        .into_iter()
+        .find(|action| action.intent == restart_spare())
+}
+
+/// Codex's background app server keeps the login it started with, and its own command
+/// starts it on the one in use. The switch's notice offers that, asking first, runs it once
+/// however often it is asked while it runs, and then says only what the person starts again,
+/// as the core read it afterwards.
+#[test]
+fn the_app_server_is_restarted_from_the_switch_notice() {
+    let (mut model, mut machine) = app_server_running(Front::MacMenuBar);
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    let offered = restart_offer(&model).expect("offered");
+    assert!(offered.enabled);
+    assert!(
+        offered
+            .confirm
+            .is_some_and(|asked| !asked.confirm_is_default)
+    );
+    assert!(machine.restarts.is_empty(), "nothing runs until asked");
+
+    let left = warning(
+        "sessions_still_running",
+        "1 `codex` session started before this switch is still running and still using `main`.",
+    );
+    machine.restarting = Ok(crate::Restarted {
+        left: Some(left.clone()),
+        warnings: Vec::new(),
+    });
+    model.send(restart_spare());
+    assert!(
+        !restart_offer(&model).expect("still there").enabled,
+        "held back while it runs"
+    );
+    model.send(restart_spare());
+    model.run(&mut machine);
+
+    assert_eq!(
+        machine.restarts,
+        [("codex/spare".to_owned(), "codex/main".to_owned())]
+    );
+    assert_eq!(model.state.presented, None);
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
+    assert_eq!(last.warnings, [left]);
+    assert_eq!(last.restartable, None);
+    assert!(restart_offer(&model).is_none(), "offered no more");
+}
+
+/// With nothing left on the old login, the notice no longer says to start sessions again.
+#[test]
+fn nothing_is_said_to_start_again_once_the_app_server_was_all_that_ran() {
+    let (mut model, mut machine) = app_server_running(Front::MacMenuBar);
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+
+    model.send(restart_spare());
+    model.run(&mut machine);
+
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
+    assert!(last.warnings.is_empty(), "{:?}", last.warnings);
+    assert_eq!(last.restart, None);
+}
+
+/// A restart that failed is said in the window, and offered again.
+#[test]
+fn a_failed_restart_is_said_and_offered_again() {
+    let (mut model, mut machine) = app_server_running(Front::MacMenuBar);
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    machine.restarting = Err(refusal(
+        "restart_failed",
+        "`codex app-server daemon restart` failed (timed out waiting for daemon operation lock).",
+        Vec::new(),
+    ));
+
+    model.send(restart_spare());
+    model.run(&mut machine);
+
+    let refused = model.state.presented.clone().expect("said");
+    assert_eq!(
+        refused.doing,
+        Doing::Restart {
+            what: APP_SERVER.into()
+        }
+    );
+    assert_eq!(refused.code.as_deref(), Some("restart_failed"));
+    assert_eq!(
+        words::could_not(&refused.doing),
+        "Couldn’t restart Codex's background app server"
+    );
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
+    assert_eq!(last.warnings, [still_running()]);
+    assert!(restart_offer(&model).expect("offered again").enabled);
+}
+
+/// Only the Mac app offers it: nobody has watched Codex start its server from the Windows
+/// app, and where it runs from on Linux is not read. Asked for anyway, nothing runs.
+#[test]
+fn only_the_mac_app_offers_to_restart_the_app_server() {
+    for front in [Front::WindowsNotificationArea, Front::Gnome] {
+        let (mut model, mut machine) = app_server_running(front);
+        switch(&mut model, &mut machine, Tool::Codex, "spare");
+        assert!(restart_offer(&model).is_none(), "{front:?}");
+
+        model.send(restart_spare());
+        model.run(&mut machine);
+        assert!(machine.restarts.is_empty(), "{front:?}");
+    }
+}
+
 /// A front whose system has no app Pitboard may quit, as the Linux app's, names no other apps.
 /// ChatGPT holding Codex's login is then said as the command line says it, in the core's
 /// warning beside the switch, and nothing is asked of it: no question, no quit, no look at
@@ -1631,6 +1794,7 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
             adoption: crate::Adoption::NextOpen { app: "Claude" },
         },
         warnings: Vec::new(),
+        restartable: None,
     });
     switch(&mut model, &mut machine, Tool::Desktop, "work");
     let shown = model.shown();

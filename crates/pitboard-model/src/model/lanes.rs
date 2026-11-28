@@ -94,6 +94,7 @@ impl Job {
             | Job::LookLeft => Lane::Reads,
             Job::Switch { .. }
             | Job::Replace { .. }
+            | Job::Restart { .. }
             | Job::AutoSwitch { .. }
             | Job::Abandon
             | Job::Enrol { .. }
@@ -874,6 +875,14 @@ impl Worker {
                 account,
             },
             Job::UpdateConfig { account } => Answer::ConfigUpdated(core.update_config(&account)),
+            Job::Restart {
+                account,
+                restartable,
+            } => Answer::Restarted {
+                done: core.restart(account.provider, &restartable),
+                account,
+                restartable,
+            },
             Job::LookLeft => Answer::LookedLeft(core.left_login()),
             Job::Stow { seen, from } => Answer::Stowed {
                 done: core.stow(&seen),

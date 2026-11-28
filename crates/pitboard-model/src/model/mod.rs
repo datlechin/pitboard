@@ -365,6 +365,15 @@ pub enum Intent {
     UpdateConfig {
         account: AccountKey,
     },
+    /// Start again what still runs `account`'s tool on the login its switch to `account` left,
+    /// where the tool's own command does it and the front offers to: the switch notice's
+    /// Restart App Server, once the person confirmed. Codex's background app server stops and
+    /// starts on the login in use, under the core's lock. Asked only while that notice offers
+    /// it, and not again until it is over. Afterwards the notice says what still runs on the
+    /// old login, read again; what stopped it is said in the window, and the offer stays.
+    Restart {
+        account: AccountKey,
+    },
     /// Put away the login left in the file behind Claude Code's store, as the sheet for it
     /// says, `Sheet::Stow`: once that sheet has looked, and only while the file still holds
     /// what it looked at. Not where the login is of an account nobody enrolled, which the sheet
@@ -682,6 +691,8 @@ pub(crate) struct LastSwitch {
     // a sign-in that replaced the account's login in use, since no switch did
     pub said: Option<SignedIn>,
     pub warnings: Vec<Warning>,
+    // what of what still runs on the login it left Pitboard can start again, until it has
+    pub restartable: Option<crate::Restartable>,
     // for a tool whose app holds the login from when it is next opened
     pub opens: Option<Opens>,
     // where switching by itself made it
@@ -736,6 +747,8 @@ pub(crate) enum Doing {
     Remove { account: Key },
     Rename { account: Key },
     UpdateConfig,
+    // `what`, as a sentence names it: "Codex's background app server"
+    Restart { what: String },
     TellWhose,
     CleanUp,
     ChangeWarm,

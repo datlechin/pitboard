@@ -237,6 +237,31 @@ pub(crate) fn add_account_shown(front: Front, app: &str, asks: bool) -> String {
     }
 }
 
+/// The switch notice's offer to start again what still runs on the login the switch left,
+/// which asks first.
+pub(crate) fn restart_holder(front: Front, asks: bool) -> String {
+    if asks {
+        titled(front, "Restart App Server…", "Restart app server…")
+    } else {
+        titled(front, "Restart App Server", "Restart app server")
+    }
+}
+
+/// What the offer asks, of `what` as a sentence names it: "Codex's background app server".
+pub(crate) fn restart_question(what: &str) -> String {
+    format!("Restart {what}?")
+}
+
+// Codex drains what the server runs for as long as its settings give it, then stops it
+// (`codex_app_server_daemon_restart`).
+pub(crate) fn restart_consequence(what: &str) -> String {
+    format!(
+        "{} starts again signed in to the account you switched to. Work it is running may be \
+         interrupted.",
+        capitalised(what)
+    )
+}
+
 pub(crate) fn update_config(front: Front) -> String {
     titled(
         front,

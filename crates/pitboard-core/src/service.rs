@@ -582,6 +582,18 @@ impl Pitboard {
         }
     }
 
+    /// Starts again what runs `which`'s tool on the login a switch from `from` left, where the
+    /// tool's own command does it ([`holder::Remedy::Run`]), and says what still runs on that
+    /// login as the switch said it: `None` where nothing does. Runs nothing where no such
+    /// holder runs now. Under Pitboard's lock, settled first, so the login in use stays put
+    /// while it starts.
+    pub fn restart(&self, which: ProviderId, from: &str) -> Changing<Option<Warning>> {
+        let permit = self.permitted()?;
+        self.changing(permit, "restart", which.code(), Some(which), |settled| {
+            switch::restart(settled, which, from)
+        })
+    }
+
     /// Whether `which`'s app may be opened again, from the index alone.
     pub fn whole(&self, which: ProviderId) -> bool {
         match crate::provider::of(which) {
@@ -1014,6 +1026,7 @@ impl Audited for Enrolment {
 }
 impl Audited for String {}
 impl Audited for bool {}
+impl Audited for Option<Warning> {}
 impl Audited for crate::duty::warm::Range {}
 
 impl Audited for switch::Stowed {

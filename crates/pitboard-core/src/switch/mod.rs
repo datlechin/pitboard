@@ -38,6 +38,7 @@ mod refresh;
 mod refusals;
 mod rename;
 pub(crate) mod renew;
+mod restart;
 mod settle;
 mod stow;
 #[cfg(test)]
@@ -67,6 +68,7 @@ pub(crate) use journal::{Asking, interrupted_tool, pending as interrupted};
 pub(crate) use rename::rename;
 pub(crate) use renew::{Due, renew_due, renew_parked};
 pub use renew::{Renewal, Unwritable};
+pub(crate) use restart::restart;
 pub use settle::{GaveUp, abandon};
 use settle::{drop_live_twins, purge};
 pub(crate) use settle::{repair, settle, stuck};
@@ -618,16 +620,9 @@ fn put_in(
     let parks_pending = purge(ctx, permit, &mut state);
     clear_journal(ctx, permit);
     // A session that started with no login keeps none, which no warning about a login says.
-    let still_running = match (going, still_holding(ctx, which)) {
-        (Going::Nothing, _) | (_, StillHolding::Nothing) => None,
-        (Going::Refused, StillHolding::These(holding)) => Some(Warning::SessionsStillRunning {
-            from: from.clone(),
-            holding,
-        }),
-        (Going::Refused, StillHolding::Unknown) => Some(Warning::SessionsUnknown {
-            tool: which,
-            from: from.clone(),
-        }),
+    let still_running = match going {
+        Going::Nothing => None,
+        Going::Refused => still_running(which, &from, still_holding(ctx, which)),
     };
     let warnings = on_the_command_line
         .into_iter()
@@ -922,17 +917,7 @@ fn switch_from(
     // means nothing to somebody who does not know one is open, with what makes each kind
     // take the switch, and with the one thing not to do in any of them. Where nobody could
     // tell what is running, that is said, with the same thing not to do.
-    let still_running = match still_holding(ctx, key.provider) {
-        StillHolding::Nothing => None,
-        StillHolding::These(holding) => Some(Warning::SessionsStillRunning {
-            from: from.clone(),
-            holding,
-        }),
-        StillHolding::Unknown => Some(Warning::SessionsUnknown {
-            tool: key.provider,
-            from: from.clone(),
-        }),
-    };
+    let still_running = still_running(key.provider, &from, still_holding(ctx, key.provider));
     let warnings = on_the_command_line
         .into_iter()
         .chain(parking)
@@ -1161,6 +1146,25 @@ pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
         None => StillHolding::Unknown,
         Some(holding) if holding.is_empty() => StillHolding::Nothing,
         Some(holding) => StillHolding::These(holding),
+    }
+}
+
+/// What a switch away from `from` says of what still runs `which`'s tool on that login.
+pub(crate) fn still_running(
+    which: ProviderId,
+    from: &str,
+    holding: StillHolding,
+) -> Option<Warning> {
+    match holding {
+        StillHolding::Nothing => None,
+        StillHolding::These(holding) => Some(Warning::SessionsStillRunning {
+            from: from.to_owned(),
+            holding,
+        }),
+        StillHolding::Unknown => Some(Warning::SessionsUnknown {
+            tool: which,
+            from: from.to_owned(),
+        }),
     }
 }
 

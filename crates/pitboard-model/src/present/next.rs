@@ -163,6 +163,7 @@ fn error_section(code: &str, desktop: bool) -> Option<&'static str> {
         | "live_login_refused"
         | "account_on_hold"
         | "replace_failed"
+        | "restart_failed"
         | "install_failed"
         | "session_expired" => "switching",
         // The app's own: the sign-in it started ended under it.

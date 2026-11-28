@@ -793,6 +793,125 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     model.shutdown();
 }
 
+/// The real core's Codex switch, through the lanes, with Codex's background app server and a
+/// `codex` session running. The switch notice offers to start the server again, asking first,
+/// and runs nothing until asked. A restart that fails says Codex's reason and keeps the offer;
+/// one that works leaves the notice saying only what the person starts again, the session.
+/// Each runs `codex app-server daemon restart` in the Codex home Pitboard switched.
+#[test]
+fn a_codex_switch_offers_to_restart_the_app_server() {
+    use pitboard_core::testing::stand_in::{Script, Step};
+
+    let mut world = two_codex_accounts("codex-restart");
+    let calls = world.dir("calls.jsonl");
+    let restart = |then: Vec<Step>| Script::Plays {
+        args: Some(vec!["app-server".into(), "daemon".into(), "restart".into()]),
+        steps: [Step::Records {
+            at: calls.clone(),
+            variables: vec!["CODEX_HOME".into()],
+        }]
+        .into_iter()
+        .chain(then)
+        .collect(),
+    };
+    let codex_home = world.codex_program(&restart(vec![
+        Step::Warns("Error: timed out waiting for daemon operation lock\n".into()),
+        Step::Exits(1),
+    ]));
+    world.host.runs_at(
+        "codex",
+        &[
+            "/Users/a/.codex/packages/app-server-daemon/releases/0.172.0-aarch64-apple-darwin/bin/codex",
+            "codex",
+        ],
+    );
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    model.send(Intent::Start);
+    told.until("the accounts read", codex_shows("personal"));
+    model.send(Intent::SwitchTo {
+        account: AccountKey::new(Tool::Codex, "work"),
+    });
+
+    let snapshots = told.until("the switch", codex_shows("work"));
+    let last = snapshots.last().expect("a snapshot");
+    let offered = notice(last, "switch/codex")
+        .expect("the switch's notice")
+        .actions
+        .iter()
+        .find(|action| matches!(action.intent, Intent::Restart { .. }))
+        .expect("a restart is offered")
+        .clone();
+    assert_eq!(offered.title, "Restart App Server…");
+    assert!(offered.enabled);
+    let question = offered.confirm.as_ref().expect("it asks first");
+    assert_eq!(question.title, "Restart Codex's background app server?");
+    assert!(!question.confirm_is_default);
+    assert!(!calls.exists(), "a switch alone runs nothing");
+
+    model.send(offered.intent.clone());
+    let snapshots = told.until("the restart fails", |told| {
+        told.last().is_some_and(|last| last.failure_alert.is_some())
+    });
+    let last = snapshots.last().expect("a snapshot");
+    let alert = last.failure_alert.as_ref().expect("a failure");
+    assert!(
+        alert
+            .message
+            .contains("timed out waiting for daemon operation lock"),
+        "{alert:?}"
+    );
+    assert!(
+        alert.message.contains("codex app-server daemon restart"),
+        "{alert:?}"
+    );
+    assert_eq!(signed_in(last, Tool::Codex).as_deref(), Some("work"));
+    assert!(
+        notice(last, "switch/codex")
+            .expect("the switch's notice")
+            .actions
+            .iter()
+            .any(|action| action.intent == offered.intent && action.enabled),
+        "offered again"
+    );
+
+    world.codex_program(&restart(Vec::new()));
+    model.send(Intent::DismissFailure);
+    model.send(offered.intent.clone());
+    let snapshots = told.until("the restart", |told| {
+        told.last()
+            .and_then(|last| notice(last, "switch/codex"))
+            .is_some_and(|said| {
+                !said
+                    .actions
+                    .iter()
+                    .any(|action| matches!(action.intent, Intent::Restart { .. }))
+            })
+    });
+    let last = snapshots.last().expect("a snapshot");
+    assert_eq!(last.failure_alert, None);
+    let said = notice(last, "switch/codex")
+        .expect("the switch's notice")
+        .lines
+        .join(" ");
+    assert!(said.contains("1 codex session"), "{said}");
+    assert!(!said.contains("app server"), "{said}");
+
+    let records: Vec<serde_json::Value> = std::fs::read_to_string(&calls)
+        .expect("what Codex was asked")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("a record"))
+        .collect();
+    assert_eq!(records.len(), 2, "{records:?}");
+    for record in &records {
+        assert_eq!(
+            record["variables"]["CODEX_HOME"],
+            codex_home.to_str().expect("a path")
+        );
+    }
+    model.shutdown();
+}
+
 /// The real core's Codex switch, through the lanes, on a machine whose process list cannot
 /// be read. Nobody can say whether ChatGPT's own `codex` runs, so no quit question is
 /// asked, though ChatGPT is open, and the switch is made. What Codex's last switch said

@@ -113,6 +113,15 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         ),
     },
     PerSystem {
+        name: "codex_app_server_daemon_restart",
+        macos: Read("0.172.0"),
+        linux: Read("0.172.0"),
+        windows: NotRead(
+            "the Windows server starts only from a terminal whose host lets it leave the job, \
+             as codex_windows_app_server says, and no Windows app runs the restart",
+        ),
+    },
+    PerSystem {
         name: "codex_windows_app_server",
         macos: NotRead("where the app server runs from on macOS is codex_app_server_daemon's"),
         linux: NotRead("where the app server runs from on Linux is codex_app_server_daemon's"),
@@ -539,6 +548,40 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             "app-server daemon restart",
             "app-server-updater.pid",
             "daemon-updater.pid",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_app_server_daemon_restart",
+        fact: "`codex app-server daemon restart` stops the background app server running in \
+               `$CODEX_HOME` and starts it again, and starts one where none ran. It runs the \
+               selected daemon package whichever `codex` asks. It first waits up to \
+               `MAX_SHUTDOWN_GRACE_SECONDS` and 75 seconds for the lock every daemon lifecycle \
+               command takes in that home, then asks the server to stop and forces it after \
+               `shutdownGraceSeconds` from `$CODEX_HOME/app-server-daemon/settings.json`, 60 by \
+               default and 0 to 300, so running work may be cut short, and waits up to 30 \
+               seconds on macOS and Linux for the new server to answer. The server it starts \
+               takes the environment of whoever ran it, less Codex's own handoff variable, and \
+               works in the daemon's state folder. It refuses an app server answering the \
+               socket that it did not start. On success it prints one JSON object; on failure \
+               it exits nonzero, its error returned from `main` and so said on standard error \
+               as `Error: ` and the reason, then any `Caused by:` lines",
+        read_from: "Lifecycle semantics in codex-rs/app-server-daemon/README.md, \
+                    restart_with_settings, acquire_operation_lock and wait_until_ready in \
+                    codex-rs/app-server-daemon/src/lib.rs, the start in backend/pid_start.rs, \
+                    and the daemon subcommands and main in codex-rs/cli/src/main.rs, at tag \
+                    rust-v0.172.0, read on 2026-11-28; the darwin-arm64 and linux-arm64 builds \
+                    hold its literals. On macOS with 0.172.0, the server went on reporting the \
+                    account it had loaded after a switch, and the account switched to once \
+                    restarted (pull request 453)",
+        verified_against: "0.172.0",
+        depends: "switch::restart, which runs it under Pitboard's lock and never stops it part \
+                  way, only where the process list names the server, and says the reason after \
+                  `Error: `; and the Mac app's offer to restart the server after a Codex switch",
+        probe: &[
+            "app server is running but is not managed by codex app-server daemon",
+            "timed out waiting for daemon operation lock",
+            "shutdownGraceSeconds",
         ],
         absent: &[],
     },

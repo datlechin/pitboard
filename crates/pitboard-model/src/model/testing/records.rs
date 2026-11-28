@@ -164,6 +164,7 @@ pub(crate) fn switched(
             adoption,
         },
         warnings,
+        restartable: None,
     })
 }
 
@@ -185,6 +186,7 @@ pub(crate) fn already_active(label: &str, warnings: Vec<Warning>) -> Result<Swit
             account: Key::parse(label),
         },
         warnings,
+        restartable: None,
     })
 }
 

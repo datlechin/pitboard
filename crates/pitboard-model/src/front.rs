@@ -66,6 +66,21 @@ impl Front {
         }
     }
 
+    /// Whether the front offers, after a switch, to start again what still runs the tool on
+    /// the login it left, where the tool's own command does that: Codex's background app
+    /// server (`codex_app_server_daemon_restart`).
+    pub(crate) fn restarts_what_holds_a_login(self) -> bool {
+        match self {
+            Front::MacMenuBar => true,
+            // Codex starts its Windows server only from a terminal whose host lets it break
+            // away from its job (`codex_windows_app_server`), and nobody has watched it start
+            // from the app's.
+            Front::WindowsNotificationArea => false,
+            // Where the server runs from on Linux is not read (`codex_app_server_daemon`).
+            Front::Gnome => false,
+        }
+    }
+
     /// Whether the front opens an account's site in a window of its own.
     pub fn offers_account_windows(self) -> bool {
         match self {

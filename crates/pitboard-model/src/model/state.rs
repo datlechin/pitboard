@@ -57,8 +57,8 @@ use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
-    FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Surfaces,
-    Switch, Switched, Uninstalled, WarmRefused, Warning, WatchService,
+    FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Restartable, Restarted,
+    Schedule, Status, Surfaces, Switch, Switched, Uninstalled, WarmRefused, Warning, WatchService,
 };
 use pitboard_core::duty::autoswitch::{Policy, Threshold};
 use pitboard_core::duty::cadence::{
@@ -245,6 +245,12 @@ pub(crate) enum Job {
     Forget { account: Key },
     /// Write `account` into its tool's config, while it is in use.
     UpdateConfig { account: Key },
+    /// Start again what still runs `account`'s tool on the login its switch to `account` left,
+    /// as `restartable` names it, under the core's lock.
+    Restart {
+        account: Key,
+        restartable: Restartable,
+    },
     /// Look at the file behind Claude Code's store: what it holds, and whose the login in it
     /// is, which may ask Anthropic with that login's own access token, and whose the login
     /// stored is, as a read asks it. It changes nothing.
@@ -523,6 +529,12 @@ pub(crate) enum Answer {
     /// What writing the account in use into its tool's config came to, with what its tool
     /// warned of.
     ConfigUpdated(Result<Vec<Warning>, PitboardError>),
+    /// What starting again what held the login `account`'s switch left came to.
+    Restarted {
+        account: Key,
+        restartable: Restartable,
+        done: Result<Restarted, PitboardError>,
+    },
     /// What is left in the file behind Claude Code's store, and what putting it away would
     /// do with it: `None` where nothing is.
     LookedLeft(Result<Option<Left>, PitboardError>),
@@ -641,6 +653,7 @@ impl Answer {
             | Answer::Renamed { .. }
             | Answer::Forgot { .. }
             | Answer::ConfigUpdated(_)
+            | Answer::Restarted { .. }
             | Answer::Stowed { .. }
             | Answer::Repaired { .. }
             | Answer::ScheduleSet { .. }
@@ -1114,6 +1127,9 @@ pub(crate) struct State {
     replacing: Option<Replacing>,
     /// What each tool's last switch said that is still true, one per tool at most.
     pub(crate) last_switches: Vec<LastSwitch>,
+    /// Whether what still held the login a switch left is being started again, which holds
+    /// back asking for it again until that is over.
+    pub(crate) restarting: bool,
     /// What giving up on an interrupted switch kept, until somebody has read it.
     pub(crate) abandoned: Option<Abandoned>,
     /// What the sheet for putting away the login left in a file has found of it, while that
@@ -1259,6 +1275,7 @@ impl State {
             quitting: None,
             replacing: None,
             last_switches: Vec::new(),
+            restarting: false,
             abandoned: None,
             left: None,
             stowed: None,
@@ -1714,6 +1731,7 @@ impl State {
                 let account = account.into();
                 self.change(Job::UpdateConfig { account }, jobs);
             }
+            Intent::Restart { account } => self.restart(account.into(), jobs),
             Intent::Stow => self.stow(jobs),
             Intent::DismissStowed => self.stowed = None,
             Intent::PaneShown { pane } => self.pane_shown(pane, now, jobs),
@@ -2982,6 +3000,8 @@ impl State {
                         adoption: adoption.clone(),
                     },
                     warnings: warnings.clone(),
+                    // Claude Code has no holder a command of its own starts again.
+                    restartable: None,
                 };
                 self.auto_standing = Some(AutoStanding::Came(AutoSwitched::Switched {
                     from,
@@ -3411,6 +3431,11 @@ impl State {
                 self.forgot(&account, done.map_err(Some), now, jobs);
             }
             Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
+            Answer::Restarted {
+                account,
+                restartable,
+                done,
+            } => self.restarted(&account, &restartable, done.map_err(Some), now, jobs),
             Answer::LookedLeft(found) => self.looked_left(found.map_err(Some)),
             Answer::Stowed { from, done } => {
                 self.stowed(from.as_ref(), done.map_err(Some), now, jobs);
@@ -3573,6 +3598,10 @@ impl State {
                 }
                 Job::Forget { account } => self.forgot(&account, Err(None), now, jobs),
                 Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
+                Job::Restart {
+                    account,
+                    restartable,
+                } => self.restarted(&account, &restartable, Err(None), now, jobs),
                 Job::LookLeft => self.looked_left(Err(None)),
                 Job::Stow { from, .. } => self.stowed(from.as_ref(), Err(None), now, jobs),
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
@@ -3786,6 +3815,7 @@ impl State {
                 restart: None,
                 said: None,
                 warnings: Vec::new(),
+                restartable: None,
                 opens: None,
                 back: None,
             });
@@ -4429,6 +4459,7 @@ impl State {
                         restart: None,
                         said: None,
                         warnings: Vec::new(),
+                        restartable: None,
                         opens: None,
                         back: None,
                     });
@@ -4436,6 +4467,9 @@ impl State {
                     if !said.warnings.contains(&warning) {
                         said.warnings.push(warning);
                     }
+                }
+                if done.restartable.is_some() {
+                    said.restartable = done.restartable;
                 }
                 self.remember(said);
                 return;
@@ -4463,6 +4497,7 @@ impl State {
             restart,
             said: None,
             warnings: done.warnings,
+            restartable: done.restartable,
             opens,
             back: None,
         });
@@ -4706,6 +4741,92 @@ impl State {
                 self.present(match error {
                     Some(error) => Refused::of(Doing::UpdateConfig, error),
                     None => Refused::lost(Doing::UpdateConfig),
+                });
+            }
+        }
+    }
+
+    /// Starts again what still holds the login `account`'s switch left, where its notice
+    /// offers to: on a front that does, while no switch is under way and no restart is.
+    fn restart(&mut self, account: Key, jobs: &mut Vec<Job>) {
+        if !self.front.restarts_what_holds_a_login() || self.restarting || self.switch_under_way() {
+            return;
+        }
+        let Some(restartable) = self
+            .last_switches
+            .iter()
+            .find(|last| last.provider == account.provider && last.to == account)
+            .and_then(|last| last.restartable.clone())
+        else {
+            return;
+        };
+        self.restarting = true;
+        self.change(
+            Job::Restart {
+                account,
+                restartable,
+            },
+            jobs,
+        );
+    }
+
+    /// What starting again what held the login `account`'s switch left came to. Once it
+    /// worked, the switch's notice says what still runs on that login as the core read it
+    /// afterwards, in place of what the switch read, and offers nothing more; where nothing
+    /// does, it no longer says to start sessions again either. What stopped it is said in the
+    /// window, and the offer stays.
+    fn restarted(
+        &mut self,
+        account: &Key,
+        restartable: &Restartable,
+        done: Result<Restarted, Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        self.restarting = false;
+        match done {
+            Ok(restarted) => {
+                if let Some(last) = self
+                    .last_switches
+                    .iter_mut()
+                    .find(|last| last.provider == account.provider && last.to == *account)
+                {
+                    last.restartable = None;
+                    let said = last.warnings.iter().position(|warning| {
+                        matches!(
+                            warning.code.as_str(),
+                            "sessions_still_running" | "sessions_unknown"
+                        )
+                    });
+                    match (said, restarted.left) {
+                        (Some(at), Some(left)) => last.warnings[at] = left,
+                        (Some(at), None) => {
+                            last.warnings.remove(at);
+                            last.restart = None;
+                        }
+                        (None, Some(left)) => last.warnings.push(left),
+                        (None, None) => last.restart = None,
+                    }
+                }
+                let saying = self.say_after_read(restarted.warnings);
+                self.refresh(
+                    Asked {
+                        after_change: true,
+                        saying,
+                        ..Asked::default()
+                    },
+                    now,
+                    jobs,
+                );
+            }
+            Err(error) => {
+                self.change_over();
+                let doing = Doing::Restart {
+                    what: restartable.what.clone(),
+                };
+                self.present(match error {
+                    Some(error) => Refused::of(doing, error),
+                    None => Refused::lost(doing),
                 });
             }
         }
